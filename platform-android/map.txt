@@ -1,0 +1,128 @@
+platform-android/
+├── build.gradle.kts
+│   # com.android.library + Hilt + KSP.
+│   # Declares TFLite/ONNX Runtime Mobile as implementation (never api)
+│   # so they don't leak to dependent modules.
+│   # minSdk = 28, targetSdk/compileSdk = latest stable.
+│
+├── proguard-rules.pro
+│   # Keep rules for JNI-backed native bindings (TFLite/ONNX ops must
+│   # not be stripped/renamed by R8).
+│
+└── src/main/
+    ├── AndroidManifest.xml
+    │   # Declares BLE/Wi-Fi permissions, foreground service types (mesh relay),
+    │   # notification channels. No Sentry service declared.
+    │
+    ├── assets/models/
+    │   ├── stt_multilingual.onnx          # Shared multilingual STT model (INT4/INT8)
+    │   ├── stt_multilingual.tokenizer.json
+    │   ├── tts_multilingual.onnx          # Shared multilingual TTS model
+    │   └── tts_multilingual.voices.json   # Language → internal speaker/embedding map
+    │
+    └── kotlin/com/tactical/platform/
+        ├── audio/
+        │   ├── AndroidAudioRecordRecorder.kt
+        │   │   # Implements AudioRecorder via AudioRecord.
+        │   │   # startMonitoring() uses a tiny buffer & low thread priority.
+        │   │
+        │   ├── AudioRecordConfigMapper.kt
+        │   │   # Maps AudioConfig → AudioRecord builder params.
+        │   │
+        │   ├── AndroidAudioTrackPlayer.kt
+        │   │   # Implements AudioPlayer via AudioTrack.
+        │   │   # stopPlayback() clears the AudioTrack buffer immediately.
+        │   │
+        │   └── AlertToneGenerator.kt
+        │       # Synthesizes raw PCM siren bursts (no model needed).
+        │
+        ├── radio/
+        │   ├── BleRadioTransport.kt
+        │   │   # RadioTransport over BLE GATT/L2CAP.
+        │   │   # broadcast() returns TacticalResult.Failure if GATT write fails.
+        │   │
+        │   ├── WifiDirectRadioTransport.kt
+        │   │   # RadioTransport over Wi-Fi P2P sockets.
+        │   │
+        │   └── CompositeRadioTransport.kt
+        │       # Multiplexes broadcast across BLE + Wi-Fi Direct.
+        │
+        ├── ble/
+        │   ├── AndroidBleAdvertiser.kt
+        │   │   # Wraps BluetoothLeAdvertiser.
+        │   │
+        │   ├── AndroidBleScanner.kt
+        │   │   # Wraps BluetoothLeScanner. Uses callbackFlow.
+        │   │   # Handles API 28-30 (location) vs API 31+ (BLE) permission split.
+        │   │
+        │   └── BlePayloadMapper.kt
+        │       # Converts ByteArray ↔ Packet via core-protocol.
+        │
+        ├── wifi/
+        │   └── AndroidWifiDirectManager.kt
+        │       # Wraps WifiP2pManager. connect() returns TacticalResult.
+        │
+        ├── haptics/
+        │   └── AndroidHapticEngine.kt
+        │       # Wraps Vibrator/VibratorManager (API-gated).
+        │
+        ├── power/
+        │   ├── AndroidWakeLockManager.kt
+        │   │   # Wraps PowerManager.WakeLock.
+        │   │
+        │   └── AndroidDozeModeHandler.kt
+        │       # Handles ignore-battery-optimizations intent.
+        │
+        ├── alarm/
+        │   └── AndroidAlarmBypass.kt
+        │       # Forces AudioManager to max volume, bypasses DND via
+        │       # NotificationManager. Saves previous state for resetVolume().
+        │
+        ├── flashlight/
+        │   └── CameraFlashlightController.kt
+        │       # Strobes torch via CameraManager.
+        │       # On flash-less devices, strobe() is a no-op.
+        │
+        ├── permissions/
+        │   └── AndroidPermissionGateway.kt
+        │       # Bridges ActivityResultLauncher for runtime permissions.
+        │       # Maps Permission enum to Android manifest strings per API level.
+        │
+        └── speech/                             # THE SWAPPABLE CORE
+            ├── AssetModelProvider.kt
+            │   # Implements ModelProvider. Loads any file under assets/models/
+            │   # as MappedByteBuffer by ModelIdentifier — format-agnostic.
+            │
+            ├── DynamicModelDownloadManager.kt
+            │   # Implements ModelDownloadManager. Extracts bundled models to
+            │   # app-internal storage on first launch (local only).
+            │   # Emits Failed(reason) if extraction/checksum fails.
+            │
+            ├── SpeechBackendModule.kt
+            │   # Hilt module. THE ONE FILE YOU EDIT TO SWAP BACKENDS.
+            │   # Binds SpeechToText/TextToSpeech to exactly one backend package.
+            │
+            └── backend/                       # One folder per inference runtime
+                ├── tflite/                    # TensorFlow Lite backend
+                │   ├── TfliteSpeechToText.kt
+                │   │   # Implements SpeechToText using TFLite.
+                │   │   # Only file importing org.tensorflow.lite for STT.
+                │   │
+                │   ├── TfliteTextToSpeech.kt
+                │   │   # Implements TextToSpeech using TFLite.
+                │   │   # Only file importing org.tensorflow.lite for TTS.
+                │   │
+                │   └── TfliteTensorMapper.kt
+                │       # Converts AudioFrame/String ⇄ TFLite ByteBuffer tensors.
+                │
+                └── onnx/                     # ONNX Runtime Mobile backend
+                    ├── OnnxSpeechToText.kt
+                    │   # Implements SpeechToText using ONNX Runtime.
+                    │   # Only file importing ai.onnxruntime for STT.
+                    │
+                    ├── OnnxTextToSpeech.kt
+                    │   # Implements TextToSpeech using ONNX Runtime.
+                    │   # Only file importing ai.onnxruntime for TTS.
+                    │
+                    └── OnnxTensorMapper.kt
+                        # Same role as TfliteTensorMapper, for ONNX's tensor API.

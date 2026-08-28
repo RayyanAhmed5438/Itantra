@@ -1,0 +1,54 @@
+engine-mesh/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin. Depends on core-domain, core-protocol,
+│   # core-platform-api.
+│
+└── src/main/kotlin/com/tactical/engine/mesh/
+    ├── router/
+    │   ├── MeshRouter.kt
+    │   │   # fun handle(packet): ForwardDecision.
+    │   │
+    │   └── FloodMeshRouter.kt
+    │       # Forwards if TTL > 0 and unseen.
+    │
+    ├── deduplication/
+    │   ├── DeduplicationFilter.kt
+    │   │   # fun mightContain(hash): Boolean, fun put(hash).
+    │   │
+    │   └── RollingBloomFilter.kt
+    │       # Time-windowed Bloom filter over BitSet. Two buckets rotated
+    │       # every 10 seconds.
+    │
+    ├── forwarding/
+    │   ├── ForwardDecision.kt
+    │   │   # Sealed: AcceptLocal, Rebroadcast(relayPacket),
+    │   │   # AcceptAndRebroadcast(relayPacket), Drop(reason).
+    │   │
+    │   ├── ForwardTable.kt
+    │   │   # fun nextHop(destination): DeviceId? (unused in flooding).
+    │   │
+    │   └── EmptyForwardTable.kt
+    │       # Always returns null — no routing table needed.
+    │
+    ├── ttl/
+    │   ├── TtlTracker.kt
+    │   │   # fun decrement(packet): MeshRelayPacket?.
+    │   │
+    │   └── DecrementingTtlTracker.kt
+    │       # Returns null once TTL exhausted.
+    │
+    ├── quality/
+    │   ├── LinkQualityMonitor.kt
+    │   │   # fun observe(): Flow<LinkQuality>.
+    │   │
+    │   └── RssiLinkQualityMonitor.kt
+    │       # Rolling average RSSI per link (uses RawPacket.rssi).
+    │
+    └── service/
+        ├── MeshService.kt
+        │   # FIXED: suspend fun send(packet): TacticalResult<Unit>.
+        │   # fun receive(): Flow<Packet>.
+        │
+        └── DefaultMeshService.kt
+            # Wires router, dedup, TTL tracker, RadioTransport.
+            # Propagates TacticalResult from RadioTransport.broadcast().

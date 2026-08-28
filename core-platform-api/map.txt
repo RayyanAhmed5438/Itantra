@@ -1,0 +1,102 @@
+core-platform-api/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin only. Pure interfaces. No Android imports.
+│   # Depends on core-domain.
+│
+└── src/main/kotlin/com/tactical/platform/api/
+    ├── audio/
+    │   ├── AudioRecorder.kt
+    │   │   # fun start(config): Flow<AudioFrame>, fun stop().
+    │   │   # NEW: fun startMonitoring(config, thresholdDb): Flow<Unit>
+    │   │   # — low-power energy detection for VOX, does NOT run full STT.
+    │   │
+    │   ├── AudioPlayer.kt
+    │   │   # suspend fun play(frame), suspend fun playAlert(tone: AlertTone).
+    │   │   # NEW: suspend fun stopPlayback() — allows emergencies to cut off
+    │   │   # routine audio.
+    │   │
+    │   └── AlertTone.kt
+    │       # Enum: EMERGENCY_INCOMING, MESSAGE_RECEIVED.
+    │
+    ├── radio/
+    │   ├── RadioTransport.kt
+    │   │   # fun incoming(): Flow<RawPacket>.
+    │   │   # FIXED: suspend fun broadcast(raw): TacticalResult<Unit>.
+    │   │
+    │   └── RawPacket.kt
+    │       # data: ByteArray, rssi: Int, timestamp: Long.
+    │
+    ├── ble/
+    │   ├── BleBeaconAdvertiser.kt
+    │   │   # suspend fun advertise(payload: ByteArray),
+    │   │   # suspend fun stopAdvertising().
+    │   │
+    │   ├── BleBeaconScanner.kt
+    │   │   # fun scan(): Flow<ScannedBleDevice>. Stops on flow cancellation.
+    │   │
+    │   └── ScannedBleDevice.kt
+    │       # deviceId: String (hardware MAC), rssi: Int,
+    │       # advertisementPayload: ByteArray? (null means no payload).
+    │
+    ├── wifi/
+    │   ├── WifiDirectManager.kt
+    │   │   # suspend fun discoverPeers(): Flow<List<WifiDirectPeer>>
+    │   │   # (suspend indicates async setup before emission).
+    │   │   # FIXED: suspend fun connect(deviceId): TacticalResult<Unit>.
+    │   │
+    │   └── WifiDirectPeer.kt
+    │       # deviceAddress: String, deviceName: String.
+    │
+    ├── haptics/
+    │   ├── HapticEngine.kt
+    │   │   # suspend fun perform(pattern: HapticPattern).
+    │   │
+    │   └── HapticPattern.kt
+    │       # timings: LongArray, amplitudes: IntArray (0..255).
+    │       # Fully parametric — caller defines the waveform.
+    │
+    ├── power/
+    │   ├── WakeLockManager.kt
+    │   │   # suspend fun acquire(tag: String), suspend fun release(tag: String).
+    │   │   # Idempotent per tag.
+    │   │
+    │   └── DozeModeHandler.kt
+    │       # suspend fun requestIgnoreBatteryOptimizations().
+    │       # Opens system dialog. No synchronous return.
+    │
+    ├── alarm/
+    │   └── AlarmBypass.kt
+    │       # suspend fun bypassDndAndMaxVolume(),
+    │       # suspend fun resetVolume().
+    │       # Caller is responsible for timeouts.
+    │
+    ├── flashlight/
+    │   └── FlashlightController.kt
+    │       # suspend fun strobe(intervalMs: Long), suspend fun off().
+    │       # Behavior on flash-less devices: no-op (graceful degradation).
+    │
+    ├── permissions/
+    │   ├── PermissionGateway.kt
+    │   │   # suspend fun request(permission: Permission): Boolean.
+    │   │
+    │   └── Permission.kt
+    │       # Logical enum: RECORD_AUDIO, LOCATION, BLUETOOTH_SCAN,
+    │       # BLUETOOTH_ADVERTISE, BLUETOOTH_CONNECT, NEARBY_WIFI_DEVICES,
+    │       # CAMERA, NOTIFICATIONS. Mapped to Android strings in platform-android.
+    │
+    └── speech/
+        ├── SpeechToText.kt
+        │   # FIXED: fun transcribe(audio: Flow<AudioFrame>): Flow<TranscriptionChunk>
+        │   # where chunk.isFinal indicates a sentence boundary.
+        │
+        ├── TextToSpeech.kt
+        │   # suspend fun synthesize(text: String, langTag: LanguageTag): AudioFrame.
+        │   # Fully offline. Single multilingual model.
+        │
+        ├── ModelProvider.kt
+        │   # suspend fun getModelBuffer(id: ModelIdentifier): ByteBuffer.
+        │   # Returns a memory-mapped buffer. No TacticalResult wrapper.
+        │
+        └── ModelDownloadManager.kt
+            # fun ensureModelAvailable(id: ModelIdentifier): Flow<ModelStatus>.
+            # Emits Ready, Loading, Missing, or Failed.

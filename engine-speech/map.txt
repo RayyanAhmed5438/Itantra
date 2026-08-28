@@ -1,0 +1,25 @@
+engine-speech/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin. Depends only on core-domain, core-platform-api.
+│   # Does NOT import TFLite/ONNX — those live in platform-android.
+│
+└── src/main/kotlin/com/tactical/engine/speech/
+    ├── pipeline/
+    │   ├── SpeechPipeline.kt
+    │   │   # suspend fun process(audio: Flow<AudioFrame>, lang: LanguageTag): AudioFrame.
+    │   │   # Local loopback/self-test only. Real PTT flow is split across devices.
+    │   │
+    │   └── DefaultSpeechPipeline.kt
+    │       # Composes injected SpeechToText → TextToSpeech sequentially.
+    │       # STT emits final chunks; the pipeline takes the first finalized
+    │       # sentence and feeds it to TTS.
+    │
+    └── config/
+        ├── LanguageProfile.kt
+        │   # ISO code, display name, and the LanguageTag the active
+        │   # multilingual model uses internally for this language.
+        │
+        └── SupportedLanguages.kt
+            # Static registry of the 10 supported languages → LanguageProfile.
+            # Edit values here if the model's internal language IDs change.
+

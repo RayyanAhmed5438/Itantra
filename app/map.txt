@@ -1,0 +1,86 @@
+app/
+├── build.gradle.kts
+│   # com.android.application + Hilt + KSP.
+│   # Depends on ALL other modules: core-domain, core-platform-api,
+│   # core-protocol, platform-android, engine-discovery, engine-mesh,
+│   # engine-speech, feature-ptt, feature-emergency.
+│   # (Sentry dependency removed.)
+│   # minSdk = 28, targetSdk/compileSdk latest stable.
+│   # APK size CI gate < 150 MB (with INT4 quantization strategy).
+│
+├── proguard-rules.pro
+│   # App-level R8 rules. Keeps Hilt, Compose, and model classes.
+│   # Merged with platform-android's proguard rules.
+│
+└── src/main/
+    ├── AndroidManifest.xml
+    │   # App-level manifest. Merges platform-android's foreground-service
+    │   # and permission declarations. Declares launcher activity.
+    │   # No Sentry service or permission references.
+    │
+    └── kotlin/com/tactical/app/
+        ├── di/
+        │   ├── AppModule.kt
+        │   │   # Hilt bindings for platform drivers (non-speech).
+        │   │   # Binds AudioRecorder → AndroidAudioRecordRecorder, etc.
+        │   │
+        │   ├── EngineModule.kt
+        │   │   # Hilt bindings for engines.
+        │   │   # Binds DiscoveryService → DefaultDiscoveryService,
+        │   │   # MeshService → DefaultMeshService, SpeechPipeline → DefaultSpeechPipeline.
+        │   │
+        │   └── FeatureModule.kt
+        │       # FIXED: Removed Sentry bindings.
+        │       # Binds PttController → DefaultPttController,
+        │       # EmergencyBroadcaster → RadiusEmergencyBroadcaster, etc.
+        │
+        ├── ui/
+        │   ├── theme/
+        │   │   ├── TacticalTheme.kt
+        │   │   │   # OLED dark-mode Compose theme.
+        │   │   │
+        │   │   └── TacticalColors.kt
+        │   │       # High-contrast HUD palette (amber, deep-red, squad-green).
+        │   │
+        │   ├── ptt/
+        │   │   ├── PttScreen.kt
+        │   │   │   # Main PTT/VOX screen composable.
+        │   │   │
+        │   │   ├── PttViewModel.kt
+        │   │   │   # Bridges PttController/VoxController state to Compose.
+        │   │   │   # Surfaces transmission failure states (TacticalResult).
+        │   │   │
+        │   │   ├── TransmitZone.kt
+        │   │   │   # Big press-and-hold transmit button.
+        │   │   │
+        │   │   ├── SquadIndicatorGrid.kt
+        │   │   │   # Grid of peer presence tiles from DiscoveryService.
+        │   │   │
+        │   │   └── LinkStatusIcon.kt
+        │   │       # Per-peer link-quality glyph.
+        │   │
+        │   ├── emergency/
+        │   │   ├── EmergencyScreen.kt
+        │   │   │   # SOS/distress screen composable.
+        │   │   │
+        │   │   ├── EmergencyViewModel.kt
+        │   │   │   # Bridges PanicTrigger/EmergencyBroadcaster to Compose.
+        │   │   │
+        │   │   └── PanicSlider.kt
+        │   │       # 2s-hold panic control widget.
+        │   │
+        │   └── mesh/
+        │       ├── MeshStatusScreen.kt
+        │       │   # Mesh topology / hop counts / link list composable.
+        │       │
+        │       └── MeshStatusViewModel.kt
+        │           # Bridges MeshService/DiscoveryService to Compose.
+        │
+        ├── MainActivity.kt
+        │   # Single Activity host for the Compose UI tree.
+        │   # Contains navigation between PTT, Emergency, Mesh screens.
+        │
+        └── TacticalApplication.kt
+            # Application class. Annotated @HiltAndroidApp.
+            # Initializes the Hilt graph.
+

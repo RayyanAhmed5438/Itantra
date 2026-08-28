@@ -1,0 +1,33 @@
+core-protocol/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin. Depends on core-domain.
+│
+└── src/main/kotlin/com/tactical/protocol/
+    ├── serialization/
+    │   ├── PacketSerializer.kt
+    │   │   # fun serialize(packet: Packet): ByteArray,
+    │   │   # fun deserialize(bytes: ByteArray): Packet.
+    │   │
+    │   └── BinaryPacketSerializer.kt
+    │       # Implements [Magic|Version|Type|Len|CRC32|Payload] format.
+    │       # Magic = 0x5A, Version = 0x01.
+    │
+    ├── hashing/
+    │   ├── PacketHasher.kt
+    │   │   # fun hash(packet: Packet): Long. Used by mesh dedup.
+    │   │
+    │   └── XxHashPacketHasher.kt
+    │       # Fast non-cryptographic hash (xxHash) over the packet's
+    │       # canonical serialized form (excluding envelope).
+    │
+    ├── validation/
+    │   ├── PacketValidator.kt
+    │   │   # fun validate(bytes: ByteArray): Boolean.
+    │   │
+    │   └── Crc32Validator.kt
+    │       # Verifies the embedded CRC32 against the payload.
+    │
+    └── constants/
+        └── ProtocolConstants.kt
+            # MAGIC_BYTE = 0x5A, VERSION = 0x01, DEFAULT_TTL = 5,
+            # MAX_HOPS = 10, BEACON_INTERVAL_MS = 2000, MAX_PACKET_SIZE = 1024.

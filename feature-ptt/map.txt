@@ -1,0 +1,46 @@
+feature-ptt/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin. Depends on core-domain, core-platform-api,
+│   # engine-speech, engine-mesh.
+│
+└── src/main/kotlin/com/tactical/feature/ptt/
+    ├── controller/
+    │   ├── PttController.kt
+    │   │   # fun press(), fun release(), fun state(): StateFlow<PttState>.
+    │   │
+    │   └── DefaultPttController.kt
+    │       # State machine: IDLE → ARMED → RECORDING → TRANSMITTING → IDLE.
+    │       # Collects TranscriptionChunks. Only transmits on isFinal == true.
+    │       # Captures TacticalResult from MeshService.send() and surfaces it.
+    │
+    ├── vox/
+    │   ├── VoxController.kt
+    │   │   # fun enable(), fun disable().
+    │   │
+    │   └── AmplitudeVoxController.kt
+    │       # FIXED: Uses AudioRecorder.startMonitoring() for low-power
+    │       # energy detection. Triggers full AudioRecorder.start() only
+    │       # when RMS exceeds thresholdDb for >150ms.
+    │
+    ├── session/
+    │   ├── PttSession.kt
+    │   │   # Metadata: sessionId, startTime, languageTag, deviceId, isVox.
+    │   │
+    │   └── SessionState.kt
+    │       # Enum: IDLE, ARMED, RECORDING, TRANSMITTING, PLAYING.
+    │
+    ├── feedback/
+    │   ├── PttHapticFeedback.kt
+    │   │   # Interface: suspend fun onPress(), onRelease(), onTransmitComplete().
+    │   │
+    │   └── PatternedHapticFeedback.kt
+    │       # Delegates to HapticEngine with PTT-specific patterns.
+    │
+    └── relay/
+        ├── PttPacketBuilder.kt
+        │   # Builds a TextPacket from a finalized TranscriptionChunk.
+        │
+        └── PttMeshDispatcher.kt
+            # Dispatches the packet via MeshService.send().
+            # Propagates TacticalResult back to the controller.
+

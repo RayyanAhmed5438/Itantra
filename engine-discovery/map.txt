@@ -1,0 +1,46 @@
+engine-discovery/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin. Depends on core-domain, core-platform-api.
+│
+└── src/main/kotlin/com/tactical/engine/discovery/
+    ├── catalog/
+    │   ├── DeviceCatalog.kt
+    │   │   # all(): StateFlow<List<DeviceNode>>, suspend fun upsert(node).
+    │   │
+    │   └── InMemoryDeviceCatalog.kt
+    │       # ConcurrentHashMap-backed, 15s TTL eviction.
+    │       # Emits PeerLost when a node expires.
+    │
+    ├── proximity/
+    │   ├── ProximityEstimator.kt
+    │   │   # fun estimate(rssi): Double (meters).
+    │   │
+    │   └── RssiProximityEstimator.kt
+    │       # Log-distance path-loss model.
+    │
+    ├── beacon/
+    │   ├── PresenceBeacon.kt
+    │   │   # Periodic heartbeat payload: callsign, listenPort?.
+    │   │
+    │   ├── BeaconEmitter.kt
+    │   │   # Interface for periodic beacon timer.
+    │   │
+    │   └── PeriodicBeaconEmitter.kt
+    │       # Broadcasts every 2s via RadioTransport.broadcast().
+    │
+    ├── scanner/
+    │   ├── BeaconScanner.kt
+    │   │   # fun scan(): Flow<DeviceNode>.
+    │   │
+    │   └── CompositeBeaconScanner.kt
+    │       # FIXED: Merges BLE + Wi-Fi Direct scans.
+    │       # Prioritizes logical BeaconPacket.sender (DeviceId) over
+    │       # hardware MAC to prevent duplicate entries for the same peer.
+    │
+    └── service/
+        ├── DiscoveryService.kt
+        │   # fun peers(): StateFlow<List<DeviceNode>>, suspend fun start(),
+        │   # suspend fun stop().
+        │
+        └── DefaultDiscoveryService.kt
+            # Orchestrates scanner, catalog, and beacon emitter.

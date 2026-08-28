@@ -1,0 +1,86 @@
+core-domain/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin only. No Android plugin. Unit-testable on plain JVM.
+│
+└── src/main/kotlin/com/tactical/domain/
+    ├── identity/
+    │   ├── DeviceId.kt
+    │   │   # Value class wrapping a non-blank peer identifier string.
+    │   │
+    │   ├── DeviceNode.kt
+    │   │   # Peer snapshot: id, callsign, RSSI, lastSeen, hopCount,
+    │   │   # link: LinkType, optional battery. Used by engine-discovery.
+    │   │
+    │   └── LinkType.kt
+    │       # NEW — explicitly defined enum: DIRECT, RELAYED, STALE.
+    │
+    ├── audio/
+    │   ├── AudioConfig.kt
+    │   │   # PCM format: sampleRate, channels, bitDepth, chunkDurationMs.
+    │   │   # Derives frameSizeInBytes.
+    │   │
+    │   └── AudioFrame.kt
+    │       # One PCM chunk: data: ByteArray, timestamp, durationMs.
+    │       # Hand-written equals/hashCode over data.
+    │
+    ├── packet/
+    │   ├── Packet.kt
+    │   │   # Sealed interface marker. All wire packet types implement this.
+    │   │
+    │   ├── TextPacket.kt
+    │   │   # sender: DeviceId, text: String, languageCode: String, timestamp.
+    │   │   # No translation fields — travels in the speaker's language only.
+    │   │
+    │   ├── VoicePacket.kt
+    │   │   # Emergency-only raw audio: sender, audioData: ByteArray,
+    │   │   # codec: AudioCodec, timestamp.
+    │   │
+    │   ├── EmergencyPacket.kt
+    │   │   # FIXED: now carries languageCode: String so the receiver's TTS
+    │   │   # speaks it in the sender's original language.
+    │   │   # Fields: sender, severity: Severity, description, location: GeoFix?,
+    │   │   # languageCode, timestamp.
+    │   │
+    │   ├── BeaconPacket.kt
+    │   │   # Presence heartbeat: sender, callsign, listenPort: Int?, timestamp.
+    │   │
+    │   ├── MeshRelayPacket.kt
+    │   │   # Flooding envelope (NOT a Packet). Fields: originalSender,
+    │   │   # immediateSender, ttl, hopCount, payload: Packet.
+    │   │
+    │   ├── AudioCodec.kt
+    │   │   # NEW — explicitly defined enum: PCM_RAW, OPUS.
+    │   │
+    │   └── Severity.kt
+    │       # NEW — explicitly defined enum: CAUTION, URGENT, CRITICAL.
+    │
+    ├── location/
+    │   └── GeoFix.kt
+    │       # GPS coordinates: latitude, longitude, optional altitude,
+    │       # optional accuracyMeters, timestamp.
+    │
+    ├── speech/
+    │   ├── ModelIdentifier.kt
+    │   │   # Value class wrapping a logical model name string
+    │   │   # ("stt_multilingual", "tts_multilingual").
+    │   │
+    │   ├── ModelStatus.kt
+    │   │   # FIXED: sealed with Ready, Loading(progress), Missing, Failed(reason).
+    │   │
+    │   ├── LanguageTag.kt
+    │   │   # ISO code + backend-internal id the active multilingual model uses
+    │   │   # for that language (e.g., NeMo lang code or Piper speaker index).
+    │   │
+    │   └── TranscriptionChunk.kt
+    │       # NEW — STT emits this. Fields: text: String, isFinal: Boolean,
+    │       # languageCode: String.
+    │
+    ├── events/
+    │   └── DomainEvent.kt
+    │       # Sealed interface. FIXED: now includes DeviceDiscovered(node).
+    │       # Variants: PacketReceived, PeerLost, DeviceDiscovered, EmergencyTriggered.
+    │
+    └── result/
+        └── TacticalResult.kt
+            # Sealed interface (consistent with other sealed types).
+            # Success<T>(value) / Failure(error: String). map(), getOrNull().

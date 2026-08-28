@@ -1,0 +1,53 @@
+feature-emergency/
+├── build.gradle.kts
+│   # kotlin("jvm") plugin. Depends on core-domain, core-platform-api,
+│   # engine-mesh.
+│
+└── src/main/kotlin/com/tactical/feature/emergency/
+    ├── broadcast/
+    │   ├── EmergencyBroadcaster.kt
+    │   │   # suspend fun broadcastSos(packet: EmergencyPacket).
+    │   │
+    │   └── RadiusEmergencyBroadcaster.kt
+    │       # Wraps EmergencyPacket in MeshRelayPacket with TTL = MAX_HOPS.
+    │       # Calls MeshService.send() and handles TacticalResult.
+    │
+    ├── receiver/
+    │   ├── EmergencyReceiver.kt
+    │   │   # fun incoming(): Flow<EmergencyPacket>.
+    │   │
+    │   └── DefaultEmergencyReceiver.kt
+    │       # Filters PacketReceived events for EmergencyPacket.
+    │
+    ├── squelch/
+    │   ├── SquelchBreaker.kt
+    │   │   # suspend fun breakSquelch(packet: EmergencyPacket).
+    │   │   # suspend fun dismiss().  # NEW — manual reset.
+    │   │
+    │   └── SystemSquelchBreaker.kt
+    │       # FIXED: Includes 30-second auto-reset timer + manual dismiss().
+    │       # breakSquelch(): stopPlayback() → bypassDndAndMaxVolume()
+    │       # → strobe() → playAlert(siren) → TTS.synthesize(description, langCode).
+    │       # dismiss(): resetVolume() → off() → cancels timer.
+    │
+    ├── trigger/
+    │   ├── PanicTrigger.kt
+    │   │   # fun startHold(), fun releaseHold(), fun state().
+    │   │
+    │   ├── HoldPanicTrigger.kt
+    │   │   # Requires a verified 2s continuous press before triggering.
+    │   │
+    │   └── PanicTriggerState.kt
+    │       # Enum: IDLE, HOLDING, TRIGGERED.
+    │
+    ├── beacon/
+    │   ├── DistressBeacon.kt
+    │   │   # suspend fun start(), suspend fun stop().
+    │   │
+    │   └── PeriodicDistressBeacon.kt
+    │       # Re-broadcasts EmergencyPacket with fresh GeoFix every 5s.
+    │
+    └── message/
+        └── EmergencyMessageBuilder.kt
+            # Builds EmergencyPacket from user input, current GeoFix,
+            # and current device language.
