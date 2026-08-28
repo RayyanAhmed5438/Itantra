@@ -29,7 +29,7 @@ data class VoicePacket(
     override fun hashCode(): Int {
         var result = sender.hashCode()
         result = 31 * result + audioData.contentHashCode()
-        result = 31 * result + (codec?.hashCode() ?: 0)
+        result = 31 * result + codec.hashCode()
         result = 31 * result + timestamp.hashCode()
         return result
     }
