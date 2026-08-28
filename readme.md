@@ -1,4 +1,4 @@
-Sure! Here's a simple explanation of each of the 11 modules in the app, using everyday analogies. Think of the app as a **special walkie-talkie system** that also sends emergency alerts and watches your back.
+ Here's a simple explanation of each of the 10 modules in the app, using everyday analogies. Think of the app as a **special walkie-talkie system** that also sends emergency alerts and watches your back.
 
 ---
 
@@ -113,17 +113,7 @@ This is the one case where raw audio might be sent instead of text, to make sure
 
 ---
 
-### 10. `feature-sentry` — **The Perimeter Tripwire**
-
-This module turns your phone into a **passive guard**. When you “arm” sentry mode, the phone goes into a **low‑power listening mode**—it scans for a specific emergency signal (like a special code) using Bluetooth, but only a tiny fraction of the time (<1% duty cycle) to save battery.
-
-If it detects that signal (from another phone in distress), it **wakes up the phone, sounds the alarm, flashes the light, and speaks a warning**—even if the app wasn’t open.
-
-It’s like leaving a guard dog that sleeps lightly and only barks when an intruder steps on a tripwire.
-
----
-
-### 11. `app` — **The Control Panel & Screen**
+### 10. `app` — **The Control Panel & Screen**
 
 This is the **final, visible part**—the actual Android application you install. It brings everything together:
 
@@ -153,7 +143,6 @@ The `app` module is like the **dashboard of a car**—you press the pedals and t
 | `engine-speech` | Turns speech to text and text to speech (no translation). |
 | `feature-ptt` | The walkie‑talkie button and voice‑activated mode. |
 | `feature-emergency` | Panic button and emergency sirens/flashlights. |
-| `feature-sentry` | Passive guard that wakes up on a distress signal. |
 | `app` | The screen and wiring that makes everything work together. |
 
 That’s the whole app in plain English!
