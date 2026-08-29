@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.tactical.engine.mesh.deduplication.RollingBloomFilterTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-28T21:01:24.664Z" hostname="SOMEONE" time="0.076">
-  <properties/>
-  <testcase name="should not have false negatives" classname="com.tactical.engine.mesh.deduplication.RollingBloomFilterTest" time="0.067"/>
-  <testcase name="should remember added hashes" classname="com.tactical.engine.mesh.deduplication.RollingBloomFilterTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
