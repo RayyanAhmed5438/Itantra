@@ -1,8 +1,12 @@
 package com.tactical.protocol.serialization
 
 import com.tactical.domain.identity.DeviceId
+import com.tactical.domain.location.GeoFix
 import com.tactical.domain.packet.*
 import com.tactical.protocol.constants.ProtocolConstants
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import java.nio.ByteBuffer
 import java.util.zip.CRC32
 
@@ -10,10 +14,10 @@ class BinaryPacketSerializer : PacketSerializer {
 
     override fun serialize(packet: Packet): ByteArray {
         val payload = when (packet) {
-            is TextPacket -> packet.text.toByteArray()
-            is VoicePacket -> ByteArray(0)
-            is EmergencyPacket -> ByteArray(0)
-            is BeaconPacket -> ByteArray(0)
+            is TextPacket -> encodeTextPacket(packet)
+            is VoicePacket -> encodeVoicePacket(packet)
+            is EmergencyPacket -> encodeEmergencyPacket(packet)
+            is BeaconPacket -> encodeBeaconPacket(packet)
         }
 
         val type: Byte = when (packet) {
@@ -28,28 +32,87 @@ class BinaryPacketSerializer : PacketSerializer {
 
     override fun serializeRelay(packet: MeshRelayPacket): ByteArray {
         val innerPayload = serialize(packet.payload)
-        
-        val origSenderBytes = packet.originalSender.value.toByteArray()
-        val immSenderBytes = packet.immediateSender.value.toByteArray()
-        
-        val relayPayload = ByteBuffer.allocate(
-            1 + origSenderBytes.size + 1 + immSenderBytes.size + 4 + 4 + 4 + innerPayload.size
-        ).apply {
-            put(origSenderBytes.size.toByte())
-            put(origSenderBytes)
-            put(immSenderBytes.size.toByte())
-            put(immSenderBytes)
-            putInt(packet.ttl)
-            putInt(packet.hopCount)
-            putInt(innerPayload.size)
-            put(innerPayload)
-        }.array()
+
+        val relayPayload = ByteArrayOutputStream().use { bos ->
+            DataOutputStream(bos).use { out ->
+                out.writeString(packet.originalSender.value)
+                out.writeString(packet.immediateSender.value)
+                out.writeInt(packet.ttl)
+                out.writeInt(packet.hopCount)
+                out.writeInt(innerPayload.size)
+                out.write(innerPayload)
+            }
+            bos.toByteArray()
+        }
 
         return wrapInEnvelope(100.toByte(), relayPayload)
     }
 
+    // ---- Per-type payload encoding ----
+
+    private fun encodeTextPacket(packet: TextPacket): ByteArray = byteStream {
+        writeString(packet.sender.value)
+        writeString(packet.languageCode)
+        writeString(packet.text)
+        writeLong(packet.timestamp)
+    }
+
+    private fun encodeVoicePacket(packet: VoicePacket): ByteArray = byteStream {
+        writeString(packet.sender.value)
+        writeByte(packet.codec.ordinal)
+        writeInt(packet.audioData.size)
+        write(packet.audioData)
+        writeLong(packet.timestamp)
+    }
+
+    private fun encodeEmergencyPacket(packet: EmergencyPacket): ByteArray = byteStream {
+        writeString(packet.sender.value)
+        writeByte(packet.severity.ordinal)
+        writeString(packet.description)
+        writeString(packet.languageCode)
+        writeGeoFix(packet.location)
+        writeLong(packet.timestamp)
+    }
+
+    private fun encodeBeaconPacket(packet: BeaconPacket): ByteArray = byteStream {
+        writeString(packet.sender.value)
+        writeString(packet.callsign)
+        writeBoolean(packet.listenPort != null)
+        if (packet.listenPort != null) writeInt(packet.listenPort)
+        writeLong(packet.timestamp)
+    }
+
+    private fun DataOutputStream.writeGeoFix(fix: GeoFix?) {
+        writeBoolean(fix != null)
+        if (fix == null) return
+        writeDouble(fix.latitude)
+        writeDouble(fix.longitude)
+        writeBoolean(fix.altitude != null)
+        if (fix.altitude != null) writeDouble(fix.altitude)
+        writeBoolean(fix.accuracyMeters != null)
+        if (fix.accuracyMeters != null) writeFloat(fix.accuracyMeters)
+        writeLong(fix.timestamp)
+    }
+
+    private fun DataOutputStream.writeString(value: String) {
+        val bytes = value.toByteArray(Charsets.UTF_8)
+        writeInt(bytes.size)
+        write(bytes)
+    }
+
+    private inline fun byteStream(block: DataOutputStream.() -> Unit): ByteArray =
+        ByteArrayOutputStream().use { bos ->
+            DataOutputStream(bos).use { it.block() }
+            bos.toByteArray()
+        }
+
     private fun wrapInEnvelope(type: Byte, payload: ByteArray): ByteArray {
-        val buffer = ByteBuffer.allocate(11 + payload.size)
+        val totalSize = 11 + payload.size
+        require(totalSize <= ProtocolConstants.MAX_PACKET_SIZE) {
+            "Serialized packet ($totalSize bytes) exceeds MAX_PACKET_SIZE (${ProtocolConstants.MAX_PACKET_SIZE})"
+        }
+
+        val buffer = ByteBuffer.allocate(totalSize)
         buffer.put(ProtocolConstants.MAGIC_BYTE)
         buffer.put(ProtocolConstants.VERSION)
         buffer.put(type)
@@ -63,15 +126,52 @@ class BinaryPacketSerializer : PacketSerializer {
         return buffer.array()
     }
 
+    // ---- Deserialization ----
+
     override fun deserialize(bytes: ByteArray): Packet {
         val unwrapped = unwrapEnvelope(bytes)
+        val input = DataInputStream(unwrapped.payload.inputStream())
+
         return when (unwrapped.type.toInt()) {
-            1 -> TextPacket(
-                sender = DeviceId("unknown"), 
-                text = String(unwrapped.payload), 
-                languageCode = "en", 
-                timestamp = System.currentTimeMillis()
-            )
+            1 -> input.use {
+                val sender = DeviceId(it.readString())
+                val languageCode = it.readString()
+                val text = it.readString()
+                val timestamp = it.readLong()
+                TextPacket(sender = sender, text = text, languageCode = languageCode, timestamp = timestamp)
+            }
+            2 -> input.use {
+                val sender = DeviceId(it.readString())
+                val codec = AudioCodec.entries[it.readByte().toInt()]
+                val audioLen = it.readInt()
+                val audioData = ByteArray(audioLen).also { buf -> it.readFully(buf) }
+                val timestamp = it.readLong()
+                VoicePacket(sender = sender, audioData = audioData, codec = codec, timestamp = timestamp)
+            }
+            3 -> input.use {
+                val sender = DeviceId(it.readString())
+                val severity = Severity.entries[it.readByte().toInt()]
+                val description = it.readString()
+                val languageCode = it.readString()
+                val location = it.readGeoFix()
+                val timestamp = it.readLong()
+                EmergencyPacket(
+                    sender = sender,
+                    severity = severity,
+                    description = description,
+                    location = location,
+                    languageCode = languageCode,
+                    timestamp = timestamp
+                )
+            }
+            4 -> input.use {
+                val sender = DeviceId(it.readString())
+                val callsign = it.readString()
+                val hasPort = it.readBoolean()
+                val listenPort = if (hasPort) it.readInt() else null
+                val timestamp = it.readLong()
+                BeaconPacket(sender = sender, callsign = callsign, listenPort = listenPort, timestamp = timestamp)
+            }
             else -> throw IllegalArgumentException("Unknown packet type: ${unwrapped.type}")
         }
     }
@@ -79,27 +179,47 @@ class BinaryPacketSerializer : PacketSerializer {
     override fun deserializeRelay(bytes: ByteArray): MeshRelayPacket {
         val unwrapped = unwrapEnvelope(bytes)
         if (unwrapped.type.toInt() != 100) throw IllegalArgumentException("Not a relay packet")
-        
-        val buffer = ByteBuffer.wrap(unwrapped.payload)
-        
-        val origLen = buffer.get().toInt()
-        val origSender = ByteArray(origLen).also { buffer.get(it) }
-        
-        val immLen = buffer.get().toInt()
-        val immSender = ByteArray(immLen).also { buffer.get(it) }
-        
-        val ttl = buffer.getInt()
-        val hopCount = buffer.getInt()
-        
-        val innerLen = buffer.getInt()
-        val innerBytes = ByteArray(innerLen).also { buffer.get(it) }
-        
-        return MeshRelayPacket(
-            originalSender = DeviceId(String(origSender)),
-            immediateSender = DeviceId(String(immSender)),
-            ttl = ttl,
-            hopCount = hopCount,
-            payload = deserialize(innerBytes)
+
+        val input = DataInputStream(unwrapped.payload.inputStream())
+        return input.use {
+            val originalSender = DeviceId(it.readString())
+            val immediateSender = DeviceId(it.readString())
+            val ttl = it.readInt()
+            val hopCount = it.readInt()
+            val innerLen = it.readInt()
+            val innerBytes = ByteArray(innerLen).also { buf -> it.readFully(buf) }
+
+            MeshRelayPacket(
+                originalSender = originalSender,
+                immediateSender = immediateSender,
+                ttl = ttl,
+                hopCount = hopCount,
+                payload = deserialize(innerBytes)
+            )
+        }
+    }
+
+    private fun DataInputStream.readString(): String {
+        val len = readInt()
+        val bytes = ByteArray(len)
+        readFully(bytes)
+        return String(bytes, Charsets.UTF_8)
+    }
+
+    private fun DataInputStream.readGeoFix(): GeoFix? {
+        val hasLocation = readBoolean()
+        if (!hasLocation) return null
+        val latitude = readDouble()
+        val longitude = readDouble()
+        val altitude = if (readBoolean()) readDouble() else null
+        val accuracyMeters = if (readBoolean()) readFloat() else null
+        val geoTimestamp = readLong()
+        return GeoFix(
+            latitude = latitude,
+            longitude = longitude,
+            altitude = altitude,
+            accuracyMeters = accuracyMeters,
+            timestamp = geoTimestamp
         )
     }
 
@@ -109,12 +229,16 @@ class BinaryPacketSerializer : PacketSerializer {
         val buffer = ByteBuffer.wrap(bytes)
         val magic = buffer.get()
         if (magic != ProtocolConstants.MAGIC_BYTE) throw IllegalArgumentException("Invalid magic")
-        
+
         val version = buffer.get()
+        if (version != ProtocolConstants.VERSION) throw IllegalArgumentException("Unsupported version: $version")
+
         val type = buffer.get()
         val len = buffer.getInt()
         val crc = buffer.getInt()
-        
+
+        if (buffer.remaining() < len) throw IllegalArgumentException("Truncated packet: expected $len bytes, got ${buffer.remaining()}")
+
         val payload = ByteArray(len)
         buffer.get(payload)
 
@@ -123,7 +247,7 @@ class BinaryPacketSerializer : PacketSerializer {
         if (crc != computedCrc.value.toInt()) {
             throw IllegalArgumentException("CRC mismatch")
         }
-        
+
         return Unwrapped(type, payload)
     }
 }
