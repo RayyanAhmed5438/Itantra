@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
  * to transmit over BLE.
  *
  * Fragment wire format (8-byte header + payload):
- * [transferId: Int (4B)][chunkIndex: Short (2B)][totalChunks: Short (2B)][payload...]
+ * [transferId: Int (4B)][chunkIndex: Short (2B)][totalChunks: Short (2B)]
  *
  * transferId only needs to be unique among a sender's concurrently
  * in-flight fragmented transmissions to the same peer — it has nothing to

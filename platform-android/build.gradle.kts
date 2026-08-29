@@ -48,7 +48,7 @@ dependencies {
     implementation(project(":core-platform-api"))
     implementation(project(":core-protocol"))
 
-    // Coroutines (callbackFlow for BLE/WiFi callback-based APIs)
+    // Coroutines (callbackFlow for BLE/Wi-Fi callback-based APIs)
     implementation(libs.kotlinx.coroutines.android)
 
     // Hilt
@@ -58,12 +58,12 @@ dependencies {
     // On-device inference backends — `implementation`, never `api`, so
     // dependent modules (engine-speech, feature-ptt, app) never see these
     // types directly. SpeechBackendModule is the only seam.
-//    implementation(libs.tensorflow.lite)
-//    implementation(libs.tensorflow.lite.support)
-//    implementation(libs.onnxruntime.android)
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.support)
+    implementation(libs.onnxruntime.android)
 
 //    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.androidx.core)
+    testImplementation(libs.androidx.test.core)
 //    testImplementation(libs.robolectric)
 }
