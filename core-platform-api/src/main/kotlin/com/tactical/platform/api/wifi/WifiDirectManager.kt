@@ -30,18 +30,4 @@ interface WifiDirectManager {
     suspend fun connect(deviceId: String): TacticalResult<Unit>
 }
 
-/**
- * ASSUMPTION FLAGGED: core.md references WifiDirectPeer as the element
- * type of discoverPeers()'s list but never specifies its fields anywhere
- * in the document. Sketched here as the minimum needed to identify a peer
- * and connect to it — deviceAddress matches what connect(deviceId: String)
- * would need to be given back. Not confirmed.
- */
-data class WifiDirectPeer(
-    val deviceAddress: String,
-    val deviceName: String
-) {
-    init {
-        require(deviceAddress.isNotBlank()) { "deviceAddress must not be blank" }
-    }
-}
+

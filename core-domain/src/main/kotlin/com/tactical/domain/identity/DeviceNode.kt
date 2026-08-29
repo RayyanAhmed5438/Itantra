@@ -23,21 +23,3 @@ data class DeviceNode(
     }
 }
 
-/**
- * Connection health for a peer. Nullable on DeviceNode (rather than a
- * required 4th "unknown" case) so a freshly-discovered node with no
- * computed link quality yet can simply omit it, rather than engine-discovery
- * having to invent a placeholder value.
- *
- * ASSUMPTION FLAGGED: core.md specifies `link: LinkType?` but never lists
- * LinkType's actual values. These three are carried over from our original
- * LinkStatus design since they cover the states engine-discovery's beacon
- * TTL / RSSI trend logic needs. Confirm with whoever owns engine-discovery
- * before this is treated as final — the values themselves aren't confirmed
- * by core.md, only the nullable-enum shape is.
- */
-enum class LinkType {
-    DIRECT,
-    RELAYED,
-    STALE
-}

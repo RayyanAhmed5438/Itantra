@@ -35,18 +35,4 @@ data class VoicePacket(
     }
 }
 
-/**
- * ASSUMPTION FLAGGED: core.md references `codec: AudioCodec?` on VoicePacket
- * but never defines AudioCodec anywhere in the file tree or spec. Sketched
- * here as a minimal enum covering the two realistic options — raw PCM
- * (no compression, largest payload) and a compressed option for when
- * bandwidth actually matters. `codec` being nullable on VoicePacket
- * suggests null means "raw PCM, no codec applied" is a valid, expected
- * case, not an error — worth confirming that reading is correct with
- * whoever specced this, along with which real codec(s) OPUS should
- * concretely mean once encoding is implemented in platform-android.
- */
-enum class AudioCodec {
-    PCM_RAW,
-    OPUS
-}
+

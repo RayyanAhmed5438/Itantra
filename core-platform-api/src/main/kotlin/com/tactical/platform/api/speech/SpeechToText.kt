@@ -1,6 +1,7 @@
 package com.tactical.platform.api.speech
 
 import com.tactical.domain.audio.AudioFrame
+import com.tactical.domain.speech.TranscriptionChunk
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -22,8 +23,3 @@ interface SpeechToText {
     fun transcribe(audio: Flow<AudioFrame>): Flow<TranscriptionChunk>
 }
 
-data class TranscriptionChunk(
-    val text: String,
-    val isFinal: Boolean,
-    val languageCode: String
-)
