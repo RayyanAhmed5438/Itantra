@@ -7,7 +7,7 @@ import com.tactical.domain.audio.AudioFrame
 import com.tactical.domain.speech.ModelIdentifier
 import com.tactical.platform.api.speech.ModelProvider
 import com.tactical.platform.api.speech.SpeechToText
-import com.tactical.platform.api.speech.TranscriptionChunk
+import com.tactical.domain.speech.TranscriptionChunk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
