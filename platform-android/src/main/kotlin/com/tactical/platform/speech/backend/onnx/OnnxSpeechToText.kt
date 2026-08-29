@@ -76,6 +76,7 @@ class OnnxSpeechToText @Inject constructor(
         }
 
         audio.collect { audioFrame ->
+            @Suppress("BlockingMethodInNonBlockingContext")
             pcmBuffer.write(audioFrame.data)
             accumulatedDurationMs += audioFrame.durationMs
 

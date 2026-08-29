@@ -1,7 +1,10 @@
 package com.tactical.platform.radio
 
+import android.Manifest
 import android.bluetooth.*
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.radio.RadioTransport
 import com.tactical.platform.api.radio.RawPacket
@@ -23,6 +26,11 @@ class BleRadioTransport(
     private val reassembler = BleFragmentReassembler()
 
     override fun incoming(): Flow<RawPacket> = callbackFlow {
+        if (!hasBluetoothConnectPermission()) {
+            close(SecurityException("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before collecting incoming()"))
+            return@callbackFlow
+        }
+
         val serverCallback = object : BluetoothGattServerCallback() {
             override fun onCharacteristicWriteRequest(
                 device: BluetoothDevice,
@@ -45,7 +53,11 @@ class BleRadioTransport(
                     }
                 }
                 if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    } catch (e: SecurityException) {
+                        // Permission revoked mid-session — the peer's write simply times out.
+                    }
                 }
             }
 
@@ -71,13 +83,13 @@ class BleRadioTransport(
         )
         service.addCharacteristic(characteristic)
 
-        gattServer = bluetoothManager.openGattServer(context, serverCallback)?.also {
-            it.addService(service)
+        gattServer = try {
+            bluetoothManager.openGattServer(context, serverCallback)?.also { it.addService(service) }
+        } catch (e: SecurityException) {
+            close(e)
+            return@callbackFlow
         }
 
-        // Fragments arriving over connections this device initiated as a
-        // GATT client (outbound side) are reassembled the same way as
-        // server-side writes, just fed in via this listener instead.
         val clientFragmentListener: (String, ByteArray) -> Unit = { address, fragment ->
             reassembler.onFragmentReceived(address, fragment)?.let { complete ->
                 trySend(
@@ -93,12 +105,20 @@ class BleRadioTransport(
 
         awaitClose {
             connectionRegistry.removeRawIncomingListener(clientFragmentListener)
-            gattServer?.close()
+            try {
+                gattServer?.close()
+            } catch (e: SecurityException) {
+                // Permission revoked mid-session — nothing left to clean up safely.
+            }
             gattServer = null
         }
     }
 
     override suspend fun broadcast(raw: RawPacket): TacticalResult<Unit> {
+        if (!hasBluetoothConnectPermission()) {
+            return TacticalResult.Failure("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before calling broadcast()")
+        }
+
         val inboundDevices = connectionRegistry.inboundConnectedDevices()
         val outboundGatts = connectionRegistry.outboundConnectedGatts()
 
@@ -117,8 +137,12 @@ class BleRadioTransport(
                 val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(device.address))
                 var peerOk = true
                 for (chunk in chunks) {
-                    serverCharacteristic.value = chunk
-                    if (!server.notifyCharacteristicChanged(device, serverCharacteristic, false)) {
+                    val notified = try {
+                        server.notifyChanged(device, serverCharacteristic, chunk)
+                    } catch (e: SecurityException) {
+                        false
+                    }
+                    if (!notified) {
                         peerOk = false
                         break
                     }
@@ -136,8 +160,12 @@ class BleRadioTransport(
             val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(gatt.device.address))
             var peerOk = true
             for (chunk in chunks) {
-                characteristicOut.value = chunk
-                if (!gatt.writeCharacteristic(characteristicOut)) {
+                val written = try {
+                    gatt.writeChunk(characteristicOut, chunk)
+                } catch (e: SecurityException) {
+                    false
+                }
+                if (!written) {
                     peerOk = false
                     break
                 }
@@ -149,6 +177,49 @@ class BleRadioTransport(
         else TacticalResult.Failure("broadcast reached no peers: ${failures.joinToString("; ")}")
     }
 
+    private fun hasBluetoothConnectPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true // Legacy BLUETOOTH permission (API <31) is install-time granted, not runtime-gated.
+        }
+
+    /** Notifies using the API 33+ overload (value passed directly, avoids
+     *  the deprecated characteristic.value mutation) when available. */
+    private fun BluetoothGattServer.notifyChanged(
+        device: BluetoothDevice,
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray
+    ): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifyCharacteristicChanged(device, characteristic, false, value) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = value
+            @Suppress("DEPRECATION")
+            notifyCharacteristicChanged(device, characteristic, false)
+        }
+    } catch (e: SecurityException) {
+        false
+    }
+
+    /** Writes using the API 33+ overload for the same reason. */
+    private fun BluetoothGatt.writeChunk(characteristic: BluetoothGattCharacteristic, value: ByteArray): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            writeCharacteristic(
+                characteristic,
+                value,
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            ) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = value
+            @Suppress("DEPRECATION")
+            writeCharacteristic(characteristic)
+        }
+    } catch (e: SecurityException) {
+        false
+    }
     companion object {
         val GATT_SERVICE_UUID: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
         val PACKET_CHARACTERISTIC_UUID: UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")

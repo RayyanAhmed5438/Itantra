@@ -57,7 +57,7 @@ object BleFragmenter {
 class BleFragmentReassembler {
 
     private data class TransferKey(val peerAddress: String, val transferId: Int)
-    private class InProgress(val totalChunks: Int) {
+    private class InProgress(totalChunks: Int) {
         val chunks = arrayOfNulls<ByteArray>(totalChunks)
         var received = 0
     }
