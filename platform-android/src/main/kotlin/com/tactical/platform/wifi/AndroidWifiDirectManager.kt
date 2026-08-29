@@ -29,7 +29,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 class AndroidWifiDirectManager(
     private val context: Context,
     private val wifiP2pManager: WifiP2pManager,
-    private val channel: Channel
+    private val wifichannel: Channel
 ) : WifiDirectManager {
 
     override suspend fun discoverPeers(): Flow<List<WifiDirectPeer>> = callbackFlow {
@@ -40,13 +40,13 @@ class AndroidWifiDirectManager(
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action == WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION) {
-                    wifiP2pManager.requestPeers(channel, peerListListener)
+                    wifiP2pManager.requestPeers(wifichannel, peerListListener)
                 }
             }
         }
         context.registerReceiver(receiver, IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION))
 
-        wifiP2pManager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+        wifiP2pManager.discoverPeers(wifichannel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 // Peers arrive via the broadcast above, not this callback —
                 // this only confirms the scan request itself was accepted.
@@ -64,7 +64,7 @@ class AndroidWifiDirectManager(
         suspendCancellableCoroutine { continuation ->
             val config = WifiP2pConfig().apply { deviceAddress = deviceId }
 
-            wifiP2pManager.connect(channel, config, object : WifiP2pManager.ActionListener {
+            wifiP2pManager.connect(wifichannel, config, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     // Negotiation accepted only — actual group formation is
                     // reported asynchronously via WIFI_P2P_CONNECTION_CHANGED_ACTION,

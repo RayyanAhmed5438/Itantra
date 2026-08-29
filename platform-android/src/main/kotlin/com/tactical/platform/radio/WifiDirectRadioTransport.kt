@@ -43,7 +43,7 @@ import java.util.concurrent.ConcurrentHashMap
 class WifiDirectRadioTransport(
     private val context: Context,
     private val wifiP2pManager: WifiP2pManager,
-    private val channel: Channel
+    private val wifichannel: Channel
 ) : RadioTransport {
 
     private val sockets = ConcurrentHashMap<String, Socket>()
@@ -79,7 +79,7 @@ class WifiDirectRadioTransport(
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action != WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION) return
 
-                wifiP2pManager.requestConnectionInfo(channel) { info ->
+                wifiP2pManager.requestConnectionInfo(wifichannel) { info ->
                     if (info == null || !info.groupFormed) return@requestConnectionInfo
 
                     if (info.isGroupOwner) {

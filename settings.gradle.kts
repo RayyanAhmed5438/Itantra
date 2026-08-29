@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "imantra"
+rootProject.name = "itantra"
 include(":app")
 include(":core-domain")
 include(":core-platform-api")

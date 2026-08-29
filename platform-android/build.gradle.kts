@@ -1,8 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.google.devtools.ksp)
 }
 
 android {
@@ -14,7 +13,7 @@ android {
         // targetSdk is not set on library modules (AGP ignores it there);
         // the app module's targetSdk governs runtime behavior.
 
-        consumerProguardFiles("proguard-rules.pro")
+
     }
 
     buildFeatures {
@@ -28,8 +27,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
     }
 
     packaging {
@@ -57,12 +58,12 @@ dependencies {
     // On-device inference backends — `implementation`, never `api`, so
     // dependent modules (engine-speech, feature-ptt, app) never see these
     // types directly. SpeechBackendModule is the only seam.
-    implementation(libs.tensorflow.lite)
-    implementation(libs.tensorflow.lite.support)
-    implementation(libs.onnxruntime.android)
+//    implementation(libs.tensorflow.lite)
+//    implementation(libs.tensorflow.lite.support)
+//    implementation(libs.onnxruntime.android)
 
-    testImplementation(kotlin("test"))
+//    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.androidx.test.core)
-    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.core)
+//    testImplementation(libs.robolectric)
 }

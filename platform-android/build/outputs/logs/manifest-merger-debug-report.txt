@@ -1,0 +1,130 @@
+-- Merging decision tree log ---
+manifest
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:2:1-90:12
+INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:2:1-90:12
+	package
+		INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml
+	xmlns:tools
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:3:5-51
+	xmlns:android
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:2:11-69
+uses-permission#android.permission.RECORD_AUDIO
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:6:5-71
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:6:22-68
+uses-permission#android.permission.BLUETOOTH_SCAN
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:12:5-15:32
+	android:usesPermissionFlags
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:14:9-55
+	tools:targetApi
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:15:9-29
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:13:9-57
+uses-permission#android.permission.BLUETOOTH_ADVERTISE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:16:5-99
+	tools:targetApi
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:16:76-96
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:16:22-75
+uses-permission#android.permission.BLUETOOTH_CONNECT
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:17:5-97
+	tools:targetApi
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:17:74-94
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:17:22-73
+uses-permission#android.permission.BLUETOOTH
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:22:5-24:38
+	android:maxSdkVersion
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:24:9-35
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:23:9-52
+uses-permission#android.permission.BLUETOOTH_ADMIN
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:25:5-27:38
+	android:maxSdkVersion
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:27:9-35
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:26:9-58
+uses-permission#android.permission.ACCESS_FINE_LOCATION
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:28:5-30:38
+	android:maxSdkVersion
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:30:9-35
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:29:9-63
+uses-feature#android.hardware.bluetooth_le
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:34:5-36:36
+	android:required
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:36:9-33
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:35:9-53
+uses-permission#android.permission.ACCESS_WIFI_STATE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:39:5-76
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:39:22-73
+uses-permission#android.permission.CHANGE_WIFI_STATE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:40:5-76
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:40:22-73
+uses-permission#android.permission.ACCESS_NETWORK_STATE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:41:5-79
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:41:22-76
+uses-permission#android.permission.CHANGE_NETWORK_STATE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:42:5-79
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:42:22-76
+uses-permission#android.permission.NEARBY_WIFI_DEVICES
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:46:5-99
+	tools:targetApi
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:46:76-96
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:46:22-75
+uses-feature#android.hardware.wifi.direct
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:48:5-50:36
+	android:required
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:50:9-33
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:49:9-52
+uses-permission#android.permission.CAMERA
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:53:5-65
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:53:22-62
+uses-feature#android.hardware.camera.flash
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:54:5-56:36
+	android:required
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:56:9-33
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:55:9-53
+uses-permission#android.permission.VIBRATE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:59:5-66
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:59:22-63
+uses-permission#android.permission.WAKE_LOCK
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:62:5-68
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:62:22-65
+uses-permission#android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:63:5-95
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:63:22-92
+uses-permission#android.permission.POST_NOTIFICATIONS
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:66:5-77
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:66:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:69:5-77
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:69:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:70:5-94
+	android:name
+		ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:70:22-91
+application
+ADDED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml:72:5-88:19
+uses-sdk
+INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml
+INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from F:\rayyan\rayyan\itantra\platform-android\src\main\AndroidManifest.xml

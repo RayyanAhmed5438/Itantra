@@ -7,8 +7,6 @@ import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import com.tactical.platform.api.ble.BleBeaconAdvertiser
-import kotlinx.coroutines.resume
-import kotlinx.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -68,12 +66,18 @@ class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
             val callback = object : AdvertiseCallback() {
                 override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
                     activeCallback = this
-                    if (continuation.isActive) continuation.resume(Unit)
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.success(Unit))
+                    }
                 }
 
                 override fun onStartFailure(errorCode: Int) {
                     if (continuation.isActive) {
-                        continuation.resumeWithException(IllegalStateException("advertise() failed, errorCode=$errorCode"))
+                        continuation.resumeWith(
+                            Result.failure(
+                                IllegalStateException("advertise() failed, errorCode=$errorCode")
+                            )
+                        )
                     }
                 }
             }

@@ -68,6 +68,9 @@ class AlertToneGenerator {
         )
     }
 
+    private fun samplesForDuration(durationMs: Int, sampleRate: Int): Int =
+        (durationMs.toLong() * sampleRate / 1000L).toInt()
+
     private fun renderSegments(segments: List<ToneSegment>, config: AudioConfig, amplitude: Double): ByteArray {
         val bytesPerSample = 2
         val totalBytes = segments.sumOf {

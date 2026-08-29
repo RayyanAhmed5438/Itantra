@@ -78,7 +78,10 @@ class BinaryPacketSerializer : PacketSerializer {
         writeString(packet.sender.value)
         writeString(packet.callsign)
         writeBoolean(packet.listenPort != null)
-        if (packet.listenPort != null) writeInt(packet.listenPort)
+        val listenPort = packet.listenPort
+        if (listenPort != null) {
+            writeInt(listenPort)
+        }
         writeLong(packet.timestamp)
     }
 
@@ -88,9 +91,16 @@ class BinaryPacketSerializer : PacketSerializer {
         writeDouble(fix.latitude)
         writeDouble(fix.longitude)
         writeBoolean(fix.altitude != null)
-        if (fix.altitude != null) writeDouble(fix.altitude)
+        val altitude = fix.altitude
+        if (altitude != null) {
+            writeDouble(altitude)
+        }
         writeBoolean(fix.accuracyMeters != null)
-        if (fix.accuracyMeters != null) writeFloat(fix.accuracyMeters)
+
+        val accuracyMeters = fix.accuracyMeters
+        if (accuracyMeters != null) {
+            writeFloat(accuracyMeters)
+        }
         writeLong(fix.timestamp)
     }
 
