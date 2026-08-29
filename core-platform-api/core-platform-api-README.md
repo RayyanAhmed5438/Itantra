@@ -2,7 +2,7 @@
 
 Pure Kotlin/JVM API layer that defines the contracts between the app's domain/engine/feature modules and the platform implementation.
 
-This module answers **what platform capabilities are available** — recording and playing audio, BLE advertising/scanning, radio I/O, Wi-Fi Direct discovery/connection, haptics, power management, emergency alert controls, permissions, and on-device speech/model access. It does **not** contain Android implementations or business logic.
+This module answers **what platform capabilities are available** — recording and playing audio, BLE advertising/scanning, radio I/O, Wi-Fi Direct discovery/connection, haptics, power management, emergency alert controls, permissions, and on-device speech/model access. It defines interfaces and small platform-neutral boundary types only; it does **not** contain Android implementations, inference code, hardware access, or feature/business logic.
 
 Package root: `com.tactical.platform.api`.
 
@@ -524,24 +524,24 @@ The revised architecture keeps `core-platform-api` as the contract boundary and 
 |---|---|---|
 | `audio` | `AudioRecorder` | Full recording + low-power VOX monitoring |
 | `audio` | `AudioPlayer` | Audio playback + alert playback + interruption |
-| `audio` | `AlertTone` | Predefined alert identifiers |
+| `audio` | `AlertTone` | Predefined alert identifiers (declared with `AudioPlayer`) |
 | `radio` | `RawPacket` | Raw received bytes + RSSI + timestamp |
 | `radio` | `RadioTransport` | Bearer-agnostic receive/broadcast |
 | `ble` | `ScannedBleDevice` | Raw BLE scan result |
 | `ble` | `BleBeaconAdvertiser` | Advertise/stop local beacon |
 | `ble` | `BleBeaconScanner` | Stream BLE scan results |
 | `wifi` | `WifiDirectManager` | Peer discovery + connection |
-| `wifi` | `WifiDirectPeer` | Wi-Fi Direct peer data |
+| `wifi` | `WifiDirectPeer` | Wi-Fi Direct peer data (declared with `WifiDirectManager`) |
 | `haptics` | `HapticPattern` | Validated vibration waveform |
 | `haptics` | `HapticEngine` | Execute vibration waveform |
 | `power` | `WakeLockManager` | Acquire/release CPU wake lock |
 | `power` | `DozeModeHandler` | Request battery-optimization exemption |
 | `alarm` | `AlarmBypass` | Emergency DND/volume override |
 | `flashlight` | `FlashlightController` | Emergency flashlight strobe/off |
-| `permissions` | `Permission` | Platform-independent permission IDs |
+| `permissions` | `Permission` | Platform-independent permission IDs (declared with `PermissionGateway`) |
 | `permissions` | `PermissionGateway` | Request one logical permission |
 | `speech` | `SpeechToText` | Streaming local STT |
-| `speech` | `TranscriptionChunk` | Partial/final STT result + language |
+| `speech` | `TranscriptionChunk` | Partial/final STT result + language (declared with `SpeechToText`) |
 | `speech` | `TextToSpeech` | Local multilingual TTS |
 | `speech` | `ModelProvider` | Access local model bytes |
 | `speech` | `ModelDownloadManager` | Ensure a model is locally ready |
@@ -557,9 +557,9 @@ plugins {
 
 dependencies {
     implementation(project(":core-domain"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 
 kotlin {

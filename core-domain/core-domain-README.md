@@ -102,7 +102,7 @@ Represents the current snapshot of a discovered peer.
 | `rssi` | `Int` | Received signal strength associated with the observation |
 | `lastSeen` | `Instant` | Time at which the peer was last observed |
 | `hopCount` | `Int` | Number of hops associated with the peer's current observation |
-| `link` | `LinkType?`* | Current connection/link classification |
+| `link` | `LinkType` | Current connection/link classification |
 | `battery` | `Int?` | Optional battery percentage |
 
 ### Validation
@@ -456,7 +456,7 @@ Represents the language identity needed by the speech backend.
 
 This keeps model/backend-specific language identifiers out of higher-level feature code.
 
-`TextPacket` intentionally carries the simpler wire-level `languageCode: String`; `LanguageTag` is the richer type used at the TTS API boundary.
+`TextPacket` intentionally carries the simpler wire-level `languageCode: String`; `LanguageTag` remains the richer domain type used at the speech boundary.
 
 ---
 
