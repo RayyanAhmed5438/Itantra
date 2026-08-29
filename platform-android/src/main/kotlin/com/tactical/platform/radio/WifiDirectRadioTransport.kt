@@ -17,6 +17,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
@@ -67,6 +68,8 @@ class WifiDirectRadioTransport(
                 } catch (e: IOException) {
                     // Peer dropped — normal on disconnect. broadcast() simply
                     // stops reaching this peer once its socket is removed below.
+                } catch (e: IllegalArgumentException) {
+                    // Malformed/corrupted frame — treat like a dropped peer, not a fatal error.
                 } finally {
                     sockets.remove(peerAddress, socket)
                     writeLocks.remove(peerAddress)
@@ -132,10 +135,10 @@ class WifiDirectRadioTransport(
         }
     }
 
-    override suspend fun broadcast(raw: RawPacket): TacticalResult<Unit> {
+    override suspend fun broadcast(raw: RawPacket): TacticalResult<Unit> = withContext(Dispatchers.IO) {
         val peers = sockets.entries.toList()
         if (peers.isEmpty()) {
-            return TacticalResult.Failure("No connected Wi-Fi Direct peers to broadcast to")
+            return@withContext TacticalResult.Failure("No connected Wi-Fi Direct peers to broadcast to")
         }
 
         var anySucceeded = false
@@ -159,7 +162,7 @@ class WifiDirectRadioTransport(
             }
         }
 
-        return if (anySucceeded) TacticalResult.Success(Unit)
+        if (anySucceeded) TacticalResult.Success(Unit)
         else TacticalResult.Failure("broadcast reached no peers: ${failures.joinToString("; ")}")
     }
 
