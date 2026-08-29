@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.tactical.protocol.serialization.BinaryPacketSerializerTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-28T21:01:24.726Z" hostname="SOMEONE" time="0.008">
+  <properties/>
+  <testcase name="should round-trip TextPacket" classname="com.tactical.protocol.serialization.BinaryPacketSerializerTest" time="0.006"/>
+  <testcase name="should round-trip MeshRelayPacket" classname="com.tactical.protocol.serialization.BinaryPacketSerializerTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
