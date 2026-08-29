@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.tactical.engine.discovery.catalog.InMemoryDeviceCatalogTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-28T21:01:28.358Z" hostname="SOMEONE" time="0.28">
+  <properties/>
+  <testcase name="should mark nodes as STALE before eviction" classname="com.tactical.engine.discovery.catalog.InMemoryDeviceCatalogTest" time="0.234"/>
+  <testcase name="should evict stale nodes after TTL" classname="com.tactical.engine.discovery.catalog.InMemoryDeviceCatalogTest" time="0.042"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
