@@ -5,7 +5,7 @@ import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.audio.AudioRecorder
 import com.tactical.platform.api.speech.SpeechToText
-import com.tactical.platform.api.speech.TranscriptionChunk
+import com.tactical.domain.speech.TranscriptionChunk
 import com.tactical.ptt.feedback.PttHapticFeedback
 import com.tactical.ptt.relay.PttMeshDispatcher
 import com.tactical.ptt.relay.PttPacketBuilder

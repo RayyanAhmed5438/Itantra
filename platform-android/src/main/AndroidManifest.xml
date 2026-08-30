@@ -28,6 +28,9 @@
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="32" />
 
     <!-- Declares BLE as used-but-not-required: many tactical radios/relays
          are phones without native BLE, but we don't gate install on it. -->
