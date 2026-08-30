@@ -2,124 +2,85 @@ package com.tactical.ptt.controller
 
 import com.tactical.domain.audio.AudioConfig
 import com.tactical.domain.identity.DeviceId
-import com.tactical.domain.result.TacticalResult
-import com.tactical.domain.speech.LanguageTag
 import com.tactical.ptt.feedback.PttHapticFeedback
 import com.tactical.ptt.relay.PttMeshDispatcher
 import com.tactical.ptt.relay.PttPacketBuilder
-import com.tactical.ptt.session.PttSession
 import com.tactical.ptt.session.SessionState
-import com.tactical.api.audio.AudioRecorder
-import com.tactical.api.speech.SpeechToText
-import com.tactical.api.speech.TranscriptionChunk
+import com.tactical.platform.api.audio.AudioRecorder
+import com.tactical.platform.api.speech.SpeechToText
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * State machine: IDLE -> ARMED -> RECORDING -> TRANSMITTING -> IDLE.
- * Transmits only on final, non-empty transcription chunk and surfaces TacticalResult.
- */
 class DefaultPttController(
-    private val localDeviceId: DeviceId,
+    private val deviceId: DeviceId,
     private val audioRecorder: AudioRecorder,
     private val speechToText: SpeechToText,
     private val packetBuilder: PttPacketBuilder,
     private val meshDispatcher: PttMeshDispatcher,
     private val hapticFeedback: PttHapticFeedback,
-    private val defaultLanguageTag: LanguageTag = LanguageTag("en-US"),
+    private val scope: CoroutineScope,
     private val audioConfig: AudioConfig = AudioConfig(),
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val releaseGraceMs: Long = 600L
 ) : PttController {
 
-    private val mutex = Mutex()
     private val _state = MutableStateFlow(PttState())
-    private var currentSession: PttSession? = null
-    private var transcriptionJob: Job? = null
-    private var latestFinalChunk: TranscriptionChunk? = null
-
     override fun state(): StateFlow<PttState> = _state.asStateFlow()
 
-    override suspend fun press() = mutex.withLock {
-        if (_state.value.sessionState != SessionState.IDLE) return@withLock
+    private var sessionJob: Job? = null
 
-        // Transition: IDLE -> ARMED
-        _state.update { it.copy(sessionState = SessionState.ARMED, lastResult = null) }
+    override suspend fun press() {
+        if (_state.value.sessionState != SessionState.IDLE) return
+
+        _state.update {
+            it.copy(sessionState = SessionState.ARMED, lastTranscription = null, lastResult = null)
+        }
         hapticFeedback.onPress()
 
-        val session = PttSession(
-            deviceId = localDeviceId,
-            languageTag = defaultLanguageTag
-        )
-        currentSession = session
-        latestFinalChunk = null
-
-        val audioStream = audioRecorder.start(audioConfig)
-
-        // Transition: ARMED -> RECORDING
         _state.update { it.copy(sessionState = SessionState.RECORDING) }
+        val frames = audioRecorder.start(audioConfig)
 
-        transcriptionJob = speechToText.transcribe(audioStream, defaultLanguageTag)
-            .onEach { chunk ->
-                _state.update { it.copy(lastTranscription = chunk.text) }
+        sessionJob = scope.launch {
+            speechToText.transcribe(frames).collect { chunk ->
                 if (chunk.isFinal) {
-                    latestFinalChunk = chunk
+                    _state.update {
+                        it.copy(lastTranscription = chunk.text, sessionState = SessionState.TRANSMITTING)
+                    }
+                    transmit(chunk.text, chunk.languageCode)
+                    _state.update { it.copy(sessionState = SessionState.IDLE) }
+                } else {
+                    _state.update { it.copy(lastTranscription = chunk.text) }
                 }
             }
-            .catch { e ->
-                _state.update {
-                    it.copy(
-                        sessionState = SessionState.IDLE,
-                        lastResult = TacticalResult.Failure(e)
-                    )
-                }
-            }
-            .launchIn(scope)
+        }
     }
 
-    override suspend fun release() = mutex.withLock {
-        if (_state.value.sessionState != SessionState.RECORDING) return@withLock
-
+    override suspend fun release() {
         hapticFeedback.onRelease()
         audioRecorder.stop()
-        transcriptionJob?.cancel()
-        transcriptionJob = null
 
-        val session = currentSession
-        val chunk = latestFinalChunk
-
-        if (session != null && chunk != null && chunk.text.isNotBlank()) {
-            // Transition: RECORDING -> TRANSMITTING
-            _state.update { it.copy(sessionState = SessionState.TRANSMITTING) }
-
-            val packet = packetBuilder.build(session, chunk)
-            val result = meshDispatcher.dispatch(packet)
-
-            if (result is TacticalResult.Success) {
-                hapticFeedback.onTransmitComplete()
-            }
-
-            // Transition: TRANSMITTING -> IDLE
-            _state.update {
-                it.copy(
-                    sessionState = SessionState.IDLE,
-                    lastResult = result
-                )
+        val job = sessionJob
+        if (job != null) {
+            withTimeoutOrNull(releaseGraceMs) { job.join() }
+            job.cancel()
+            sessionJob = null
+            if (_state.value.sessionState != SessionState.TRANSMITTING) {
+                _state.update { it.copy(sessionState = SessionState.IDLE) }
             }
         } else {
             _state.update { it.copy(sessionState = SessionState.IDLE) }
         }
+    }
 
-        currentSession = null
-        latestFinalChunk = null
+    private suspend fun transmit(text: String, languageCode: String) {
+        val packet = packetBuilder.build(text = text, languageCode = languageCode, sender = deviceId)
+        val result = meshDispatcher.dispatch(packet)
+        _state.update { it.copy(lastResult = result) }
+        hapticFeedback.onTransmitComplete()
     }
 }
