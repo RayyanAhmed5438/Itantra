@@ -47,7 +47,7 @@ class AmplitudeVoxController(
             .onEach {
                 if (!speaking) {
                     speaking = true
-                    pttController.press()
+                    pttController.press(isVox=true)
                 }
             }
             .catch { disable() }
