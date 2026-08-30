@@ -11,7 +11,9 @@ data class PttState(
 )
 
 interface PttController {
-    suspend fun press()
+    /** isVox = true when this session was triggered by VOX energy
+     *  detection rather than a manual button press. */
+    suspend fun press(isVox: Boolean = false)
     suspend fun release()
     fun state(): StateFlow<PttState>
 }
