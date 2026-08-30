@@ -1,7 +1,7 @@
 package com.tactical.ptt.controller
 
 import com.tactical.domain.result.TacticalResult
-import com.tactical.feature.ptt.session.SessionState
+import com.tactical.ptt.session.SessionState
 import kotlinx.coroutines.flow.StateFlow
 
 data class PttState(
