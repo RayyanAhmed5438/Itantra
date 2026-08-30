@@ -2,6 +2,7 @@ package com.tactical.ptt.controller
 
 import com.tactical.domain.audio.AudioConfig
 import com.tactical.domain.identity.DeviceId
+import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.audio.AudioRecorder
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.api.speech.TranscriptionChunk
@@ -19,16 +20,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Builds a fresh PttSession on every press(), reused for the whole
- * recording so PttPacketBuilder.build(session, chunk) has consistent
- * metadata across possibly-multiple partial chunks. onTransmitComplete()
- * fires after every dispatch attempt (success or failure) — flagged
- * earlier as an open question against PttHapticFeedback's doc comment
- * ("Triggered when a packet is successfully handed off"); kept as-is
- * since unconfirmed, but a UI probably wants different feedback for a
- * failed transmission than a successful one.
- */
 class DefaultPttController(
     private val deviceId: DeviceId,
     private val audioRecorder: AudioRecorder,
@@ -47,10 +38,10 @@ class DefaultPttController(
     private var sessionJob: Job? = null
     private var currentSession: PttSession? = null
 
-    override suspend fun press() {
+    override suspend fun press(isVox: Boolean) {
         if (_state.value.sessionState != SessionState.IDLE) return
 
-        val session = PttSession(deviceId = deviceId)
+        val session = PttSession(deviceId = deviceId, isVox = isVox)
         currentSession = session
 
         _state.update {
@@ -97,6 +88,10 @@ class DefaultPttController(
         val packet = packetBuilder.build(session, chunk)
         val result = meshDispatcher.dispatch(packet)
         _state.update { it.copy(lastResult = result) }
-        hapticFeedback.onTransmitComplete()
+
+        when (result) {
+            is TacticalResult.Success -> hapticFeedback.onTransmitComplete()
+            is TacticalResult.Failure -> hapticFeedback.onTransmitFailed()
+        }
     }
 }
