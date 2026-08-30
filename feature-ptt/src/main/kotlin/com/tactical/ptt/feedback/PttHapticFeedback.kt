@@ -12,4 +12,6 @@ interface PttHapticFeedback {
 
     /** Triggered when a packet is successfully handed off to the mesh transport. */
     suspend fun onTransmitComplete()
+
+    suspend fun onTransmitFailed()
 }
