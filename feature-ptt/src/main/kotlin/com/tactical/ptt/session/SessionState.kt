@@ -1,4 +1,4 @@
-package com.tactical.feature.ptt.session
+package com.tactical.ptt.session
 
 /**
  * Represents the distinct lifecycle states of a Push-To-Talk (PTT) session.
