@@ -1,26 +1,22 @@
 package com.tactical.ptt.relay
 
-import com.tactical.domain.packet.Severity
 import com.tactical.domain.packet.TextPacket
-import com.tactical.feature.ptt.session.PttSession
 import com.tactical.platform.api.speech.TranscriptionChunk
-import java.util.UUID
+import com.tactical.ptt.session.PttSession
 
 /**
- * Constructs a TextPacket from session metadata and a finalized transcription chunk.
+ * Constructs a TextPacket from session metadata and a finalized
+ * transcription chunk. Uses chunk.languageCode (what the multilingual
+ * STT model actually detected for this utterance), not
+ * session.languageTag, since the two could differ mid-session — see
+ * PttSession's open question about languageTag's actual purpose.
  */
 class PttPacketBuilder {
-
-    fun build(session: PttSession, chunk: TranscriptionChunk): TextPacket {
-        return TextPacket(
-            id = UUID.randomUUID().toString(),
-            senderId = session.deviceId,
-            recipientId = null, // Broadcast across the tactical mesh
-            timestamp = System.currentTimeMillis(),
-            ttl = 3,
+    fun build(session: PttSession, chunk: TranscriptionChunk): TextPacket =
+        TextPacket(
+            sender = session.deviceId,
             text = chunk.text,
-            languageTag = session.languageTag,
-            severity = Severity.NORMAL
+            languageCode = chunk.languageCode,
+            timestamp = System.currentTimeMillis()
         )
-    }
 }
