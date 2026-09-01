@@ -2,7 +2,7 @@ package com.tactical.emergency.beacon
 
 import com.tactical.domain.location.GeoFix
 import com.tactical.domain.packet.EmergencyPacket
-import com.tactical.feature.emergency.broadcast.EmergencyBroadcaster
+import com.tactical.emergency.broadcast.EmergencyBroadcaster
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
