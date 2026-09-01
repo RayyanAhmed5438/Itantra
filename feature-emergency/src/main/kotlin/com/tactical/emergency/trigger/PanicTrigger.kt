@@ -1,4 +1,4 @@
-package com.tactical.feature.emergency.trigger
+package com.tactical.emergency.trigger
 
 import kotlinx.coroutines.flow.StateFlow
 
