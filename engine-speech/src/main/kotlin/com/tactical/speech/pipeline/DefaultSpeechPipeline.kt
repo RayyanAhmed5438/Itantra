@@ -1,9 +1,9 @@
-package com.tactical.speech.pipeline
+package com.tactical.engine.speech.pipeline
 
 import com.tactical.domain.audio.AudioFrame
 import com.tactical.domain.speech.LanguageTag
-import com.tactical.api.speech.SpeechToText
-import com.tactical.api.speech.TextToSpeech
+import com.tactical.platform.api.speech.SpeechToText
+import com.tactical.platform.api.speech.TextToSpeech
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
