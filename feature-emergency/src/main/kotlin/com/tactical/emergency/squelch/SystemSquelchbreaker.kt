@@ -1,4 +1,4 @@
-package com.tactical.feature.emergency.squelch
+package com.tactical.emergency.squelch
 
 import com.tactical.domain.packet.EmergencyPacket
 import com.tactical.domain.speech.LanguageTag
