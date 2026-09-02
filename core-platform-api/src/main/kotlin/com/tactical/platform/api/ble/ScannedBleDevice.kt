@@ -19,7 +19,7 @@ data class ScannedBleDevice(
         if (deviceId != other.deviceId || rssi != other.rssi) return false
         val a = advertisementPayload
         val b = other.advertisementPayload
-        return if (a == null || b == null) a == b else a.contentEquals(b)
+        return if (a === null || b === null) a === b else a.contentEquals(b)
     }
 
     override fun hashCode(): Int {

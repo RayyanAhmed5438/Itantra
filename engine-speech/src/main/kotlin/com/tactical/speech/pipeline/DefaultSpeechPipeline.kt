@@ -1,4 +1,4 @@
-package com.tactical.engine.speech.pipeline
+package com.tactical.speech.pipeline
 
 import com.tactical.domain.audio.AudioFrame
 import com.tactical.domain.speech.LanguageTag
@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.first
  *
  * Note: SpeechToText.transcribe() takes no language parameter — the
  * shared multilingual model detects/handles the spoken language itself.
- * [lang] here only selects the *output* voice for TextToSpeech.synthesize().
+ * [] here only selects the *output* voice for TextToSpeech.synthesize().
  */
 class DefaultSpeechPipeline(
     private val speechToText: SpeechToText,

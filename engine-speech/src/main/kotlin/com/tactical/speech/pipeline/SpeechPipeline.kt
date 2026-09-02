@@ -1,4 +1,4 @@
-package com.tactical.engine.speech.pipeline
+package com.tactical.speech.pipeline
 
 import com.tactical.domain.audio.AudioFrame
 import com.tactical.domain.speech.LanguageTag

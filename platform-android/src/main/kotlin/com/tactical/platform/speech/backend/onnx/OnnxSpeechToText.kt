@@ -21,12 +21,12 @@ import javax.inject.Inject
 
 /**
  * Implements SpeechToText using ONNX Runtime. Only file importing
- * ai.onnxruntime for STT.
+ * AI.onnxruntime for STT.
  *
- * Same streaming design as TfliteSpeechToText (buffer → periodic partial
+ * Same streaming design as TfLiteSpeechToText (buffer → periodic partial
  * inference → 400ms-silence final inference) — duplicated rather than
  * shared with the TFLite version for the same package-isolation reason
- * given in OnnxTensorMapper's kdoc.
+ * given in OnnxTensorMapper's KDoc.
  *
  * One real difference from the TFLite version worth calling out:
  * OrtSession.run() is documented thread-safe for concurrent calls (it
@@ -65,7 +65,7 @@ class OnnxSpeechToText @Inject constructor(
 
             // ASSUMPTION FLAGGED: shape [1, sampleCount] — same
             // single-input, dynamic-time-axis assumption as
-            // TfliteSpeechToText, unconfirmed against a real checkpoint.
+            // TfLiteSpeechToText, unconfirmed against a real checkpoint.
             OnnxTensor.createTensor(environment, inputFloats, longArrayOf(1, sampleCount.toLong())).use { inputTensor ->
                 session.run(mapOf(inputName to inputTensor)).use { result ->
                     val outputTensor = result[0] as OnnxTensor
@@ -129,7 +129,7 @@ class OnnxSpeechToText @Inject constructor(
     private fun decodeOutput(logits: FloatArray): String {
         throw NotImplementedError(
             "STT output decoding isn't wired up yet — needs the real model's " +
-                    "vocabulary/decoding scheme (see OnnxSpeechToText's class kdoc)"
+                    "vocabulary/decoding scheme (see OnnxSpeechToText's class KDoc)"
         )
     }
 

@@ -1,4 +1,4 @@
-package com.tactical.engine.speech.config
+package com.tactical.speech.config
 
 import com.tactical.domain.speech.LanguageTag
 

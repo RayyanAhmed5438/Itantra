@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.net.toUri
 import com.tactical.platform.api.power.DozeModeHandler
 
 /**
@@ -28,7 +29,7 @@ class AndroidDozeModeHandler(private val context: Context) : DozeModeHandler {
         if (powerManager.isIgnoringBatteryOptimizations(context.packageName)) return
 
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:${context.packageName}")
+            data = "package:${context.packageName}".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)

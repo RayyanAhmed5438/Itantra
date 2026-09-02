@@ -74,7 +74,7 @@ class BleFragmentReassembler {
     fun onFragmentReceived(peerAddress: String, fragment: ByteArray): ByteArray? {
         if (fragment.size < 8) return null
 
-        val buffer = java.nio.ByteBuffer.wrap(fragment)
+        val buffer = ByteBuffer.wrap(fragment)
         val transferId = buffer.int
         val chunkIndex = buffer.short.toInt()
         val totalChunks = buffer.short.toInt()
