@@ -64,6 +64,7 @@ class PeriodicBeaconEmitter(
          */
         val bleBytes = blePayloadMapper.toBytes(beacon)
 
+
         bleAdvertiser.advertise(bleBytes)
 
         /*

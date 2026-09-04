@@ -32,6 +32,8 @@ class CompositeBeaconScanner(
                     blePayloadMapper.toBeaconPacketOrNull(payload)
                         ?: return@mapNotNull null
 
+
+
                 DeviceNode(
                     id = packet.sender,
                     callsign = packet.callsign,

@@ -65,12 +65,22 @@ class AndroidBleScanner(
                 callbackType: Int,
                 result: ScanResult
             ) {
+                android.util.Log.d(
+                    "BLE_DEBUG",
+                    "SCAN RESULT: device=${result.device.address}, " +
+                            "rssi=${result.rssi}"
+                )
                 val manufacturerData =
                     result.scanRecord?.manufacturerSpecificData
 
                 if (manufacturerData == null) {
                     return
                 }
+
+                android.util.Log.d(
+                    "BLE_DEBUG",
+                    "MANUFACTURER DATA: $manufacturerData"
+                )
 
                 for (index in 0 until manufacturerData.size()) {
 

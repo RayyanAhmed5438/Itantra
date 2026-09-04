@@ -50,6 +50,11 @@ class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
                 override fun onStartSuccess(
                     settingsInEffect: AdvertiseSettings
                 ) {
+                    android.util.Log.d(
+                        "BLE_DEBUG",
+                        "ADVERTISEMENT STARTED SUCCESSFULLY"
+                    )
+
                     activeCallback = this
 
                     if (continuation.isActive) {
@@ -58,6 +63,10 @@ class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
                 }
 
                 override fun onStartFailure(errorCode: Int) {
+                    android.util.Log.e(
+                        "BLE_DEBUG",
+                        "ADVERTISEMENT FAILED: errorCode=$errorCode"
+                    )
                     if (continuation.isActive) {
                         continuation.resumeWith(
                             Result.failure(
