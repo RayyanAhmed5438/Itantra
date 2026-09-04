@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.tactical.app"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"

@@ -59,7 +59,6 @@ dependencies {
     // dependent modules (engine-speech, feature-ptt, app) never see these
     // types directly. SpeechBackendModule is the only seam.
     implementation(libs.tensorflow.lite)
-    implementation(libs.tensorflow.lite.support)
     implementation(libs.onnxruntime.android)
 
 //    testImplementation(kotlin("test"))

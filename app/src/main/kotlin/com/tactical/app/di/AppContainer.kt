@@ -12,8 +12,6 @@ import com.tactical.engine.mesh.router.FloodMeshRouter
 import com.tactical.engine.mesh.ttl.DecrementingTtlTracker
 import com.tactical.platform.api.radio.RadioTransport
 import com.tactical.platform.api.radio.RawPacket
-import com.tactical.platform.speech.FakeSpeechToText
-import com.tactical.platform.speech.FakeTextToSpeech
 import com.tactical.protocol.hashing.XxHashPacketHasher
 import com.tactical.protocol.serialization.BinaryPacketSerializer
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +26,7 @@ class AppContainer(val context: Context) {
     val localDeviceId = DeviceId("SENTINEL-COMMANDER")
 
     val serializer = BinaryPacketSerializer()
-    val hasher = XxHashPacketHasher(serializer)
+    val hasher = XxHashPacketHasher()
     val dedupFilter = RollingBloomFilter()
     val ttlTracker = DecrementingTtlTracker()
 
@@ -51,6 +49,5 @@ class AppContainer(val context: Context) {
     val deviceCatalog = InMemoryDeviceCatalog()
     val proximityEstimator = RssiProximityEstimator()
 
-    val fakeStt = FakeSpeechToText()
-    val fakeTts = FakeTextToSpeech()
+
 }
