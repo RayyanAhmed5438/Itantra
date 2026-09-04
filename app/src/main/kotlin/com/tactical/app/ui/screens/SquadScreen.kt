@@ -105,7 +105,7 @@ fun SquadScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "4 DEVICES ONLINE",
+                        text = "${uiState.squadPeers.count { it.isConnected }} DEVICES ONLINE",
                         color = RedTacticalPrimaryBright,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold

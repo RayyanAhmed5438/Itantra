@@ -20,6 +20,7 @@ import com.tactical.app.ui.theme.*
 
 @Composable
 fun AppHeader(
+    deviceCount: Int,
     modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {}
 ) {
@@ -86,7 +87,9 @@ fun AppHeader(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "→ Wi-Fi Direct • 4 Devices",
+                text = "→ Wi-Fi Direct • $deviceCount ${
+                    if (deviceCount == 1) "Device" else "Devices"
+                }",
                 color = RedTacticalTextSecondary,
                 fontSize = 11.sp
             )

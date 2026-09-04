@@ -2,31 +2,47 @@ package com.tactical.engine.discovery.beacon
 
 import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.packet.BeaconPacket
-import com.tactical.platform.api.radio.RadioTransport
+import com.tactical.platform.api.ble.BleBeaconAdvertiser
 import com.tactical.platform.api.radio.RawPacket
-import com.tactical.protocol.serialization.PacketSerializer
+import com.tactical.platform.api.radio.RadioTransport
+import com.tactical.platform.api.ble.BlePayloadMapper
 import kotlinx.coroutines.*
+import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Broadcasts a BeaconPacket every 2 seconds via RadioTransport.
- */
 class PeriodicBeaconEmitter(
     private val localDeviceId: DeviceId,
     private val callsign: String,
     private val transport: RadioTransport,
-    private val serializer: PacketSerializer,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val bleAdvertiser: BleBeaconAdvertiser,
+    private val scope: CoroutineScope =
+        CoroutineScope(Dispatchers.Default + SupervisorJob())
 ) : BeaconEmitter {
 
     private var job: Job? = null
 
+    private val running = AtomicBoolean(false)
+
+    private val blePayloadMapper = BlePayloadMapper()
+
     override fun start() {
-        if (job != null) return
-        
+        if (!running.compareAndSet(false, true)) return
+
         job = scope.launch {
-            while (isActive) {
-                emit()
-                delay(2000)
+            try {
+                while (isActive) {
+                    emitBeacon()
+                    delay(BEACON_INTERVAL_MS)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } finally {
+                running.set(false)
+
+                try {
+                    bleAdvertiser.stopAdvertising()
+                } catch (_: Exception) {
+                    // Nothing else to do during shutdown.
+                }
             }
         }
     }
@@ -36,14 +52,30 @@ class PeriodicBeaconEmitter(
         job = null
     }
 
-    private suspend fun emit() {
+    private suspend fun emitBeacon() {
         val beacon = BeaconPacket(
             sender = localDeviceId,
             callsign = callsign,
             timestamp = System.currentTimeMillis()
         )
-        val bytes = serializer.serialize(beacon)
-        val raw = RawPacket(bytes, 0, System.currentTimeMillis())
-        transport.broadcast(raw)
+
+        /*
+         * BLE gets the compact BLE-specific representation.
+         */
+        val bleBytes = blePayloadMapper.toBytes(beacon)
+
+        bleAdvertiser.advertise(bleBytes)
+
+        /*
+         * Normal radio transport still gets the normal
+         * PacketSerializer representation elsewhere.
+         *
+         * This emitter no longer has PacketSerializer because
+         * BLE discovery and radio transport have different wire formats.
+         */
+    }
+
+    companion object {
+        private const val BEACON_INTERVAL_MS = 2000L
     }
 }

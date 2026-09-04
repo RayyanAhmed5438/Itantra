@@ -15,73 +15,143 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
-/**
- * Implements BleBeaconScanner by wrapping Android's BluetoothLeScanner.
- * Handles the API 28-30 (ACCESS_FINE_LOCATION-gated) vs API 31+
- * (BLUETOOTH_SCAN-gated) permission split per the interface's kdoc — but
- * only as a guard against a SecurityException crash on startScan(), not
- * as a request path. Actually requesting the permission from the user is
- * PermissionGateway's job (not yet built); callers are expected to have
- * gone through that before collecting this Flow.
- */
-class AndroidBleScanner(private val context: Context) : BleBeaconScanner {
+class AndroidBleScanner(
+    private val context: Context
+) : BleBeaconScanner {
 
     private val bluetoothManager: BluetoothManager by lazy {
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }
+
     private val scanner: BluetoothLeScanner?
         get() = bluetoothManager.adapter?.bluetoothLeScanner
 
     override fun scan(): Flow<ScannedBleDevice> = callbackFlow {
-        val requiredPermission = scanPermissionForThisApiLevel()
-        if (context.checkSelfPermission(requiredPermission) != PackageManager.PERMISSION_GRANTED) {
-            close(SecurityException("Missing $requiredPermission — request it via PermissionGateway before collecting scan()"))
-            return@callbackFlow
-        }
 
-        val le = scanner
-        if (le == null) {
-            close(IllegalStateException("BLE scanning unavailable (adapter off, or chipset doesn't support it)"))
-            return@callbackFlow
-        }
-
-        val callback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                trySend(result.toScannedBleDevice())
-            }
-
-            override fun onBatchScanResults(results: MutableList<ScanResult>) {
-                results.forEach { trySend(it.toScannedBleDevice()) }
-            }
-
-            override fun onScanFailed(errorCode: Int) {
-                close(IllegalStateException("BLE scan failed, errorCode=$errorCode"))
-            }
-        }
-
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
-
-        le.startScan(null, settings, callback)
-
-        awaitClose { le.stopScan(callback) }
-    }
-
-    private fun ScanResult.toScannedBleDevice(): ScannedBleDevice {
-        val manufacturerData = scanRecord?.manufacturerSpecificData
-        val payload = manufacturerData?.let { sparse -> if (sparse.size() == 0) null else sparse.valueAt(0) }
-        return ScannedBleDevice(
-            deviceId = device.address,
-            rssi = rssi,
-            advertisementPayload = payload
-        )
-    }
-
-    private fun scanPermissionForThisApiLevel(): String =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val requiredPermission = if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        ) {
             Manifest.permission.BLUETOOTH_SCAN
         } else {
             Manifest.permission.ACCESS_FINE_LOCATION
         }
+
+        if (
+            context.checkSelfPermission(requiredPermission) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            close(
+                SecurityException(
+                    "Missing $requiredPermission"
+                )
+            )
+            return@callbackFlow
+        }
+
+        val le = scanner
+
+        if (le == null) {
+            close(
+                IllegalStateException(
+                    "BLE scanning unavailable"
+                )
+            )
+            return@callbackFlow
+        }
+
+        val callback = object : ScanCallback() {
+
+            override fun onScanResult(
+                callbackType: Int,
+                result: ScanResult
+            ) {
+                val manufacturerData =
+                    result.scanRecord?.manufacturerSpecificData
+
+                if (manufacturerData == null) {
+                    return
+                }
+
+                for (index in 0 until manufacturerData.size()) {
+
+                    val payload = manufacturerData.valueAt(index)
+
+                    if (payload == null) continue
+
+                    trySend(
+                        ScannedBleDevice(
+                            deviceId = result.device.address,
+                            rssi = result.rssi,
+                            advertisementPayload = payload
+                        )
+                    )
+                }
+            }
+
+            override fun onBatchScanResults(
+                results: MutableList<ScanResult>
+            ) {
+                results.forEach { result ->
+
+                    val manufacturerData =
+                        result.scanRecord?.manufacturerSpecificData
+                            ?: return@forEach
+
+                    for (index in 0 until manufacturerData.size()) {
+
+                        val payload = manufacturerData.valueAt(index)
+
+                        if (payload == null) continue
+
+                        trySend(
+                            ScannedBleDevice(
+                                deviceId = result.device.address,
+                                rssi = result.rssi,
+                                advertisementPayload = payload
+                            )
+                        )
+                    }
+                }
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                close(
+                    IllegalStateException(
+                        "BLE scan failed, errorCode=$errorCode"
+                    )
+                )
+            }
+        }
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(
+                ScanSettings.SCAN_MODE_LOW_LATENCY
+            )
+            .setLegacy(true)
+            .build()
+
+        try {
+            le.startScan(
+                null,
+                settings,
+                callback
+            )
+        } catch (e: SecurityException) {
+            close(
+                SecurityException(
+                    "Bluetooth scan permission is not granted",
+                    e
+                )
+            )
+            return@callbackFlow
+        }
+
+        awaitClose {
+            try {
+                le.stopScan(callback)
+            } catch (_: SecurityException) {
+                // Permission was revoked.
+            }
+        }
+    }
 }

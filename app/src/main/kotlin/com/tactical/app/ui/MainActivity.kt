@@ -26,12 +26,18 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ -> }
+    ) { result ->
+
+        val allGranted = result.values.all { it }
+
+        if (allGranted) {
+            startMeshService()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        checkAndRequestPermissions()
-        startMeshService()
+
 
         setContent {
             RedTacticalTheme {
@@ -44,7 +50,7 @@ class MainActivity : ComponentActivity() {
                         .background(RedTacticalBackground)
                 ) {
                     Scaffold(
-                        topBar = { AppHeader() },
+                        topBar = { AppHeader(deviceCount = uiState.squadPeers.count { it.isConnected }) },
                         bottomBar = {
                             AppBottomNavigation(
                                 selectedTab = selectedTab,
@@ -109,6 +115,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        checkAndRequestPermissions()
     }
 
     private fun startMeshService() {
@@ -121,25 +128,35 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
+        val permissions = mutableListOf<String>()
+
+        fun addIfMissing(permission: String) {
+            if (
+                checkSelfPermission(permission) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                permissions.add(permission)
+            }
+        }
+
+        addIfMissing(Manifest.permission.RECORD_AUDIO)
+        addIfMissing(Manifest.permission.ACCESS_FINE_LOCATION)
+        addIfMissing(Manifest.permission.ACCESS_COARSE_LOCATION)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-        } else {
-            permissions.add(Manifest.permission.BLUETOOTH)
-            permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
+            addIfMissing(Manifest.permission.BLUETOOTH_SCAN)
+            addIfMissing(Manifest.permission.BLUETOOTH_CONNECT)
+            addIfMissing(Manifest.permission.BLUETOOTH_ADVERTISE)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            addIfMissing(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        requestPermissionLauncher.launch(permissions.toTypedArray())
+        if (permissions.isEmpty()) {
+            startMeshService()
+        } else {
+            requestPermissionLauncher.launch(permissions.toTypedArray())
+        }
     }
 }

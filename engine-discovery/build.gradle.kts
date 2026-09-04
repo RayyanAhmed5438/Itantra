@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":core-protocol"))
     implementation(project(":core-platform-api"))
 
+
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(kotlin("test"))
     implementation(libs.kotlinx.coroutines.test)}

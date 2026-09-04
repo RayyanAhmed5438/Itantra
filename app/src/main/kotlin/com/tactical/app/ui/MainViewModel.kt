@@ -11,6 +11,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.tactical.engine.discovery.proximity.RssiProximityEstimator
+import com.tactical.engine.discovery.service.DiscoveryService
+import com.tactical.domain.identity.LinkType
+import kotlinx.coroutines.flow.collectLatest
 
 enum class PttState {
     IDLE, RECORDING, PROCESSING, SENDING, SENT
@@ -58,12 +62,7 @@ data class MainUiState(
     val isWalkieTalkieScreenVisible: Boolean = false,
     val emergencyHoldProgress: Float = 0f,
     val activeEmergencyAlert: EmergencyAlertData? = null,
-    val squadPeers: List<PeerNodeUi> = listOf(
-        PeerNodeUi("COMMANDER", true, "12 m", 4),
-        PeerNodeUi("TEAM-02", true, "28 m", 3),
-        PeerNodeUi("TEAM-03", true, "45 m", 2),
-        PeerNodeUi("TEAM-04", false, "Weak connection", 1)
-    ),
+    val squadPeers: List<PeerNodeUi> = emptyList(),
     val messages: List<ChatMessageUi> = listOf(
         ChatMessageUi("YOU", "यह मदद चाहिए", "10:32 AM", "Delivered"),
         ChatMessageUi("TEAM-02", "सब लोग सुरक्षित हैं", "10:31 AM", "Played", isVoice = true),
@@ -74,7 +73,9 @@ data class MainUiState(
 )
 
 @HiltViewModel
-class MainViewModel @Inject constructor() : ViewModel() {
+class MainViewModel @Inject constructor(
+    private val discoveryService: DiscoveryService
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -191,5 +192,61 @@ class MainViewModel @Inject constructor() : ViewModel() {
             statusText = "Delivered"
         )
         _uiState.update { it.copy(messages = listOf(newMsg) + it.messages) }
+    }
+
+    private val proximityEstimator = RssiProximityEstimator()
+
+    init {
+
+
+        viewModelScope.launch {
+            discoveryService.peers().collectLatest { devices ->
+                _uiState.update { state ->
+                    state.copy(
+                        squadPeers = devices.map { device ->
+                            val distance = proximityEstimator.estimate(device.rssi)
+
+                            PeerNodeUi(
+                                callsign = device.callsign.ifBlank {
+                                    device.id.value
+                                },
+                                isConnected = device.link != LinkType.STALE,
+                                distanceText = formatDistance(distance),
+                                signalBars = signalBars(device.rssi)
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun formatDistance(distance: Double): String {
+        if (distance < 0) return "Unknown"
+
+        return if (distance < 100) {
+            "${distance.toInt()} m"
+        } else {
+            "${(distance / 1000.0).formatOneDecimal()} km"
+        }
+    }
+
+    private fun signalBars(rssi: Int): Int {
+        return when {
+            rssi >= -55 -> 4
+            rssi >= -65 -> 3
+            rssi >= -75 -> 2
+            else -> 1
+        }
+    }
+
+    private fun Double.formatOneDecimal(): String =
+        String.format(java.util.Locale.US, "%.1f", this)
+
+    override fun onCleared() {
+        viewModelScope.launch {
+            discoveryService.stop()
+        }
+        super.onCleared()
     }
 }
