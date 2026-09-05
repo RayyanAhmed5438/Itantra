@@ -3,9 +3,9 @@ package com.tactical.engine.discovery.scanner
 import com.tactical.domain.identity.DeviceNode
 import com.tactical.domain.identity.LinkType
 import com.tactical.domain.packet.BeaconPacket
+import com.tactical.platform.api.ble.BleBeaconPayloadCodec
 import com.tactical.platform.api.ble.BleBeaconScanner
 import com.tactical.platform.api.radio.RadioTransport
-import com.tactical.platform.api.ble.BlePayloadMapper
 import com.tactical.protocol.serialization.PacketSerializer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
@@ -18,21 +18,17 @@ class CompositeBeaconScanner(
     private val serializer: PacketSerializer
 ) : BeaconScanner {
 
-    private val blePayloadMapper = BlePayloadMapper()
-
     override fun scan(): Flow<DeviceNode> {
-
         val bleFlow = bleScanner.scan()
             .mapNotNull { scanned ->
+                val payload = scanned.advertisementPayload ?: return@mapNotNull null
 
-                val payload = scanned.advertisementPayload
-                    ?: return@mapNotNull null
-
-                val packet =
-                    blePayloadMapper.toBeaconPacketOrNull(payload)
-                        ?: return@mapNotNull null
-
-
+                // decode() checks the magic bytes first and returns null
+                // immediately for anything that isn't this app's format —
+                // this is what actually filters out unrelated nearby BLE
+                // devices (headphones, trackers, etc.) instead of trying
+                // to interpret their random bytes as a beacon.
+                val packet = BleBeaconPayloadCodec.decode(payload) ?: return@mapNotNull null
 
                 DeviceNode(
                     id = packet.sender,
@@ -46,13 +42,9 @@ class CompositeBeaconScanner(
 
         val radioFlow = radioTransport.incoming()
             .mapNotNull { raw ->
-
                 try {
                     val packet = serializer.deserialize(raw.data)
-
-                    if (packet !is BeaconPacket) {
-                        return@mapNotNull null
-                    }
+                    if (packet !is BeaconPacket) return@mapNotNull null
 
                     DeviceNode(
                         id = packet.sender,
@@ -67,9 +59,6 @@ class CompositeBeaconScanner(
                 }
             }
 
-        return merge(
-            bleFlow,
-            radioFlow
-        )
+        return merge(bleFlow, radioFlow)
     }
 }

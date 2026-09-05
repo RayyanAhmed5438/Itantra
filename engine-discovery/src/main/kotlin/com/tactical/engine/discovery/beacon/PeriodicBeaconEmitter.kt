@@ -3,9 +3,8 @@ package com.tactical.engine.discovery.beacon
 import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.packet.BeaconPacket
 import com.tactical.platform.api.ble.BleBeaconAdvertiser
-import com.tactical.platform.api.radio.RawPacket
+import com.tactical.platform.api.ble.BleBeaconPayloadCodec
 import com.tactical.platform.api.radio.RadioTransport
-import com.tactical.platform.api.ble.BlePayloadMapper
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -19,10 +18,7 @@ class PeriodicBeaconEmitter(
 ) : BeaconEmitter {
 
     private var job: Job? = null
-
     private val running = AtomicBoolean(false)
-
-    private val blePayloadMapper = BlePayloadMapper()
 
     override fun start() {
         if (!running.compareAndSet(false, true)) return
@@ -30,14 +26,22 @@ class PeriodicBeaconEmitter(
         job = scope.launch {
             try {
                 while (isActive) {
-                    emitBeacon()
+                    try {
+                        emitBeacon()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // A single failed beacon (bad payload, adapter
+                        // momentarily off, etc.) shouldn't take the whole
+                        // service down — skip this tick, try again in 2s.
+
+                    }
                     delay(BEACON_INTERVAL_MS)
                 }
             } catch (e: CancellationException) {
                 throw e
             } finally {
                 running.set(false)
-
                 try {
                     bleAdvertiser.stopAdvertising()
                 } catch (_: Exception) {
@@ -59,21 +63,15 @@ class PeriodicBeaconEmitter(
             timestamp = System.currentTimeMillis()
         )
 
-        /*
-         * BLE gets the compact BLE-specific representation.
-         */
-        val bleBytes = blePayloadMapper.toBytes(beacon)
-
-
+        // BLE gets the compact, magic-byte-prefixed encoding — the magic
+        // bytes let CompositeBeaconScanner reject any third-party BLE
+        // device's unrelated advertisement instead of misparsing it.
+        val bleBytes = BleBeaconPayloadCodec.encode(beacon)
         bleAdvertiser.advertise(bleBytes)
 
-        /*
-         * Normal radio transport still gets the normal
-         * PacketSerializer representation elsewhere.
-         *
-         * This emitter no longer has PacketSerializer because
-         * BLE discovery and radio transport have different wire formats.
-         */
+        // Normal radio transport still gets the full PacketSerializer
+        // representation elsewhere — different wire format on purpose,
+        // this emitter no longer touches that path.
     }
 
     companion object {

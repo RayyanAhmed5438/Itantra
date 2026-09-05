@@ -27,10 +27,18 @@ class DefaultMeshService(
 ) : MeshService {
 
     private val _incomingPackets = MutableSharedFlow<Packet>()
-    
+
     init {
         // Start processing incoming radio traffic
         transport.incoming()
+            .catch {
+                // A transport failing (no Bluetooth hardware, permission
+                // revoked mid-run, etc.) must not propagate as an uncaught
+                // exception here — SupervisorJob isolates sibling coroutines
+                // from each other, it does not swallow this exception, so
+                // without this the whole app crashes over what should just
+                // mean "one bearer is temporarily unavailable."
+            }
             .onEach { handleIncomingRaw(it) }
             .launchIn(scope)
     }

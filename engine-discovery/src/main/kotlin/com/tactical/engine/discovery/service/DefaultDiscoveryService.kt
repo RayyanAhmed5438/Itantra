@@ -7,6 +7,7 @@ import com.tactical.engine.discovery.scanner.BeaconScanner
 import com.tactical.platform.api.wifi.WifiDirectManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -31,6 +32,13 @@ class DefaultDiscoveryService(
 
         if (scanJob == null) {
             scanJob = scanner.scan()
+                .catch {
+                    // A scanner source failing (no BLE hardware, permission
+                    // revoked mid-run) must not propagate as an uncaught
+                    // exception here — matches the existing wifiJob guard
+                    // below. Losing beacon updates is the acceptable
+                    // degradation; crashing the whole service is not.
+                }
                 .onEach { node ->
                     catalog.upsert(node)
                 }
@@ -41,24 +49,17 @@ class DefaultDiscoveryService(
             wifiJob = wifiDirectManager
                 .discoverPeers()
                 .onEach { peers ->
-
-                    /*
-                     * Wi-Fi Direct discovery tells us that a physical
-                     * peer exists, but it does not contain the logical
-                     * DeviceId/callsign from our beacon.
-                     *
-                     * Therefore BLE beacon discovery remains the source
-                     * of the DeviceNode identity.
-                     *
-                     * Here we initiate the Wi-Fi Direct connection so
-                     * that the RadioTransport can subsequently establish
-                     * the TCP data path.
-                     */
                     peers.forEach { peer ->
                         scope.launch {
-                            wifiDirectManager.connect(peer.deviceAddress)
+                            try {
+                                wifiDirectManager.connect(peer.deviceAddress)
+                            } catch (e: Exception) {
+
+                            }
                         }
                     }
+                }
+                .catch {
                 }
                 .launchIn(scope)
         }

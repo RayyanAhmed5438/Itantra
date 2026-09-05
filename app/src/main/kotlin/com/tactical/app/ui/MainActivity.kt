@@ -27,13 +27,44 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
+        val denied = result.filterValues { !it }.keys
+        if (denied.isNotEmpty()) {
+            android.util.Log.w("MainActivity", "Some permissions denied: $denied")
+        }
 
-        val allGranted = result.values.all { it }
+        // Only the permissions actually required to start scanning/advertising
+        // for THIS API level — mirrors requiredTransportPermissions() below,
+        // rather than hardcoding ACCESS_FINE_LOCATION which isn't requested
+        // (or needed) at all on API 33+.
+        val transportPermissionsGranted = requiredTransportPermissions()
+            .all { result[it] == true }
 
-        if (allGranted) {
+        if (transportPermissionsGranted) {
             startMeshService()
+        } else {
+            android.util.Log.e(
+                "MainActivity",
+                "Mesh service not started: required transport permissions were denied"
+            )
         }
     }
+
+    private fun requiredTransportPermissions(): List<String> {
+        val permissions = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+        } else {
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        return permissions
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,43 +151,29 @@ class MainActivity : ComponentActivity() {
 
     private fun startMeshService() {
         val intent = Intent(this, TacticalMeshService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startForegroundService(intent)
     }
 
     private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf<String>()
-
-        fun addIfMissing(permission: String) {
-            if (
-                checkSelfPermission(permission) !=
-                android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                permissions.add(permission)
-            }
-        }
-
-        addIfMissing(Manifest.permission.RECORD_AUDIO)
-        addIfMissing(Manifest.permission.ACCESS_FINE_LOCATION)
-        addIfMissing(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        permissions += requiredTransportPermissions()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            addIfMissing(Manifest.permission.BLUETOOTH_SCAN)
-            addIfMissing(Manifest.permission.BLUETOOTH_CONNECT)
-            addIfMissing(Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
+        } else {
+            permissions.add(Manifest.permission.BLUETOOTH)
+            permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
+            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            addIfMissing(Manifest.permission.POST_NOTIFICATIONS)
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        if (permissions.isEmpty()) {
-            startMeshService()
-        } else {
-            requestPermissionLauncher.launch(permissions.toTypedArray())
-        }
+        requestPermissionLauncher.launch(permissions.distinct().toTypedArray())
     }
 }

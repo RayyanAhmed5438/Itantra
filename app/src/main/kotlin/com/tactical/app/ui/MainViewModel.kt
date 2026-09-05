@@ -197,8 +197,6 @@ class MainViewModel @Inject constructor(
     private val proximityEstimator = RssiProximityEstimator()
 
     init {
-
-
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->

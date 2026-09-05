@@ -19,24 +19,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
-/**
- * Implements WifiDirectManager by wrapping Android's WifiP2pManager.
- * Handles peer discovery (WIFI_P2P_PEERS_CHANGED_ACTION) and connection
- * initiation only. The data path once a group actually forms is
- * WifiDirectRadioTransport's job (see radio/) — it listens for
- * WIFI_P2P_CONNECTION_CHANGED_ACTION independently rather than being
- * driven by this class, matching WifiDirectManager's own kdoc note that
- * engine-mesh talks to RadioTransport,
- * not necessarily to this interface.
- *
- * discoverPeers()/connect() both guard against the missing-permission
- * lint (@RequiresPermission on WifiP2pManager's discoverPeers/
- * requestPeers/connect) the same way AndroidBleScanner guards BLE scan —
- * a check, not a request. Requesting is PermissionGateway's job; callers
- * are expected to have gone through that before calling either method
- * here.
- */
 class AndroidWifiDirectManager(
     private val context: Context,
     private val wifiP2pManager: WifiP2pManager,
@@ -44,85 +28,216 @@ class AndroidWifiDirectManager(
 ) : WifiDirectManager {
 
     override suspend fun discoverPeers(): Flow<List<WifiDirectPeer>> = callbackFlow {
+
         val requiredPermission = wifiDirectPermissionForThisApiLevel()
-        if (context.checkSelfPermission(requiredPermission) != PackageManager.PERMISSION_GRANTED) {
-            close(SecurityException("Missing $requiredPermission — request it via PermissionGateway before collecting discoverPeers()"))
+
+        if (!hasWifiDirectPermission()) {
+            android.util.Log.w(
+                TAG,
+                "Wi-Fi Direct discovery skipped: missing $requiredPermission"
+            )
+            close()
             return@callbackFlow
         }
 
-        val peerListListener = WifiP2pManager.PeerListListener { deviceList: WifiP2pDeviceList ->
-            trySend(deviceList.deviceList.map { it.toWifiDirectPeer() })
-        }
+        val peerListListener =
+            WifiP2pManager.PeerListListener { deviceList: WifiP2pDeviceList ->
+                trySend(
+                    deviceList.deviceList.map { it.toWifiDirectPeer() }
+                )
+            }
 
         val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                if (intent.action == WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION) {
-                    if (context.checkSelfPermission(requiredPermission) == PackageManager.PERMISSION_GRANTED) {
-                        wifiP2pManager.requestPeers(wifichannel, peerListListener)
+
+            override fun onReceive(
+                ctx: Context,
+                intent: Intent
+            ) {
+                if (
+                    intent.action ==
+                    WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION
+                ) {
+                    if (hasWifiDirectPermission()) {
+                        try {
+                            wifiP2pManager.requestPeers(
+                                wifichannel,
+                                peerListListener
+                            )
+                        } catch (e: SecurityException) {
+                            android.util.Log.w(
+                                TAG,
+                                "Wi-Fi Direct requestPeers permission denied",
+                                e
+                            )
+                        }
                     }
                 }
             }
         }
-        context.registerReceiver(receiver, IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION))
 
-        wifiP2pManager.discoverPeers(wifichannel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                // Peers arrive via the broadcast above, not this callback —
-                // this only confirms the scan request itself was accepted.
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(
+                    receiver,
+                    IntentFilter(
+                        WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION
+                    ),
+                    Context.RECEIVER_NOT_EXPORTED
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.registerReceiver(
+                    receiver,
+                    IntentFilter(
+                        WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION
+                    )
+                )
             }
 
-            override fun onFailure(reasonCode: Int) {
-                close(IllegalStateException("discoverPeers() request failed, reason=${reasonCode.toReasonString()}"))
-            }
-        })
+            wifiP2pManager.discoverPeers(
+                wifichannel,
+                object : WifiP2pManager.ActionListener {
 
-        awaitClose { context.unregisterReceiver(receiver) }
-    }
+                    override fun onSuccess() {
+                        android.util.Log.d(
+                            TAG,
+                            "Wi-Fi Direct peer discovery started"
+                        )
+                    }
 
-    override suspend fun connect(deviceId: String): TacticalResult<Unit> {
-        val requiredPermission = wifiDirectPermissionForThisApiLevel()
-        if (context.checkSelfPermission(requiredPermission) != PackageManager.PERMISSION_GRANTED) {
-            return TacticalResult.Failure("Missing $requiredPermission — request it via PermissionGateway before calling connect()")
-        }
-
-        return suspendCancellableCoroutine { continuation ->
-            val config = WifiP2pConfig().apply { deviceAddress = deviceId }
-
-            wifiP2pManager.connect(wifichannel, config, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    // Negotiation accepted only — actual group formation is
-                    // reported asynchronously via WIFI_P2P_CONNECTION_CHANGED_ACTION,
-                    // which WifiDirectRadioTransport listens for on its own.
-                    if (continuation.isActive) continuation.resumeWith(Result.success(TacticalResult.Success(Unit)))
-                }
-
-                override fun onFailure(reasonCode: Int) {
-                    if (continuation.isActive) {
-                        continuation.resumeWith(
-                            Result.success(TacticalResult.Failure("connect($deviceId) failed, reason=${reasonCode.toReasonString()}"))
+                    override fun onFailure(reasonCode: Int) {
+                        android.util.Log.w(
+                            TAG,
+                            "Wi-Fi Direct discovery failed: " +
+                                    reasonCode.toReasonString()
                         )
                     }
                 }
-            })
+            )
+
+        } catch (e: SecurityException) {
+            android.util.Log.w(
+                TAG,
+                "Wi-Fi Direct discovery permission denied",
+                e
+            )
+            close()
+        } catch (e: Exception) {
+            android.util.Log.e(
+                TAG,
+                "Wi-Fi Direct discovery failed",
+                e
+            )
+            close()
+        }
+
+        awaitClose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (_: Exception) {
+                // Receiver was already unregistered.
+            }
         }
     }
 
-    private fun WifiP2pDevice.toWifiDirectPeer() = WifiDirectPeer(
-        deviceAddress = deviceAddress,
-        deviceName = deviceName
-    )
+    override suspend fun connect(
+        deviceId: String
+    ): TacticalResult<Unit> {
 
-    private fun Int.toReasonString(): String = when (this) {
-        WifiP2pManager.ERROR -> "ERROR"
-        WifiP2pManager.P2P_UNSUPPORTED -> "P2P_UNSUPPORTED"
-        WifiP2pManager.BUSY -> "BUSY"
-        else -> "UNKNOWN($this)"
+        if (!hasWifiDirectPermission()) {
+            return TacticalResult.Failure(
+                "Missing Wi-Fi Direct permission"
+            )
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+
+            val config = WifiP2pConfig().apply {
+                this.deviceAddress = deviceId
+            }
+
+            try {
+
+                wifiP2pManager.connect(
+                    wifichannel,
+                    config,
+                    object : WifiP2pManager.ActionListener {
+
+                        override fun onSuccess() {
+                            if (continuation.isActive) {
+                                continuation.resume(
+                                    TacticalResult.Success(Unit)
+                                )
+                            }
+                        }
+
+                        override fun onFailure(
+                            reasonCode: Int
+                        ) {
+                            if (continuation.isActive) {
+                                continuation.resume(
+                                    TacticalResult.Failure(
+                                        "connect($deviceId) failed, " +
+                                                "reason=${reasonCode.toReasonString()}"
+                                    )
+                                )
+                            }
+                        }
+                    }
+                )
+
+            } catch (e: SecurityException) {
+                if (continuation.isActive) {
+                    continuation.resume(
+                        TacticalResult.Failure(
+                            "Wi-Fi Direct permission denied"
+                        )
+                    )
+                }
+            }
+        }
     }
 
-    private fun wifiDirectPermissionForThisApiLevel(): String =
+    // AndroidWifiDirectManager.kt
+    private fun wifiDirectRequiredPermissions(): List<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // NEARBY_WIFI_DEVICES alone is NOT sufficient in practice — confirmed
+            // by a real SecurityException from WifiPermissionsUtil even with it
+            // granted. Wi-Fi Direct peer discovery still needs Fine Location too.
+            listOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION)
+        } else {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    private fun hasWifiDirectPermission(): Boolean {
+        val permission = wifiDirectPermissionForThisApiLevel()
+
+        return context.checkSelfPermission(permission) ==
+                PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun wifiDirectPermissionForThisApiLevel(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.NEARBY_WIFI_DEVICES
         } else {
             Manifest.permission.ACCESS_FINE_LOCATION
         }
+    }
+
+    private fun WifiP2pDevice.toWifiDirectPeer() =
+        WifiDirectPeer(
+            deviceAddress = deviceAddress,
+            deviceName = deviceName
+        )
+
+    private fun Int.toReasonString(): String =
+        when (this) {
+            WifiP2pManager.ERROR -> "ERROR"
+            WifiP2pManager.P2P_UNSUPPORTED -> "P2P_UNSUPPORTED"
+            WifiP2pManager.BUSY -> "BUSY"
+            else -> "UNKNOWN($this)"
+        }
+
+    companion object {
+        private const val TAG = "AndroidWifiDirect"
+    }
 }

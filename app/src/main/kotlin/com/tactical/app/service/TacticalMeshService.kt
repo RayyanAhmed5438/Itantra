@@ -45,9 +45,22 @@ class TacticalMeshService : Service() {
         // Injecting MeshService causes the mesh engine to be created.
         // DiscoveryService requires an explicit start().
         serviceScope.launch {
-            discoveryService.start()
+            try {
+                discoveryService.start()
+            } catch (e: SecurityException) {
+                android.util.Log.e(
+                    "TacticalMeshService",
+                    "Missing permission required for mesh discovery",
+                    e
+                )
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "TacticalMeshService",
+                    "Failed to start mesh discovery",
+                    e
+                )
+            }
         }
-
         return START_STICKY
     }
 

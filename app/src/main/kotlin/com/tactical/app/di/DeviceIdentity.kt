@@ -40,7 +40,8 @@ class DeviceIdentityStore @Inject constructor(@ApplicationContext context: Conte
 
     val callsign: String by lazy {
         prefs.getString(KEY_CALLSIGN, null) ?: run {
-            val default = "OP-${deviceIdValue.takeLast(4).uppercase()}"
+            // Must fit BleBeaconPayloadCodec's 8-byte callsign limit.
+            val default = "OP-${deviceIdValue.take(4).uppercase()}"
             prefs.edit().putString(KEY_CALLSIGN, default).apply()
             default
         }

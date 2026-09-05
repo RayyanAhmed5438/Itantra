@@ -8,26 +8,46 @@ import android.os.Build
 import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.radio.RadioTransport
 import com.tactical.platform.api.radio.RawPacket
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.shareIn
 import java.util.UUID
 
 class BleRadioTransport(
     private val context: Context,
-    private val connectionRegistry: BleConnectionRegistry
+    private val connectionRegistry: BleConnectionRegistry,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
 ) : RadioTransport {
 
     private val bluetoothManager: BluetoothManager by lazy {
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }
-
+    private val bluetoothAdapter: BluetoothAdapter?
+        get() = bluetoothManager.adapter
     private var gattServer: BluetoothGattServer? = null
     private val reassembler = BleFragmentReassembler()
 
-    override fun incoming(): Flow<RawPacket> = callbackFlow {
+    private val sharedIncoming: Flow<RawPacket> by lazy {
+        rawIncoming().shareIn(scope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), replay = 0)
+    }
+
+    override fun incoming(): Flow<RawPacket> = sharedIncoming
+
+    private fun rawIncoming(): Flow<RawPacket> = callbackFlow {
         if (!hasBluetoothConnectPermission()) {
             close(SecurityException("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before collecting incoming()"))
+            return@callbackFlow
+        }
+
+        val adapter = bluetoothAdapter
+        if (adapter == null || !adapter.isEnabled) {
+            close(IllegalStateException("Bluetooth adapter unavailable or disabled"))
             return@callbackFlow
         }
 
@@ -83,10 +103,22 @@ class BleRadioTransport(
         )
         service.addCharacteristic(characteristic)
 
+
+
         gattServer = try {
-            bluetoothManager.openGattServer(context, serverCallback)?.also { it.addService(service) }
+            bluetoothManager.openGattServer(context, serverCallback)?.also {
+                it.addService(service)
+            }
         } catch (e: SecurityException) {
             close(e)
+            return@callbackFlow
+        } catch (e: NullPointerException) {
+            close(
+                IllegalStateException(
+                    "Bluetooth GATT server unavailable on this device",
+                    e
+                )
+            )
             return@callbackFlow
         }
 
