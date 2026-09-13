@@ -7,6 +7,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.merge
+import android.util.Log
+import kotlinx.coroutines.flow.catch
 
 /**
  * Multiplexes RadioTransport across BLE and Wi-Fi Direct so engine-mesh
@@ -29,7 +31,15 @@ class CompositeRadioTransport(
     private val wifiDirectTransport: RadioTransport
 ) : RadioTransport {
 
-    override fun incoming(): Flow<RawPacket> = merge(bleTransport.incoming(), wifiDirectTransport.incoming())
+    override fun incoming(): Flow<RawPacket> =
+        merge(
+            bleTransport.incoming().catch { e ->
+                Log.w(TAG, "BLE transport unavailable: ${e.message}")
+            },
+            wifiDirectTransport.incoming().catch { e ->
+                Log.w(TAG, "Wi-Fi Direct transport unavailable: ${e.message}")
+            }
+        )
 
     override suspend fun broadcast(raw: RawPacket): TacticalResult<Unit> = coroutineScope {
         val bleDeferred = async { runCatching { bleTransport.broadcast(raw) } }
@@ -50,5 +60,8 @@ class CompositeRadioTransport(
                 TacticalResult.Failure("both bearers failed — BLE: $bleError; WiFiDirect: $wifiError")
             }
         }
+    }
+    companion object {
+        private const val TAG = "CompositeRadioTransport"
     }
 }

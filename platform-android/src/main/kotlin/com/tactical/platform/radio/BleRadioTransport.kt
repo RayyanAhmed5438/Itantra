@@ -41,13 +41,32 @@ class BleRadioTransport(
 
     private fun rawIncoming(): Flow<RawPacket> = callbackFlow {
         if (!hasBluetoothConnectPermission()) {
-            close(SecurityException("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before collecting incoming()"))
+            android.util.Log.w(
+                TAG,
+                "BLE incoming disabled: missing BLUETOOTH_CONNECT permission"
+            )
+            close()
             return@callbackFlow
         }
 
-        val adapter = bluetoothAdapter
+        val adapter = try {
+            bluetoothAdapter
+        } catch (e: Exception) {
+            android.util.Log.w(
+                TAG,
+                "BLE adapter unavailable",
+                e
+            )
+            close()
+            return@callbackFlow
+        }
+
         if (adapter == null || !adapter.isEnabled) {
-            close(IllegalStateException("Bluetooth adapter unavailable or disabled"))
+            android.util.Log.d(
+                TAG,
+                "BLE incoming skipped: Bluetooth is OFF or unavailable"
+            )
+            close()
             return@callbackFlow
         }
 
@@ -107,18 +126,38 @@ class BleRadioTransport(
 
         gattServer = try {
             bluetoothManager.openGattServer(context, serverCallback)?.also {
-                it.addService(service)
+                if (!it.addService(service)) {
+                    android.util.Log.w(
+                        TAG,
+                        "Failed to add BLE GATT service"
+                    )
+                    it.close()
+                }
             }
         } catch (e: SecurityException) {
-            close(e)
-            return@callbackFlow
-        } catch (e: NullPointerException) {
-            close(
-                IllegalStateException(
-                    "Bluetooth GATT server unavailable on this device",
-                    e
-                )
+            android.util.Log.w(
+                TAG,
+                "BLE GATT server unavailable: permission denied",
+                e
             )
+            close()
+            return@callbackFlow
+        } catch (e: Exception) {
+            android.util.Log.w(
+                TAG,
+                "BLE GATT server unavailable",
+                e
+            )
+            close()
+            return@callbackFlow
+        }
+
+        if (gattServer == null) {
+            android.util.Log.w(
+                TAG,
+                "BLE GATT server could not be opened"
+            )
+            close()
             return@callbackFlow
         }
 
@@ -256,5 +295,8 @@ class BleRadioTransport(
         val GATT_SERVICE_UUID: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
         val PACKET_CHARACTERISTIC_UUID: UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
         private const val UNKNOWN_RSSI = 0
+
+        private const val TAG = "BleRadioTransport"
+
     }
 }
