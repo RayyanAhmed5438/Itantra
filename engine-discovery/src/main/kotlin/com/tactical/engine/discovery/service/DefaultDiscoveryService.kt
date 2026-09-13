@@ -10,7 +10,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 class DefaultDiscoveryService(
     private val scanner: BeaconScanner,
     private val catalog: DeviceCatalog,
@@ -31,18 +35,26 @@ class DefaultDiscoveryService(
         emitter.start()
 
         if (scanJob == null) {
-            scanJob = scanner.scan()
-                .catch {
-                    // A scanner source failing (no BLE hardware, permission
-                    // revoked mid-run) must not propagate as an uncaught
-                    // exception here — matches the existing wifiJob guard
-                    // below. Losing beacon updates is the acceptable
-                    // degradation; crashing the whole service is not.
+            scanJob = scope.launch {
+                while (isActive) {
+                    try {
+                        scanner.scan()
+                            .collect { node ->
+                                catalog.upsert(node)
+                            }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        System.err.format(
+                            "DiscoveryService",
+                            "BLE scanner stopped: ${e.message}"
+                        )
+                    }
+
+                    // Give Bluetooth a moment to recover before trying again.
+                    delay(2000L)
                 }
-                .onEach { node ->
-                    catalog.upsert(node)
-                }
-                .launchIn(scope)
+            }
         }
 
         if (wifiJob == null) {

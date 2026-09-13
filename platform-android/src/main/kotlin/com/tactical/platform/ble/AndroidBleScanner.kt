@@ -48,6 +48,13 @@ class AndroidBleScanner(
             return@callbackFlow
         }
 
+        val adapter = bluetoothManager.adapter
+
+        if (adapter == null || !adapter.isEnabled) {
+            close()
+            return@callbackFlow
+        }
+
         val le = scanner
 
         if (le == null) {
