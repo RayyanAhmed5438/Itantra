@@ -63,12 +63,7 @@ data class MainUiState(
     val emergencyHoldProgress: Float = 0f,
     val activeEmergencyAlert: EmergencyAlertData? = null,
     val squadPeers: List<PeerNodeUi> = emptyList(),
-    val messages: List<ChatMessageUi> = listOf(
-        ChatMessageUi("YOU", "यह मदद चाहिए", "10:32 AM", "Delivered"),
-        ChatMessageUi("TEAM-02", "सब लोग सुरक्षित हैं", "10:31 AM", "Played", isVoice = true),
-        ChatMessageUi("COMMANDER", "सुरक्षित स्थान पर जाएं", "10:27 AM", "ALERT", isAlert = true),
-        ChatMessageUi("TEAM-03", "लोकेशन भेज रहा हूं", "10:25 AM", "Delivered")
-    ),
+    val messages: List<ChatMessageUi> = emptyList(),
     val networkMetrics: NetworkMetrics = NetworkMetrics()
 )
 
