@@ -1,9 +1,11 @@
 package com.tactical.platform.ble
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -23,8 +25,11 @@ class AndroidBleScanner(
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }
 
+    private val bluetoothAdapter: BluetoothAdapter?
+        get() = bluetoothManager.adapter
+
     private val scanner: BluetoothLeScanner?
-        get() = bluetoothManager.adapter?.bluetoothLeScanner
+        get() = bluetoothAdapter?.bluetoothLeScanner
 
     override fun scan(): Flow<ScannedBleDevice> = callbackFlow {
 
@@ -48,9 +53,13 @@ class AndroidBleScanner(
             return@callbackFlow
         }
 
-        val adapter = bluetoothManager.adapter
+        val adapter = bluetoothAdapter
 
         if (adapter == null || !adapter.isEnabled) {
+            android.util.Log.d(
+                TAG,
+                "BLE scan skipped: Bluetooth is OFF or unavailable"
+            )
             close()
             return@callbackFlow
         }
@@ -58,13 +67,23 @@ class AndroidBleScanner(
         val le = scanner
 
         if (le == null) {
-            close(
-                IllegalStateException(
-                    "BLE scanning unavailable"
-                )
+            android.util.Log.d(
+                TAG,
+                "BLE scanner unavailable"
             )
+            close()
             return@callbackFlow
         }
+
+        val scanFilter = ScanFilter.Builder()
+            .setManufacturerData(
+                MANUFACTURER_ID,
+                byteArrayOf(
+                    MAGIC_1,
+                    MAGIC_2
+                )
+            )
+            .build()
 
         val callback = object : ScanCallback() {
 
@@ -73,27 +92,28 @@ class AndroidBleScanner(
                 result: ScanResult
             ) {
                 android.util.Log.d(
-                    "BLE_DEBUG",
-                    "SCAN RESULT: device=${result.device.address}, " +
-                            "rssi=${result.rssi}"
+                    TAG,
+                    "SCAN RESULT: device=${result.device.address}, rssi=${result.rssi}"
                 )
+
                 val manufacturerData =
                     result.scanRecord?.manufacturerSpecificData
-
-                if (manufacturerData == null) {
-                    return
-                }
-
-                android.util.Log.d(
-                    "BLE_DEBUG",
-                    "MANUFACTURER DATA: $manufacturerData"
-                )
+                        ?: return
 
                 for (index in 0 until manufacturerData.size()) {
+                    val manufacturerId = manufacturerData.keyAt(index)
+
+                    if (manufacturerId != MANUFACTURER_ID) {
+                        continue
+                    }
 
                     val payload = manufacturerData.valueAt(index)
+                        ?: continue
 
-                    if (payload == null) continue
+                    android.util.Log.d(
+                        TAG,
+                        "TACTICAL BLE BEACON: ${payload.contentToString()}"
+                    )
 
                     trySend(
                         ScannedBleDevice(
@@ -115,10 +135,14 @@ class AndroidBleScanner(
                             ?: return@forEach
 
                     for (index in 0 until manufacturerData.size()) {
+                        val manufacturerId = manufacturerData.keyAt(index)
+
+                        if (manufacturerId != MANUFACTURER_ID) {
+                            continue
+                        }
 
                         val payload = manufacturerData.valueAt(index)
-
-                        if (payload == null) continue
+                            ?: continue
 
                         trySend(
                             ScannedBleDevice(
@@ -132,6 +156,11 @@ class AndroidBleScanner(
             }
 
             override fun onScanFailed(errorCode: Int) {
+                android.util.Log.w(
+                    TAG,
+                    "BLE scan failed, errorCode=$errorCode"
+                )
+
                 close(
                     IllegalStateException(
                         "BLE scan failed, errorCode=$errorCode"
@@ -149,7 +178,7 @@ class AndroidBleScanner(
 
         try {
             le.startScan(
-                null,
+                listOf(scanFilter),
                 settings,
                 callback
             )
@@ -161,7 +190,20 @@ class AndroidBleScanner(
                 )
             )
             return@callbackFlow
+        } catch (e: Exception) {
+            close(
+                IllegalStateException(
+                    "Unable to start BLE scan",
+                    e
+                )
+            )
+            return@callbackFlow
         }
+
+        android.util.Log.d(
+            TAG,
+            "TACTICAL BLE SCAN STARTED"
+        )
 
         awaitClose {
             try {
@@ -169,6 +211,20 @@ class AndroidBleScanner(
             } catch (_: SecurityException) {
                 // Permission was revoked.
             }
+
+            android.util.Log.d(
+                TAG,
+                "TACTICAL BLE SCAN STOPPED"
+            )
         }
+    }
+
+    companion object {
+        private const val TAG = "AndroidBleScanner"
+
+        private const val MANUFACTURER_ID = 0xFFFF
+
+        private const val MAGIC_1: Byte = 0x53 // 'S'
+        private const val MAGIC_2: Byte = 0x42 // 'B'
     }
 }

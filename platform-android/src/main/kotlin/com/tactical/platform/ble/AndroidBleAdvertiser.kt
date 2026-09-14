@@ -1,5 +1,6 @@
 package com.tactical.platform.ble
 
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
@@ -9,23 +10,36 @@ import android.content.Context
 import com.tactical.platform.api.ble.BleBeaconAdvertiser
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
+class AndroidBleAdvertiser(
+    private val context: Context
+) : BleBeaconAdvertiser {
 
     private val bluetoothManager: BluetoothManager by lazy {
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }
 
+    private val bluetoothAdapter: BluetoothAdapter?
+        get() = bluetoothManager.adapter
+
     private val advertiser: BluetoothLeAdvertiser?
-        get() = bluetoothManager.adapter?.bluetoothLeAdvertiser
+        get() = bluetoothAdapter?.bluetoothLeAdvertiser
 
     private var activeCallback: AdvertiseCallback? = null
+    private var activePayload: ByteArray? = null
 
     override suspend fun advertise(payload: ByteArray) {
-        stopAdvertising()
+
+        val adapter = bluetoothAdapter
+
+        if (adapter == null || !adapter.isEnabled) {
+            throw IllegalStateException(
+                "Bluetooth is OFF or unavailable"
+            )
+        }
 
         val le = advertiser
             ?: throw IllegalStateException(
-                "BLE advertising unavailable (adapter off, or chipset doesn't support it)"
+                "BLE advertising unavailable"
             )
 
         require(payload.size <= MAX_MANUFACTURER_DATA_BYTES) {
@@ -33,40 +47,64 @@ class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
                     "${payload.size} bytes, max $MAX_MANUFACTURER_DATA_BYTES"
         }
 
+        // Already advertising this exact payload.
+        if (
+            activeCallback != null &&
+            activePayload?.contentEquals(payload) == true
+        ) {
+            return
+        }
+
+        stopAdvertising()
+
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setAdvertiseMode(
+                AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+            )
+            .setTxPowerLevel(
+                AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+            )
             .setConnectable(false)
             .build()
 
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addManufacturerData(MANUFACTURER_ID, payload)
+            .addManufacturerData(
+                MANUFACTURER_ID,
+                payload
+            )
             .build()
 
         suspendCancellableCoroutine { continuation ->
+
             val callback = object : AdvertiseCallback() {
 
                 override fun onStartSuccess(
                     settingsInEffect: AdvertiseSettings
                 ) {
                     android.util.Log.d(
-                        "BLE_DEBUG",
-                        "ADVERTISEMENT STARTED SUCCESSFULLY"
+                        TAG,
+                        "BLE ADVERTISEMENT STARTED"
                     )
 
                     activeCallback = this
+                    activePayload = payload.copyOf()
 
                     if (continuation.isActive) {
-                        continuation.resumeWith(Result.success(Unit))
+                        continuation.resumeWith(
+                            Result.success(Unit)
+                        )
                     }
                 }
 
-                override fun onStartFailure(errorCode: Int) {
-                    android.util.Log.e(
-                        "BLE_DEBUG",
-                        "ADVERTISEMENT FAILED: errorCode=$errorCode"
+                override fun onStartFailure(
+                    errorCode: Int
+                ) {
+                    android.util.Log.w(
+                        TAG,
+                        "BLE ADVERTISEMENT FAILED: errorCode=$errorCode"
                     )
+
                     if (continuation.isActive) {
                         continuation.resumeWith(
                             Result.failure(
@@ -80,7 +118,11 @@ class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
             }
 
             try {
-                le.startAdvertising(settings, data, callback)
+                le.startAdvertising(
+                    settings,
+                    data,
+                    callback
+                )
             } catch (e: SecurityException) {
                 if (continuation.isActive) {
                     continuation.resumeWith(
@@ -92,26 +134,45 @@ class AndroidBleAdvertiser(private val context: Context) : BleBeaconAdvertiser {
                         )
                     )
                 }
+            } catch (e: Exception) {
+                if (continuation.isActive) {
+                    continuation.resumeWith(
+                        Result.failure(
+                            IllegalStateException(
+                                "Unable to start BLE advertising",
+                                e
+                            )
+                        )
+                    )
+                }
             }
         }
     }
 
     override suspend fun stopAdvertising() {
-        val le = advertiser ?: return
 
-        activeCallback?.let { callback ->
+        val le = advertiser
+        val callback = activeCallback
+
+        if (le != null && callback != null) {
             try {
                 le.stopAdvertising(callback)
             } catch (_: SecurityException) {
-                // Permission was revoked; nothing else to clean up.
+                // Permission was revoked.
+            } catch (_: Exception) {
+                // Bluetooth stack may already be unavailable.
             }
         }
 
         activeCallback = null
+        activePayload = null
     }
 
     companion object {
+        private const val TAG = "AndroidBleAdvertiser"
+
         private const val MANUFACTURER_ID = 0xFFFF
+
         private const val MAX_MANUFACTURER_DATA_BYTES = 27
     }
 }
