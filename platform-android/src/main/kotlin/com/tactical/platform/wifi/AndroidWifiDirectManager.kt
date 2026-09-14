@@ -29,12 +29,20 @@ class AndroidWifiDirectManager(
 
     override suspend fun discoverPeers(): Flow<List<WifiDirectPeer>> = callbackFlow {
 
-        val requiredPermission = wifiDirectPermissionForThisApiLevel()
 
         if (!hasWifiDirectPermission()) {
             android.util.Log.w(
                 TAG,
-                "Wi-Fi Direct discovery skipped: missing $requiredPermission"
+                "Wi-Fi Direct discovery skipped: missing"
+            )
+            close()
+            return@callbackFlow
+        }
+
+        if (!isLocationEnabled()) {
+            android.util.Log.w(
+                TAG,
+                "Wi-Fi Direct discovery skipped: Location Mode is OFF"
             )
             close()
             return@callbackFlow
@@ -199,30 +207,25 @@ class AndroidWifiDirectManager(
     }
 
     // AndroidWifiDirectManager.kt
-    private fun wifiDirectRequiredPermissions(): List<String> =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // NEARBY_WIFI_DEVICES alone is NOT sufficient in practice — confirmed
-            // by a real SecurityException from WifiPermissionsUtil even with it
-            // granted. Wi-Fi Direct peer discovery still needs Fine Location too.
-            listOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION)
-        } else {
-            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
     private fun hasWifiDirectPermission(): Boolean {
-        val permission = wifiDirectPermissionForThisApiLevel()
-
-        return context.checkSelfPermission(permission) ==
-                PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun wifiDirectPermissionForThisApiLevel(): String {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.NEARBY_WIFI_DEVICES
+            context.checkSelfPermission(
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            ) == PackageManager.PERMISSION_GRANTED
         } else {
-            Manifest.permission.ACCESS_FINE_LOCATION
+            context.checkSelfPermission(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
         }
     }
 
+    private fun isLocationEnabled(): Boolean {
+        val locationManager =
+            context.getSystemService(Context.LOCATION_SERVICE)
+                    as android.location.LocationManager
+
+        return locationManager.isLocationEnabled
+    }
     private fun WifiP2pDevice.toWifiDirectPeer() =
         WifiDirectPeer(
             deviceAddress = deviceAddress,
