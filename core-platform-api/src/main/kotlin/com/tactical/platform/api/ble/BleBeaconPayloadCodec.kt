@@ -59,12 +59,7 @@ object BleBeaconPayloadCodec {
             )
         }
 
-        val callsignBytes = packet.callsign.toByteArray(StandardCharsets.UTF_8)
-
-        require(callsignBytes.size <= MAX_CALLSIGN_BYTES) {
-            "BLE callsign is too long: ${callsignBytes.size} bytes, " +
-                    "maximum is $MAX_CALLSIGN_BYTES bytes"
-        }
+        val callsignBytes = utf8Prefix(packet.callsign, MAX_CALLSIGN_BYTES)
 
         val buffer = ByteBuffer.allocate(
             HEADER_BYTES +
@@ -83,6 +78,21 @@ object BleBeaconPayloadCodec {
         buffer.put(callsignBytes)
 
         return buffer.array()
+    }
+
+    private fun utf8Prefix(value: String, maxBytes: Int): ByteArray {
+        if (value.isBlank()) {
+            throw IllegalArgumentException("BLE callsign must not be blank")
+        }
+
+        var end = value.length
+        while (end > 0) {
+            val candidate = value.substring(0, end).toByteArray(StandardCharsets.UTF_8)
+            if (candidate.size <= maxBytes) return candidate
+            end--
+        }
+
+        throw IllegalArgumentException("BLE callsign cannot fit into $maxBytes bytes")
     }
 
     fun decode(bytes: ByteArray): BeaconPacket? {
