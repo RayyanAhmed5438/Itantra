@@ -127,6 +127,25 @@ class AndroidBleConnectionManager(
     init {
         registry.addConnectionListener(this)
 
+        // Startup GATT can race with the peer's GATT server initialization.
+        // Retry quietly every 10 seconds; established sessions are left alone.
+        reconnectScope.launch {
+            delay(3000L)
+            while (true) {
+                val adapter = runCatching {
+                    context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
+                }.getOrNull()
+
+                if (adapter?.isEnabled == true) {
+                    pairedDeviceIds().forEach { id ->
+                        runCatching { reconnectPaired(id) }
+                    }
+                }
+
+                delay(10_000L)
+            }
+        }
+
         val bondFilter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         val adapterFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
