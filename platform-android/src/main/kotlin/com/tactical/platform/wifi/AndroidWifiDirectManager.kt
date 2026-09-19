@@ -118,6 +118,41 @@ class AndroidWifiDirectManager(
             close(e)
         }
     }
+    override suspend fun disconnect(): TacticalResult<Unit> {
+        if (!hasWifiDirectPermission()) {
+            return TacticalResult.Failure("Missing Wi-Fi Direct permission")
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            try {
+                wifiP2pManager.removeGroup(
+                    wifichannel,
+                    object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() {
+                            if (continuation.isActive) {
+                                continuation.resume(TacticalResult.Success(Unit))
+                            }
+                        }
+
+                        override fun onFailure(reason: Int) {
+                            if (continuation.isActive) {
+                                continuation.resume(
+                                    TacticalResult.Failure(
+                                        "Wi-Fi Direct disconnect failed: $reason"
+                                    )
+                                )
+                            }
+                        }
+                    }
+                )
+            } catch (e: SecurityException) {
+                if (continuation.isActive) {
+                    continuation.resume(TacticalResult.Failure("Wi-Fi Direct permission denied"))
+                }
+            }
+        }
+    }
+
     override suspend fun connect(deviceId: String): TacticalResult<Unit> {
         if (!hasWifiDirectPermission()) return TacticalResult.Failure("Missing Wi-Fi Direct permission")
         return suspendCancellableCoroutine { continuation ->
