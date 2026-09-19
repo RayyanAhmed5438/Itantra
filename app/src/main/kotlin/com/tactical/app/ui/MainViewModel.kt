@@ -105,15 +105,20 @@ class MainViewModel @Inject constructor(
         }
 
         healthJob = viewModelScope.launch {
-            while (viewModelScope.coroutineContext.isActive) {
-                delay(5000L)
-                if (scanLoopJob?.isActive != true) startDiscovery()
+            while (true) {
+                try {
+                    delay(5000L)
+                    if (scanLoopJob?.isActive != true) startDiscovery()
                 // Recovery guard: restart discovery when it has repeatedly stopped making progress.
                 if (discoveryService is DefaultDiscoveryService) {
                     val peers = discoveryService.peers().value
                     if (peers.isEmpty()) {
                         runCatching { discoveryService.start() }
                     }
+                } catch (_: kotlinx.coroutines.CancellationException) {
+                    break
+                } catch (_: Exception) {
+                    // Keep the health loop alive after a transient recovery error.
                 }
             }
         }
@@ -149,8 +154,12 @@ class MainViewModel @Inject constructor(
         scanLoopJob = viewModelScope.launch {
             runCatching { discoveryService.start() }
             while (viewModelScope.coroutineContext.isActive) {
-                runScanCycle()
-                delay(DISCOVERY_INTERVAL_MS)
+                try {
+                    runScanCycle()
+                    delay(DISCOVERY_INTERVAL_MS)
+                } catch (_: kotlinx.coroutines.CancellationException) {
+                    break
+                }
             }
         }
     }
