@@ -90,6 +90,12 @@ class MainViewModel @Inject constructor(
             startDiscovery()
         }
 
+        bleConnectionManager.pairedDeviceIds().forEach { pairedId ->
+            if (observedPeerIds.add(pairedId)) {
+                observePeerState(pairedId)
+            }
+        }
+
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->
@@ -116,10 +122,15 @@ class MainViewModel @Inject constructor(
                     }
 
                     val pairedIds = bleConnectionManager.pairedDeviceIds()
+                    val pairedById = state.pairedPeers.associateBy { it.deviceAddress }
+                    val pairedPeers = pairedIds.mapNotNull { id ->
+                        peers.firstOrNull { it.deviceAddress == id } ?: pairedById[id]
+                    }
+
                     state.copy(
-                        squadPeers = peers,
-                        availablePeers = peers,
-                        pairedPeers = peers.filter { it.deviceAddress in pairedIds }
+                        squadPeers = pairedPeers,
+                        availablePeers = peers.filter { it.deviceAddress !in pairedIds },
+                        pairedPeers = pairedPeers
                     )
                 }
 
@@ -247,9 +258,12 @@ class MainViewModel @Inject constructor(
     private fun refreshPairedPeers() {
         val pairedIds = bleConnectionManager.pairedDeviceIds()
         _uiState.update { state ->
+            val pairedById = state.availablePeers.associateBy { it.deviceAddress } + state.pairedPeers.associateBy { it.deviceAddress }
+            val paired = pairedIds.mapNotNull { pairedById[it] }
             state.copy(
-                pairedPeers = state.availablePeers.filter { it.deviceAddress in pairedIds },
-                squadPeers = state.availablePeers
+                pairedPeers = paired,
+                squadPeers = paired,
+                availablePeers = state.availablePeers.filter { it.deviceAddress !in pairedIds }
             )
         }
     }
