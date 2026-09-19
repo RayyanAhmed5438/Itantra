@@ -319,8 +319,30 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
 
+            var connectedCount = 0
             pairedIds.forEach { peerId ->
-                bleConnectionManager.reconnectPaired(peerId)
+                val connectionResult = bleConnectionManager.reconnectPaired(peerId)
+                if (connectionResult is TacticalResult.Success) {
+                    connectedCount++
+                }
+            }
+
+            if (connectedCount == 0) {
+                _uiState.update { state ->
+                    state.copy(
+                        messages = state.messages.mapIndexed { index, msg ->
+                            if (index == 0 && msg.sender == "YOU" && msg.text == value) {
+                                msg.copy(statusText = "No active connections")
+                            } else msg
+                        },
+                        sentMessages = state.sentMessages.mapIndexed { index, msg ->
+                            if (index == 0 && msg.text == value) {
+                                msg.copy(statusText = "No active connections")
+                            } else msg
+                        }
+                    )
+                }
+                return@launch
             }
 
             val result = meshService.send(
