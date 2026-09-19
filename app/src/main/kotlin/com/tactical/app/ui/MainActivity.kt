@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.net.wifi.WifiManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -147,6 +148,18 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        // Wi-Fi Direct service discovery requires Location Services to be
+        // enabled by the system even when the app does not use location data.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val locationEnabled =
+                (getSystemService(LOCATION_SERVICE) as? LocationManager)?.isLocationEnabled == true
+            if (!locationEnabled) {
+                startupCheckPending = true
+                openLocationSettings()
+                return
+            }
+        }
+
         startupCheckPending = false
         startMeshService()
     }
@@ -162,6 +175,14 @@ class MainActivity : ComponentActivity() {
     private fun openWifiSettings() {
         runCatching {
             startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+        }.onFailure {
+            openAppWirelessSettings()
+        }
+    }
+
+    private fun openLocationSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         }.onFailure {
             openAppWirelessSettings()
         }
