@@ -231,7 +231,9 @@ class BleRadioTransport(
             .filter { it.bondState == BluetoothDevice.BOND_BONDED }
         val outboundGatts = connectionRegistry.outboundConnectedGatts()
 
+        android.util.Log.d(TAG, "Broadcast: inbound=" + inboundDevices.size + ", outbound=" + outboundGatts.size)
         if (inboundDevices.isEmpty() && outboundGatts.isEmpty()) {
+            android.util.Log.w(TAG, "Broadcast dropped: no connected peers")
             return TacticalResult.Failure("No connected peers to broadcast to")
         }
 
@@ -257,6 +259,7 @@ class BleRadioTransport(
                     }
                 }
                 if (peerOk) anySucceeded = true else failures.add("notify failed for ${device.address}")
+                android.util.Log.d(TAG, "Notify " + device.address + " success=" + peerOk)
             }
         }
 
@@ -280,6 +283,7 @@ class BleRadioTransport(
                 }
             }
             if (peerOk) anySucceeded = true else failures.add("GATT write failed for ${gatt.device.address}")
+            android.util.Log.d(TAG, "Write " + gatt.device.address + " success=" + peerOk)
         }
 
         return if (anySucceeded) TacticalResult.Success(Unit)
@@ -330,6 +334,7 @@ class BleRadioTransport(
         false
     }
     companion object {
+        private const val TAG = "BleRadioTransport"
         val GATT_SERVICE_UUID: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         val PACKET_CHARACTERISTIC_UUID: UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
