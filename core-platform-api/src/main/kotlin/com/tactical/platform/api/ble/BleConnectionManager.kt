@@ -15,6 +15,9 @@ interface BleConnectionManager {
     fun state(deviceAddress: String): Flow<BleLinkState>
     suspend fun reconnectPaired(deviceAddress: String): TacticalResult<Unit>
     suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit>
+    /** Returns application-level IDs for iTantra peers that this device has paired with. */
+    fun pairedDeviceIds(): Set<String>
+
     fun diagnostics(): Flow<BleDiagnostics>
 }
 
