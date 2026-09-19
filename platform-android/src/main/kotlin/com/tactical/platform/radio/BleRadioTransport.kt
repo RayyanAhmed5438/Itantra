@@ -81,7 +81,9 @@ class BleRadioTransport(
                 value: ByteArray
             ) {
                 if (characteristic.uuid == PACKET_CHARACTERISTIC_UUID) {
+                    android.util.Log.d(TAG, "Incoming BLE write from " + device.address + ", bytes=" + value.size)
                     reassembler.onFragmentReceived(device.address, value)?.let { complete ->
+                        android.util.Log.d(TAG, "Incoming BLE packet reassembled from " + device.address + ", bytes=" + complete.size)
                         trySend(
                             RawPacket(
                                 data = complete,
