@@ -127,8 +127,11 @@ class AndroidBleConnectionManager(
                     if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                         gattClients[resolvedAddress] = gatt
                         registry.registerOutboundConnection(gatt)
-                        setState(resolvedAddress, BleLinkState.CONNECTED)
-                        try { gatt.discoverServices() } catch (_: Exception) {}
+                        setState(resolvedAddress, BleLinkState.CONNECTING)
+                        try { gatt.discoverServices() } catch (_: Exception) {
+                            pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery could not start"))
+                            try { gatt.disconnect() } catch (_: Exception) {}
+                        }
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                         gattClients.remove(resolvedAddress, gatt)
                         registry.unregisterOutboundConnection(resolvedAddress)
@@ -141,12 +144,15 @@ class AndroidBleConnectionManager(
                 override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
                     if (status != BluetoothGatt.GATT_SUCCESS) {
                         pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery failed: $status"))
+                        setState(resolvedAddress, BleLinkState.FAILED)
+                        try { gatt.disconnect() } catch (_: Exception) {}
                         return
                     }
                     val service = gatt.getService(BleRadioTransport.GATT_SERVICE_UUID)
                     val characteristic = service?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
                     if (characteristic == null) {
-                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("iTantra GATT service not found"))
+                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("iTantra GATT service not found"))
+                        setState(resolvedAddress, BleLinkState.FAILED)
                         try { gatt.disconnect() } catch (_: Exception) {}
                         return
                     }
