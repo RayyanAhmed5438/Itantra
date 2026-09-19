@@ -105,24 +105,27 @@ class MainViewModel @Inject constructor(
         }
 
         healthJob = viewModelScope.launch {
-            while (true) {
-                try {
-                    delay(5000L)
-                    if (scanLoopJob?.isActive != true) startDiscovery()
-                // Recovery guard: restart discovery when it has repeatedly stopped making progress.
-                if (discoveryService is DefaultDiscoveryService) {
-                    val peers = discoveryService.peers().value
-                    if (peers.isEmpty()) {
-                        runCatching { discoveryService.start() }
+        healthJob = viewModelScope.launch {
+            try {
+                while (true) {
+                    try {
+                        delay(5000L)
+                        if (scanLoopJob == null || scanLoopJob?.isCancelled == true) {
+                            startDiscovery()
+                        }
+                        if (discoveryService is DefaultDiscoveryService && discoveryService.peers().value.isEmpty()) {
+                            runCatching { discoveryService.start() }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Keep the health loop alive after transient errors.
                     }
-                } catch (_: kotlinx.coroutines.CancellationException) {
-                    break
-                } catch (_: Exception) {
-                    // Keep the health loop alive after a transient recovery error.
                 }
+            } catch (_: CancellationException) {
+                // Normal ViewModel cancellation.
             }
         }
-
         viewModelScope.launch {
             meshService.receive().collect { packet ->
                 if (packet is TextPacket) {
