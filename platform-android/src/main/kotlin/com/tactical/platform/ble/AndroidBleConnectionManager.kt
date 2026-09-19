@@ -25,8 +25,12 @@ import com.tactical.platform.api.ble.BleLinkState
 import com.tactical.platform.radio.BleConnectionRegistry
 import com.tactical.platform.radio.BleRadioTransport
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +48,7 @@ class AndroidBleConnectionManager(
     private val states = ConcurrentHashMap<String, MutableStateFlow<BleLinkState>>()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<TacticalResult<Unit>>>()
     private val gattClients = ConcurrentHashMap<String, BluetoothGatt>()
+    private val reconnectScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val prefs by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
@@ -93,6 +98,14 @@ class AndroidBleConnectionManager(
                 gattClients.clear()
                 registry.allConnectedAddresses().toList().forEach { registry.unregisterOutboundConnection(it) }
                 states.keys.toList().forEach { setState(it, BleLinkState.DISCONNECTED) }
+            } else if (state == BluetoothAdapter.STATE_ON) {
+                android.util.Log.d(TAG, "Bluetooth turned on; reconnecting paired iTantra peers")
+                reconnectScope.launch {
+                    delay(1500L)
+                    pairedDeviceIds().forEach { id ->
+                        runCatching { reconnectPaired(id) }
+                    }
+                }
             }
         }
     }
