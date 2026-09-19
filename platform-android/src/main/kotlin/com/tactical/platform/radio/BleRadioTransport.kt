@@ -45,12 +45,13 @@ class BleRadioTransport(
 
     private fun rawIncoming(): Flow<RawPacket> = callbackFlow {
         if (!hasBluetoothConnectPermission()) {
+            // Keep the incoming transport alive while Android is showing the
+            // runtime permission dialog. Closing this Flow here would make the
+            // mesh receiver permanently stop until the process is restarted.
             android.util.Log.w(
                 TAG,
-                "BLE incoming disabled: missing BLUETOOTH_CONNECT permission"
+                "BLE incoming waiting for BLUETOOTH_CONNECT permission"
             )
-            close()
-            return@callbackFlow
         }
 
         val adapter = try {
@@ -58,20 +59,17 @@ class BleRadioTransport(
         } catch (e: Exception) {
             android.util.Log.w(
                 TAG,
-                "BLE adapter unavailable",
+                "BLE adapter unavailable; waiting for Bluetooth",
                 e
             )
-            close()
-            return@callbackFlow
+            null
         }
 
         if (adapter == null || !adapter.isEnabled) {
             android.util.Log.d(
                 TAG,
-                "BLE incoming skipped: Bluetooth is OFF or unavailable"
+                "BLE GATT server waiting for Bluetooth to turn ON"
             )
-            close()
-            return@callbackFlow
         }
 
         val serverCallback = object : BluetoothGattServerCallback() {
@@ -246,10 +244,17 @@ class BleRadioTransport(
             context.registerReceiver(adapterReceiver, adapterFilter)
         }
 
-        // When Bluetooth was ON at startup, open the server immediately. When
-        // it was OFF, keep this flow alive so the STATE_ON receiver can create
-        // the server later instead of permanently terminating incoming BLE.
-        openGattServer()
+        // When Bluetooth was ON at startup, open the server immediately.
+        // When it was OFF or permissions are still being granted, retry until
+        // the radio/permission becomes available.
+        scope.launch {
+            while (gattServer == null) {
+                if (hasBluetoothConnectPermission()) {
+                    openGattServer()
+                }
+                if (gattServer == null) delay(500L)
+            }
+        }
 
         val clientFragmentListener: (String, ByteArray) -> Unit = { address, fragment ->
             reassembler.onFragmentReceived(address, fragment)?.let { complete ->
