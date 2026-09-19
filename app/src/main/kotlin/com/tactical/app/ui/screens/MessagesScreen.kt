@@ -15,8 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import com.tactical.app.ui.ChatMessageUi
@@ -90,8 +88,8 @@ fun MessagesScreen(
                     )
                 }
             }
-            items(currentMessages, key = { it.timestampText + it.sender + it.text }) {
-                message -> MessageRow(message, selected == 1)
+            items(currentMessages) { message ->
+                MessageRow(message, selected == 1)
             }
         }
 
