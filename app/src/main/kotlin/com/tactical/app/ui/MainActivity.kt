@@ -214,11 +214,17 @@ class MainActivity : ComponentActivity() {
         val wifiOn =
             (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true
 
-        if (bluetoothOn && wifiOn) {
+        val locationOn =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.P ||
+                (getSystemService(LOCATION_SERVICE) as? LocationManager)?.isLocationEnabled == true
+
+        if (bluetoothOn && wifiOn && locationOn) {
             startupCheckPending = false
             startMeshService()
         } else if (bluetoothOn && !wifiOn) {
             openWifiSettings()
+        } else if (bluetoothOn && wifiOn && !locationOn) {
+            openLocationSettings()
         }
     }
 }
