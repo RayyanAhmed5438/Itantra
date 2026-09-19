@@ -83,6 +83,7 @@ class MainViewModel @Inject constructor(
     private var scanLoopJob: Job? = null
     private var healthJob: Job? = null
     private val observedPeerIds = mutableSetOf<String>()
+    private val reconnectingPairedIds = mutableSetOf<String>()
 
     init {
         viewModelScope.launch {
@@ -110,6 +111,18 @@ class MainViewModel @Inject constructor(
 
                 val pairedIds = bleConnectionManager.pairedDeviceIds()
                 val paired = peers.filter { it.deviceAddress in pairedIds }
+
+                pairedIds.forEach { peerId ->
+                    if (reconnectingPairedIds.add(peerId)) {
+                        viewModelScope.launch {
+                            try {
+                                bleConnectionManager.reconnectPaired(peerId)
+                            } finally {
+                                reconnectingPairedIds.remove(peerId)
+                            }
+                        }
+                    }
+                }
 
                 _uiState.update { state ->
                     state.copy(
@@ -220,6 +233,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             val result = bleConnectionManager.pair(deviceAddress)
             if (result is TacticalResult.Success) {
+                refreshPairedPeers()
                 bleConnectionManager.connect(deviceAddress)
                 refreshPairedPeers()
             }
