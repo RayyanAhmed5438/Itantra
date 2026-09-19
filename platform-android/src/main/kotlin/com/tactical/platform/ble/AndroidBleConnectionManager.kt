@@ -42,8 +42,9 @@ import java.util.concurrent.ConcurrentHashMap
 @SuppressLint("MissingPermission")
 class AndroidBleConnectionManager(
     private val context: Context,
-    private val registry: BleConnectionRegistry
-) : BleConnectionManager {
+    private val registry: BleConnectionRegistry,
+    private val localDeviceId: String
+) : BleConnectionManager, BleConnectionRegistry.ConnectionListener {
 
     private val states = ConcurrentHashMap<String, MutableStateFlow<BleLinkState>>()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<TacticalResult<Unit>>>()
@@ -115,6 +116,8 @@ class AndroidBleConnectionManager(
     }
 
     init {
+        registry.addConnectionListener(this)
+
         val bondFilter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         val adapterFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -503,7 +506,28 @@ class AndroidBleConnectionManager(
             setState(deviceAddress, BleLinkState.DISCONNECTED)
             return TacticalResult.Failure("Bluetooth is off")
         }
-        return if (deviceForAddress(deviceAddress)?.bondState == BluetoothDevice.BOND_BONDED) {
+
+        val resolvedAddress = resolveAddress(deviceAddress)
+            ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
+
+        if (registry.inboundDevice(resolvedAddress) != null ||
+            gattClients.containsKey(resolvedAddress)
+        ) {
+            setState(resolvedAddress, BleLinkState.CONNECTED)
+            return TacticalResult.Success(Unit)
+        }
+
+        val peerId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress) ?: deviceAddress
+        if (!shouldInitiate(peerId)) {
+            setState(resolvedAddress, BleLinkState.DISCONNECTED)
+            android.util.Log.d(
+                TAG,
+                "Not initiating outbound GATT for " + peerId + "; waiting for peer to connect"
+            )
+            return TacticalResult.Failure("Waiting for peer to establish the BLE link")
+        }
+
+        return if (deviceForAddress(resolvedAddress)?.bondState == BluetoothDevice.BOND_BONDED) {
             connect(deviceAddress)
         } else {
             TacticalResult.Failure("Peer is not paired")
@@ -518,6 +542,28 @@ class AndroidBleConnectionManager(
             if (paired is TacticalResult.Failure) return paired
         }
         return connect(deviceAddress)
+    }
+
+    override fun onInboundConnected(device: BluetoothDevice) {
+        val appId = BlePeerAddressRegistry.applicationIdFor(device.address) ?: return
+        if (device.bondState == BluetoothDevice.BOND_BONDED) {
+            rememberPeer(appId, device.address)
+            setState(device.address, BleLinkState.CONNECTED)
+            android.util.Log.d(TAG, "Inbound BLE link ready for " + appId)
+        }
+    }
+
+    override fun onInboundDisconnected(device: BluetoothDevice) {
+        if (gattClients.containsKey(device.address)) return
+        val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
+        setState(
+            device.address,
+            if (appId != null) BleLinkState.DISCONNECTED else BleLinkState.NOT_PAIRED
+        )
+        android.util.Log.d(
+            TAG,
+            "Inbound BLE link disconnected for " + (appId ?: device.address)
+        )
     }
 
     override fun diagnostics(): Flow<BleDiagnostics> = MutableStateFlow(
@@ -535,6 +581,21 @@ class AndroidBleConnectionManager(
         lastRecovery = epochMs
         scanFailures = 0
         emptyCycles = 0
+    }
+
+    private fun shouldInitiate(peerId: String): Boolean =
+        localDeviceId.isNotBlank() &&
+            peerId.isNotBlank() &&
+            localDeviceId.lowercase() < peerId.lowercase()
+
+    private fun rememberPeer(appId: String, address: String) {
+        val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
+        ids.add(appId)
+        prefs.edit()
+            .putStringSet(PAIRED_IDS_KEY, ids)
+            .putString(PREF_ADDRESS_PREFIX + appId, address)
+            .apply()
+        BlePeerAddressRegistry.remember(appId, address)
     }
 
     private fun rssiState(address: String): MutableStateFlow<Int?> =
