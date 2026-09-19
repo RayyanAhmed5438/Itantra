@@ -11,6 +11,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import com.tactical.platform.api.ble.BleBeaconPayloadCodec
 import com.tactical.platform.api.ble.BleBeaconScanner
 import com.tactical.platform.api.ble.ScannedBleDevice
 import kotlinx.coroutines.channels.awaitClose
