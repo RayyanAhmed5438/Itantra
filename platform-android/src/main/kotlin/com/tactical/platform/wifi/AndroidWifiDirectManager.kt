@@ -3,8 +3,8 @@ package com.tactical.platform.wifi
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.wifi.p2p.WifiP2pDnsSdServiceInfo
-import android.net.wifi.p2p.WifiP2pDnsSdServiceRequest
+import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
+import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
 import android.net.wifi.p2p.WifiP2pManager
 import android.net.wifi.p2p.WifiP2pManager.Channel
 import android.os.Build
