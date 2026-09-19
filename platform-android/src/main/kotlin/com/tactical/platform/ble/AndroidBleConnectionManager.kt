@@ -324,6 +324,7 @@ class AndroidBleConnectionManager(
     private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
     companion object {
+        private const val TAG = "AndroidBleConnection"
         private const val PREFS_NAME = "itantra_ble_links"
         private const val PAIRED_IDS_KEY = "paired_device_ids"
         private const val PREF_ADDRESS_PREFIX = "address_"
