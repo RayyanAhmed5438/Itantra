@@ -340,7 +340,5 @@ class BleRadioTransport(
         val PACKET_CHARACTERISTIC_UUID: UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
         private const val UNKNOWN_RSSI = 0
 
-        private const val TAG = "BleRadioTransport"
-
     }
 }
