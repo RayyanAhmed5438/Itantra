@@ -36,6 +36,15 @@ data class ChatMessageUi(
     val isVoice: Boolean = false
 )
 
+/** Kept for the existing emergency UI; emergency behavior is not exposed in the initial device/message flow. */
+data class EmergencyAlertData(
+    val sender: String = "COMMANDER",
+    val timestampText: String = "10:32 AM",
+    val hindiText: String = "कृपया तुरंत सुरक्षित स्थान पर जाएं!",
+    val englishText: String = "Please move to a safe location immediately.",
+    val durationSeconds: Int = 4
+)
+
 data class NetworkMetrics(
     val rttMs: Int = 0,
     val hopCount: Int = 0,
@@ -119,7 +128,10 @@ class MainViewModel @Inject constructor(
 
         val pending = ChatMessageUi("YOU", value, "Just now", "Sending…")
         _uiState.update {
-            it.copy(messages = listOf(pending) + it.messages, sentMessages = listOf(pending) + it.sentMessages)
+            it.copy(
+                messages = listOf(pending) + it.messages,
+                sentMessages = listOf(pending) + it.sentMessages
+            )
         }
 
         viewModelScope.launch {
@@ -131,17 +143,23 @@ class MainViewModel @Inject constructor(
                     timestamp = System.currentTimeMillis()
                 )
             )
+
             val status = when (result) {
                 is TacticalResult.Success -> "Sent"
                 is TacticalResult.Failure -> "Queued"
             }
+
             _uiState.update { state ->
                 state.copy(
                     messages = state.messages.mapIndexed { index, msg ->
-                        if (index == 0 && msg.sender == "YOU" && msg.text == value) msg.copy(statusText = status) else msg
+                        if (index == 0 && msg.sender == "YOU" && msg.text == value) {
+                            msg.copy(statusText = status)
+                        } else msg
                     },
                     sentMessages = state.sentMessages.mapIndexed { index, msg ->
-                        if (index == 0 && msg.text == value) msg.copy(statusText = status) else msg
+                        if (index == 0 && msg.text == value) {
+                            msg.copy(statusText = status)
+                        } else msg
                     }
                 )
             }
