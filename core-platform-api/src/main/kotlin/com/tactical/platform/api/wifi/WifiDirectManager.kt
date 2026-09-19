@@ -16,5 +16,7 @@ interface WifiDirectManager {
      */
     suspend fun discoverPeers(): Flow<List<WifiDirectPeer>>
 
+    suspend fun disconnect(): TacticalResult<Unit>
+
     suspend fun connect(deviceId: String): TacticalResult<Unit>
 }
