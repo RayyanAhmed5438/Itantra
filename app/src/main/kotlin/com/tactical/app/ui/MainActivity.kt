@@ -17,6 +17,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import com.tactical.app.ui.theme.*
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private var startupCheckPending = false
