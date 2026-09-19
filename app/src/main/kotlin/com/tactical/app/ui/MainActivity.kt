@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
+import com.tactical.platform.api.ble.BleLinkState
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.tactical.app.service.TacticalMeshService
@@ -85,7 +86,7 @@ class MainActivity : ComponentActivity() {
                                 onConnect = viewModel::connectPeer,
                                 onRepair = viewModel::repairPeer
                             )
-                            1 -> SquadScreen(state, onRefresh = viewModel::startDiscovery)
+                            1 -> SquadScreen(state, onRefresh = viewModel::forceDiscovery)
                             2 -> MessagesScreen(state, viewModel::sendTextMessage)
                         }
                     }
