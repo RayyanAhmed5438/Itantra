@@ -39,9 +39,14 @@ object PlatformModule {
     @Singleton
     fun provideBleConnectionManager(
         @ApplicationContext context: Context,
-        registry: com.tactical.platform.radio.BleConnectionRegistry
+        registry: com.tactical.platform.radio.BleConnectionRegistry,
+        identityStore: DeviceIdentityStore
     ): BleConnectionManager =
-        AndroidBleConnectionManager(context, registry)
+        AndroidBleConnectionManager(
+            context = context,
+            registry = registry,
+            localDeviceId = identityStore.deviceIdValue
+        )
 
     @Provides
     @Singleton
