@@ -575,7 +575,7 @@ class AndroidBleConnectionManager(
                 " -> " + resolvedAddress +
                 ", bondState=" + device.bondState
         )
-        connect(deviceAddress)
+        return connect(deviceAddress)
     }
 
     override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
