@@ -36,7 +36,6 @@ data class ChatMessageUi(
     val isVoice: Boolean = false
 )
 
-/** Kept for the existing emergency UI; emergency behavior is not exposed in the initial device/message flow. */
 data class EmergencyAlertData(
     val sender: String = "COMMANDER",
     val timestampText: String = "10:32 AM",
@@ -68,6 +67,7 @@ class MainViewModel @Inject constructor(
     private val meshService: MeshService,
     private val identityStore: DeviceIdentityStore
 ) : ViewModel() {
+
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     private val estimator = RssiProximityEstimator()
@@ -112,13 +112,34 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Starts this installation's beacon as well as the active scan.
+     * This makes the Scan button self-contained: it no longer depends on
+     * the foreground service having been started successfully beforehand.
+     *
+     * Only iTantra beacons are accepted by CompositeBeaconScanner, so
+     * ordinary nearby Bluetooth devices are never added to this list.
+     */
     fun startDiscovery() {
         if (scanJob?.isActive == true) return
-        (discoveryService as? DefaultDiscoveryService)?.startDiscovery()
-        _uiState.update { it.copy(isScanning = true) }
+
         scanJob = viewModelScope.launch {
-            delay(5000L)
-            _uiState.update { it.copy(isScanning = false) }
+            try {
+                discoveryService.start()
+
+                (discoveryService as? DefaultDiscoveryService)?.startDiscovery()
+
+                _uiState.update { it.copy(isScanning = true) }
+
+                delay(8000L)
+
+                (discoveryService as? DefaultDiscoveryService)?.stopDiscovery()
+                _uiState.update { it.copy(isScanning = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isScanning = false) }
+            } finally {
+                scanJob = null
+            }
         }
     }
 
