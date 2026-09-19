@@ -28,7 +28,9 @@ import java.util.UUID
  *   1 byte callsign length
  *   8 bytes callsign
  * ----------------
- *  27 bytes maximum
+ *  24 bytes maximum when the legacy advertisement is connectable: Android
+ *  automatically needs advertising flags, leaving 28 bytes for the manufacturer AD structure
+ *  including the 2-byte company identifier. Therefore the manufacturer payload itself is capped at 24 bytes.
  */
 object BleBeaconPayloadCodec {
 
@@ -36,7 +38,7 @@ object BleBeaconPayloadCodec {
     private const val MAGIC_2: Byte = 0x42 // 'B'
 
     private const val UUID_BYTES = 16
-    private const val MAX_CALLSIGN_BYTES = 8
+    private const val MAX_CALLSIGN_BYTES = 5
 
     private const val HEADER_BYTES = 2
     private const val LENGTH_BYTES = 1
