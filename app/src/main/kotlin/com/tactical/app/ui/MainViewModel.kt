@@ -113,34 +113,58 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Starts this installation's beacon as well as the active scan.
-     * This makes the Scan button self-contained: it no longer depends on
-     * the foreground service having been started successfully beforehand.
-     *
-     * Only iTantra beacons are accepted by CompositeBeaconScanner, so
-     * ordinary nearby Bluetooth devices are never added to this list.
+     * Starts persistent discovery. The timer controls discovery only;
+     * established GATT sessions are deliberately left untouched.
      */
     fun startDiscovery() {
-        if (scanJob?.isActive == true) return
+        if (scanLoopJob?.isActive == true) return
 
-        scanJob = viewModelScope.launch {
-            try {
-                discoveryService.start()
-
-                (discoveryService as? DefaultDiscoveryService)?.startDiscovery()
-
-                _uiState.update { it.copy(isScanning = true) }
-
-                delay(8000L)
-
-                (discoveryService as? DefaultDiscoveryService)?.stopDiscovery()
-                _uiState.update { it.copy(isScanning = false) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isScanning = false) }
-            } finally {
-                scanJob = null
+        scanLoopJob = viewModelScope.launch {
+            runCatching { discoveryService.start() }
+            while (isActive) {
+                runScanCycle()
+                delay(DISCOVERY_INTERVAL_MS)
             }
         }
+    }
+
+    private suspend fun runScanCycle() {
+        if (scanJob?.isActive == true) return
+
+        val job = viewModelScope.launch {
+            try {
+                (discoveryService as? DefaultDiscoveryService)?.startDiscovery()
+                _uiState.update { it.copy(isScanning = true) }
+                delay(SINGLE_SCAN_WINDOW_MS)
+            } catch (_: Exception) {
+                // A failed radio cycle must not kill persistent discovery.
+            } finally {
+                (discoveryService as? DefaultDiscoveryService)?.stopDiscovery()
+                _uiState.update { it.copy(isScanning = false) }
+            }
+        }
+
+        scanJob = job
+        job.join()
+        scanJob = null
+    }
+
+    /** Immediate manual scan; it does not tear down persistent discovery. */
+    fun forceDiscovery() {
+        if (scanJob?.isActive == true) return
+        viewModelScope.launch { runScanCycle() }
+    }
+
+    fun pairPeer(deviceAddress: String) {
+        viewModelScope.launch { bleConnectionManager.pair(deviceAddress) }
+    }
+
+    fun connectPeer(deviceAddress: String) {
+        viewModelScope.launch { bleConnectionManager.connect(deviceAddress) }
+    }
+
+    fun repairPeer(deviceAddress: String) {
+        viewModelScope.launch { bleConnectionManager.repairAndReconnect(deviceAddress) }
     }
 
     fun sendTextMessage(text: String) {
