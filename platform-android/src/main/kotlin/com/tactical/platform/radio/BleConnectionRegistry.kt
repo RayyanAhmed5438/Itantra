@@ -79,5 +79,8 @@ class BleConnectionRegistry {
 
     fun allConnectedAddresses(): Set<String> = inboundDevices.keys + outboundGatts.keys
 
+    fun outboundGatt(address: String): BluetoothGatt? = outboundGatts[address]
+    fun inboundDevice(address: String): BluetoothDevice? = inboundDevices[address]
+
     fun nextTransferId(): Int = transferIdCounter.getAndIncrement()
 }
