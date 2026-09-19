@@ -157,29 +157,29 @@ class AndroidBleConnectionManager(
                         return
                     }
                     if (!gatt.setCharacteristicNotification(characteristic, true)) {
-                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Could not enable notifications"))
+                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Could not enable notifications"))
                         return
                     }
                     val descriptor = characteristic.getDescriptor(CCCD_UUID)
                     if (descriptor == null) {
-                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("CCCD descriptor missing"))
+                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("CCCD descriptor missing"))
                         return
                     }
                     try {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             val rc = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-                            if (rc != BluetoothStatusCodes.SUCCESS) pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed: $rc"))
+                            if (rc != BluetoothStatusCodes.SUCCESS) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed: $rc"))
                         } else {
                             @Suppress("DEPRECATION") descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                            @Suppress("DEPRECATION") if (!gatt.writeDescriptor(descriptor)) pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed"))
+                            @Suppress("DEPRECATION") if (!gatt.writeDescriptor(descriptor)) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed"))
                         }
                     } catch (e: Exception) {
-                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Notification setup failed: ${e.message}"))
+                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification setup failed: ${e.message}"))
                     }
                 }
 
                 override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-                    if (descriptor.uuid == CCCD_UUID) pending.remove(deviceAddress)?.complete(if (status == BluetoothGatt.GATT_SUCCESS) TacticalResult.Success(Unit) else TacticalResult.Failure("CCCD write status=$status"))
+                    if (descriptor.uuid == CCCD_UUID) pending.remove(resolvedAddress)?.complete(if (status == BluetoothGatt.GATT_SUCCESS) TacticalResult.Success(Unit) else TacticalResult.Failure("CCCD write status=$status"))
                 }
 
                 override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
@@ -200,14 +200,14 @@ class AndroidBleConnectionManager(
             try {
                 withTimeout(20_000L) { completion.await() }
             } catch (_: TimeoutCancellationException) {
-                pending.remove(deviceAddress)
+                pending.remove(resolvedAddress)
                 try { gatt.disconnect() } catch (_: Exception) {}
                 try { gatt.close() } catch (_: Exception) {}
                 setState(resolvedAddress, BleLinkState.FAILED)
                 TacticalResult.Failure("GATT connection timed out")
             }
         } catch (e: Exception) {
-            pending.remove(deviceAddress)
+            pending.remove(resolvedAddress)
             setState(resolvedAddress, BleLinkState.FAILED)
             TacticalResult.Failure("Unable to connect: ${e.message}")
         }
