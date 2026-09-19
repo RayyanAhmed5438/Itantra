@@ -250,6 +250,11 @@ class BleRadioTransport(
         val serverCharacteristic = server?.getService(GATT_SERVICE_UUID)?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
         if (server != null && serverCharacteristic != null) {
             for (device in inboundDevices) {
+                // When both sides have their own outbound GATT, prefer the
+                // outbound write and do not send the same packet a second time
+                // through the server notification path.
+                if (connectionRegistry.outboundGatt(device.address) != null) continue
+
                 val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(device.address))
                 var peerOk = true
                 for (chunk in chunks) {
