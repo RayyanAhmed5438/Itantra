@@ -76,7 +76,8 @@ fun DevicesScreen(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
                     .navigationBarsPadding()
             ) {
                 items(uiState.availablePeers, key = { it.deviceAddress }) { peer ->
