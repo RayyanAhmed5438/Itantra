@@ -1,7 +1,7 @@
 package com.tactical.app.ui
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -111,8 +111,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureWirelessEnabled() {
-        val bluetoothOff =
-            BluetoothAdapter.getDefaultAdapter()?.isEnabled == false
+        val bluetoothAdapter = getSystemService(BluetoothManager::class.java)?.adapter
+        val bluetoothOff = bluetoothAdapter?.isEnabled == false
 
         val wifiOff =
             (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == false
@@ -142,10 +142,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
 
-        if (
-            BluetoothAdapter.getDefaultAdapter()?.isEnabled == true &&
+        val bluetoothOn =
+            getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
+
+        val wifiOn =
             (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true
-        ) {
+
+        if (bluetoothOn && wifiOn) {
             startMeshService()
         }
     }
