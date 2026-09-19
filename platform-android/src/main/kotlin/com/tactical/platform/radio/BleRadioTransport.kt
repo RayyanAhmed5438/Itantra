@@ -100,6 +100,34 @@ class BleRadioTransport(
                 }
             }
 
+            override fun onDescriptorWriteRequest(
+                device: BluetoothDevice,
+                requestId: Int,
+                descriptor: BluetoothGattDescriptor,
+                preparedWrite: Boolean,
+                responseNeeded: Boolean,
+                offset: Int,
+                value: ByteArray
+            ) {
+                if (descriptor.uuid == CCCD_UUID) {
+                    @Suppress("DEPRECATION")
+                    descriptor.value = value
+                }
+                if (responseNeeded) {
+                    try {
+                        gattServer?.sendResponse(
+                            device,
+                            requestId,
+                            BluetoothGatt.GATT_SUCCESS,
+                            offset,
+                            value
+                        )
+                    } catch (_: SecurityException) {
+                        // Permission revoked mid-session.
+                    }
+                }
+            }
+
             override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
                 connectionRegistry.onMtuNegotiated(device.address, mtu)
             }
