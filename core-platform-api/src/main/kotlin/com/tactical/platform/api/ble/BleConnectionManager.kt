@@ -14,6 +14,7 @@ interface BleConnectionManager {
     suspend fun disconnect(deviceAddress: String)
     fun state(deviceAddress: String): Flow<BleLinkState>
     suspend fun reconnectPaired(deviceAddress: String): TacticalResult<Unit>
+    suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit>
 }
 
 enum class BleLinkState {
