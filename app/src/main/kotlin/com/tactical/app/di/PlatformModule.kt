@@ -2,9 +2,11 @@ package com.tactical.app.di
 
 import android.content.Context
 import com.tactical.platform.api.ble.BleBeaconAdvertiser
+import com.tactical.platform.api.ble.BleConnectionManager
 import com.tactical.platform.api.ble.BleBeaconScanner
 import com.tactical.platform.api.wifi.WifiDirectManager
 import com.tactical.platform.ble.AndroidBleAdvertiser
+import com.tactical.platform.ble.AndroidBleConnectionManager
 import com.tactical.platform.ble.AndroidBleScanner
 import com.tactical.platform.wifi.AndroidWifiDirectManager
 import android.net.wifi.p2p.WifiP2pManager
@@ -32,6 +34,14 @@ object PlatformModule {
         @ApplicationContext context: Context
     ): BleBeaconScanner =
         AndroidBleScanner(context)
+
+    @Provides
+    @Singleton
+    fun provideBleConnectionManager(
+        @ApplicationContext context: Context,
+        registry: com.tactical.platform.radio.BleConnectionRegistry
+    ): BleConnectionManager =
+        AndroidBleConnectionManager(context, registry)
 
     @Provides
     @Singleton
