@@ -1,6 +1,7 @@
 package com.tactical.app.ui
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Intent
@@ -40,15 +41,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Android 13+ does not allow a normal app to silently call
-     * BluetoothAdapter.enable(). This system activity asks the user to
-     * turn Bluetooth on, which is the supported startup flow.
-     */
     private val requestBluetoothEnable = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) {
-        ensureWirelessEnabled()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            ensureWirelessEnabled()
+        } else {
+            // Do not trap the user in the Bluetooth prompt. Open the normal
+            // wireless settings page so they can enable it manually.
+            openBluetoothSettings()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,9 +62,7 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableIntStateOf(0) }
 
                 Scaffold(
-                    topBar = {
-                        AppHeader(deviceCount = state.squadPeers.size)
-                    },
+                    topBar = { AppHeader(deviceCount = state.squadPeers.size) },
                     bottomBar = {
                         AppBottomNavigation(
                             selectedTab = selectedTab,
@@ -77,18 +77,9 @@ class MainActivity : ComponentActivity() {
                             .padding(padding)
                     ) {
                         when (selectedTab) {
-                            0 -> DevicesScreen(
-                                uiState = state,
-                                onScan = viewModel::startDiscovery
-                            )
-                            1 -> SquadScreen(
-                                uiState = state,
-                                onRefresh = viewModel::startDiscovery
-                            )
-                            2 -> MessagesScreen(
-                                uiState = state,
-                                onSendMessage = viewModel::sendTextMessage
-                            )
+                            0 -> DevicesScreen(state, viewModel::startDiscovery)
+                            1 -> SquadScreen(state, onRefresh = viewModel::startDiscovery)
+                            2 -> MessagesScreen(state, viewModel::sendTextMessage)
                         }
                     }
                 }
@@ -108,9 +99,10 @@ class MainActivity : ComponentActivity() {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            } else {
+                // Required by Wi-Fi Direct on Android 12L and lower.
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
         }.distinct()
 
         val missing = permissions.filter {
@@ -135,9 +127,14 @@ class MainActivity : ComponentActivity() {
 
         if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled) {
             startupCheckPending = true
-            requestBluetoothEnable.launch(
-                Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            )
+
+            runCatching {
+                requestBluetoothEnable.launch(
+                    Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                )
+            }.onFailure {
+                openBluetoothSettings()
+            }
             return
         }
 
@@ -152,6 +149,14 @@ class MainActivity : ComponentActivity() {
 
         startupCheckPending = false
         startMeshService()
+    }
+
+    private fun openBluetoothSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        }.onFailure {
+            openAppWirelessSettings()
+        }
     }
 
     private fun openWifiSettings() {
@@ -191,12 +196,8 @@ class MainActivity : ComponentActivity() {
         if (bluetoothOn && wifiOn) {
             startupCheckPending = false
             startMeshService()
-        } else {
-            // If the user returned from the Bluetooth prompt with BT enabled
-            // but Wi-Fi still disabled, send them directly to Wi-Fi settings.
-            if (bluetoothOn && !wifiOn) {
-                openWifiSettings()
-            }
+        } else if (bluetoothOn && !wifiOn) {
+            openWifiSettings()
         }
     }
 }
