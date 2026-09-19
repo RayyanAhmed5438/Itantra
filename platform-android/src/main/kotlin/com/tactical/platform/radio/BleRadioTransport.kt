@@ -146,19 +146,24 @@ class BleRadioTransport(
             }
         }
 
+        val gattServerLock = Any()
+
         fun closeGattServer() {
-            try {
-                gattServer?.close()
-            } catch (e: SecurityException) {
-                // Permission revoked or Bluetooth stack already unavailable.
-            } catch (_: Exception) {
-                // Bluetooth stack may already have torn down the server.
+            synchronized(gattServerLock) {
+                try {
+                    gattServer?.close()
+                } catch (e: SecurityException) {
+                    // Permission revoked or Bluetooth stack already unavailable.
+                } catch (_: Exception) {
+                    // Bluetooth stack may already have torn down the server.
+                }
+                gattServer = null
             }
-            gattServer = null
         }
 
         fun openGattServer() {
-            if (!hasBluetoothConnectPermission()) {
+            synchronized(gattServerLock) {
+                if (!hasBluetoothConnectPermission()) {
                 android.util.Log.w(TAG, "Cannot open BLE GATT server: missing BLUETOOTH_CONNECT permission")
                 return
             }
@@ -207,10 +212,11 @@ class BleRadioTransport(
                 }
                 gattServer = opened
                 android.util.Log.d(TAG, "BLE GATT server ready")
-            } catch (e: SecurityException) {
-                android.util.Log.w(TAG, "BLE GATT server unavailable: permission denied", e)
-            } catch (e: Exception) {
-                android.util.Log.w(TAG, "BLE GATT server unavailable", e)
+                } catch (e: SecurityException) {
+                    android.util.Log.w(TAG, "BLE GATT server unavailable: permission denied", e)
+                } catch (e: Exception) {
+                    android.util.Log.w(TAG, "BLE GATT server unavailable", e)
+                }
             }
         }
 
