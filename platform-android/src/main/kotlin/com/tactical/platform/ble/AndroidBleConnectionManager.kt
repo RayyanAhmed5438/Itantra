@@ -98,6 +98,7 @@ class AndroidBleConnectionManager(
             return TacticalResult.Success(Unit)
         }
         setState(resolvedAddress, BleLinkState.PAIRING)
+        android.util.Log.d(TAG, "PAIR requested for " + resolvedAddress)
         return try {
             if (!device.createBond()) {
                 setState(resolvedAddress, BleLinkState.FAILED)
@@ -109,6 +110,7 @@ class AndroidBleConnectionManager(
                 if (device.bondState == BluetoothDevice.BOND_BONDED) {
                     rememberPairedPeer(deviceAddress, resolvedAddress)
                     setState(resolvedAddress, BleLinkState.PAIRED)
+                    android.util.Log.d(TAG, "PAIR successful for " + resolvedAddress)
                     TacticalResult.Success(Unit)
                 } else {
                     setState(resolvedAddress, BleLinkState.FAILED)
@@ -135,6 +137,7 @@ class AndroidBleConnectionManager(
             return TacticalResult.Success(Unit)
         }
         setState(resolvedAddress, BleLinkState.CONNECTING)
+        android.util.Log.d(TAG, "GATT connect requested for " + resolvedAddress)
         val completion = CompletableDeferred<TacticalResult<Unit>>()
         pending[resolvedAddress] = completion
         return try {
@@ -144,6 +147,7 @@ class AndroidBleConnectionManager(
                         gattClients[resolvedAddress] = gatt
                         registry.registerOutboundConnection(gatt)
                         setState(resolvedAddress, BleLinkState.CONNECTING)
+                        android.util.Log.d(TAG, "GATT connected, discovering services for " + resolvedAddress)
                         try { gatt.discoverServices() } catch (_: Exception) {
                             pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery could not start"))
                             try { gatt.disconnect() } catch (_: Exception) {}
@@ -158,6 +162,7 @@ class AndroidBleConnectionManager(
                 }
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                    android.util.Log.d(TAG, "GATT services discovered for " + resolvedAddress + ", status=" + status)
                     if (status != BluetoothGatt.GATT_SUCCESS) {
                         pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery failed: $status"))
                         setState(resolvedAddress, BleLinkState.FAILED)
