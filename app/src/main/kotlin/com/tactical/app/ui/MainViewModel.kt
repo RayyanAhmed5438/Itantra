@@ -247,7 +247,10 @@ class MainViewModel @Inject constructor(
             val result = bleConnectionManager.pair(deviceAddress)
             if (result is TacticalResult.Success) {
                 refreshPairedPeers()
-                bleConnectionManager.connect(deviceAddress)
+                // The BLE manager elects one deterministic initiator for the
+                // pair, so the two phones do not race each other with GATT
+                // client connections.
+                bleConnectionManager.reconnectPaired(deviceAddress)
                 refreshPairedPeers()
             }
         }
