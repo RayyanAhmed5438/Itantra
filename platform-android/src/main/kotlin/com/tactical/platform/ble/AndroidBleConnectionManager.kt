@@ -3,6 +3,7 @@
 package com.tactical.platform.ble
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -33,6 +34,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /** Explicit pairing and persistent BLE GATT client sessions. */
+@SuppressLint("MissingPermission")
 class AndroidBleConnectionManager(
     private val context: Context,
     private val registry: BleConnectionRegistry
