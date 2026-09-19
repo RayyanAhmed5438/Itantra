@@ -24,6 +24,20 @@ class BleConnectionRegistry {
     private val defaultUsableMtu = 20
 
     private val rawIncomingListeners = java.util.concurrent.CopyOnWriteArrayList<(String, ByteArray) -> Unit>()
+    private val connectionListeners = java.util.concurrent.CopyOnWriteArrayList<ConnectionListener>()
+
+    interface ConnectionListener {
+        fun onInboundConnected(device: BluetoothDevice)
+        fun onInboundDisconnected(device: BluetoothDevice)
+    }
+
+    fun addConnectionListener(listener: ConnectionListener) {
+        connectionListeners.add(listener)
+    }
+
+    fun removeConnectionListener(listener: ConnectionListener) {
+        connectionListeners.remove(listener)
+    }
 
     fun addRawIncomingListener(listener: (String, ByteArray) -> Unit) {
         rawIncomingListeners.add(listener)
@@ -45,10 +59,13 @@ class BleConnectionRegistry {
 
     fun registerInboundConnection(device: BluetoothDevice) {
         inboundDevices[device.address] = device
+        connectionListeners.forEach { it.onInboundConnected(device) }
     }
 
     fun unregisterInboundConnection(device: BluetoothDevice) {
-        inboundDevices.remove(device.address)
+        if (inboundDevices.remove(device.address) != null) {
+            connectionListeners.forEach { it.onInboundDisconnected(device) }
+        }
         negotiatedMtu.remove(device.address)
     }
 
