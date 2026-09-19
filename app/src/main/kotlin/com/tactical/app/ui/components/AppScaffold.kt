@@ -19,135 +19,41 @@ import androidx.compose.ui.unit.sp
 import com.tactical.app.ui.theme.*
 
 @Composable
-fun AppHeader(
-    deviceCount: Int,
-    modifier: Modifier = Modifier,
-    onSettingsClick: () -> Unit = {}
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(RedTacticalBackground)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+fun AppHeader(deviceCount: Int, modifier: Modifier = Modifier, onSettingsClick: () -> Unit = {}) {
+    Column(modifier.fillMaxWidth().background(RedTacticalBackground).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = "SENTINEL",
-                    tint = RedTacticalPrimary,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "SENTINEL",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
+                Icon(Icons.Default.Shield, "SENTINEL", tint = RedTacticalPrimary, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("SENTINEL", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
             }
-
-            IconButton(onClick = onSettingsClick) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = Color.White
-                )
-            }
+            IconButton(onClick = onSettingsClick) { Icon(Icons.Default.Settings, "Settings", tint = Color.White) }
         }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Connection Pill
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(RedTacticalSurface)
-                .border(1.dp, RedTacticalSurfaceBorder, RoundedCornerShape(12.dp))
-                .padding(horizontal = 10.dp, vertical = 4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(RedTacticalStatusGreen)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "CONNECTED",
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "→ Wi-Fi Direct • $deviceCount ${
-                    if (deviceCount == 1) "Device" else "Devices"
-                }",
-                color = RedTacticalTextSecondary,
-                fontSize = 11.sp
-            )
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(RedTacticalSurface).border(1.dp, RedTacticalSurfaceBorder, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(RedTacticalStatusGreen))
+            Spacer(Modifier.width(6.dp))
+            Text("NETWORK READY", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(8.dp))
+            Text("• $deviceCount ${if (deviceCount == 1) "Device" else "Devices"}", color = RedTacticalTextSecondary, fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-fun AppBottomNavigation(
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    NavigationBar(
-        modifier = modifier,
-        containerColor = RedTacticalSurface,
-        tonalElevation = 8.dp
-    ) {
-        NavigationBarItem(
-            selected = selectedTab == 0,
-            onClick = { onTabSelected(0) },
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("HOME") },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = RedTacticalPrimaryBright,
-                selectedTextColor = RedTacticalPrimaryBright,
-                unselectedIconColor = RedTacticalTextSecondary,
-                unselectedTextColor = RedTacticalTextSecondary,
-                indicatorColor = RedTacticalDarkBorder
-            )
-        )
-
-        NavigationBarItem(
-            selected = selectedTab == 1,
-            onClick = { onTabSelected(1) },
-            icon = { Icon(Icons.Default.People, contentDescription = "Squad") },
-            label = { Text("SQUAD") },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = RedTacticalPrimaryBright,
-                selectedTextColor = RedTacticalPrimaryBright,
-                unselectedIconColor = RedTacticalTextSecondary,
-                unselectedTextColor = RedTacticalTextSecondary,
-                indicatorColor = RedTacticalDarkBorder
-            )
-        )
-
-        NavigationBarItem(
-            selected = selectedTab == 2,
-            onClick = { onTabSelected(2) },
-            icon = { Icon(Icons.Default.Email, contentDescription = "Messages") },
-            label = { Text("MESSAGES") },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = RedTacticalPrimaryBright,
-                selectedTextColor = RedTacticalPrimaryBright,
-                unselectedIconColor = RedTacticalTextSecondary,
-                unselectedTextColor = RedTacticalTextSecondary,
-                indicatorColor = RedTacticalDarkBorder
-            )
-        )
+fun AppBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
+    NavigationBar(modifier = modifier, containerColor = RedTacticalSurface, tonalElevation = 8.dp) {
+        NavigationBarItem(selected = selectedTab == 0, onClick = { onTabSelected(0) }, icon = { Icon(Icons.Default.Devices, "Devices") }, label = { Text("DEVICES") }, colors = navigationColors())
+        NavigationBarItem(selected = selectedTab == 1, onClick = { onTabSelected(1) }, icon = { Icon(Icons.Default.People, "Squad") }, label = { Text("SQUAD") }, colors = navigationColors())
+        NavigationBarItem(selected = selectedTab == 2, onClick = { onTabSelected(2) }, icon = { Icon(Icons.Default.Email, "Messages") }, label = { Text("MESSAGES") }, colors = navigationColors())
     }
 }
+
+@Composable
+private fun navigationColors() = NavigationBarItemDefaults.colors(
+    selectedIconColor = RedTacticalPrimaryBright,
+    selectedTextColor = RedTacticalPrimaryBright,
+    unselectedIconColor = RedTacticalTextSecondary,
+    unselectedTextColor = RedTacticalTextSecondary,
+    indicatorColor = RedTacticalDarkBorder
+)
