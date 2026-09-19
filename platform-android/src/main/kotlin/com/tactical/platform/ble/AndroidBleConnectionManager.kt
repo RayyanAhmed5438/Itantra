@@ -165,131 +165,292 @@ class AndroidBleConnectionManager(
 
     override suspend fun connect(deviceAddress: String): TacticalResult<Unit> {
         if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
+
         val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
         if (adapter == null || !adapter.isEnabled) {
             setState(deviceAddress, BleLinkState.DISCONNECTED)
             return TacticalResult.Failure("Bluetooth is off")
         }
+
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
-        val device = deviceForAddress(resolvedAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
-        if (device.bondState != BluetoothDevice.BOND_BONDED) return TacticalResult.Failure("Pair the device before connecting")
-        if (gattClients.containsKey(resolvedAddress)) {
+        val device = deviceForAddress(resolvedAddress)
+            ?: return TacticalResult.Failure("Bluetooth device not found")
+
+        if (device.bondState != BluetoothDevice.BOND_BONDED) {
+            return TacticalResult.Failure("Pair the device before connecting")
+        }
+
+        // gattClients contains only fully initialized/ready GATT sessions.
+        gattClients[resolvedAddress]?.let {
             setState(resolvedAddress, BleLinkState.CONNECTED)
             return TacticalResult.Success(Unit)
         }
 
-        pending[resolvedAddress]?.let { existing ->
+        suspend fun awaitExisting(
+            existing: CompletableDeferred<TacticalResult<Unit>>
+        ): TacticalResult<Unit> {
             return try {
                 withTimeout(20_000L) { existing.await() }
             } catch (_: TimeoutCancellationException) {
                 TacticalResult.Failure("Existing GATT connection attempt timed out")
             }
+        }
+
+        pending[resolvedAddress]?.let { existing ->
+            return awaitExisting(existing)
         }
 
         val completion = CompletableDeferred<TacticalResult<Unit>>()
         val existing = pending.putIfAbsent(resolvedAddress, completion)
         if (existing != null) {
-            return try {
-                withTimeout(20_000L) { existing.await() }
-            } catch (_: TimeoutCancellationException) {
-                TacticalResult.Failure("Existing GATT connection attempt timed out")
+            return awaitExisting(existing)
+        }
+
+        fun failConnection(
+            targetGatt: BluetoothGatt?,
+            message: String,
+            state: BleLinkState = BleLinkState.FAILED
+        ) {
+            if (targetGatt != null) {
+                gattClients.remove(resolvedAddress, targetGatt)
+                registry.unregisterOutboundConnection(resolvedAddress)
+            }
+            pending.remove(resolvedAddress, completion)
+                ?.complete(TacticalResult.Failure(message))
+            setState(resolvedAddress, state)
+            if (targetGatt != null) {
+                try { targetGatt.disconnect() } catch (_: Exception) {}
+                try { targetGatt.close() } catch (_: Exception) {}
             }
         }
 
         setState(resolvedAddress, BleLinkState.CONNECTING)
         android.util.Log.d(TAG, "GATT connect requested for " + resolvedAddress)
+
         return try {
-            val callback = object : BluetoothGattCallback() {
-                override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                    if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
-                        gattClients[resolvedAddress] = gatt
-                        registry.registerOutboundConnection(gatt)
+            val callback = object : BluetoothGattCallback {
+
+                private fun isCurrentGatt(gatt: BluetoothGatt): Boolean =
+                    pending[resolvedAddress] === completion || gattClients[resolvedAddress] === gatt
+
+                override fun onConnectionStateChange(
+                    gatt: BluetoothGatt,
+                    status: Int,
+                    newState: Int
+                ) {
+                    if (!isCurrentGatt(gatt)) {
+                        try { gatt.close() } catch (_: Exception) {}
+                        return
+                    }
+
+                    if (newState == BluetoothProfile.STATE_CONNECTED &&
+                        status == BluetoothGatt.GATT_SUCCESS
+                    ) {
                         setState(resolvedAddress, BleLinkState.CONNECTING)
-                        android.util.Log.d(TAG, "GATT connected, discovering services for " + resolvedAddress)
-                        try { gatt.discoverServices() } catch (_: Exception) {
-                            pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery could not start"))
-                            try { gatt.disconnect() } catch (_: Exception) {}
+                        android.util.Log.d(
+                            TAG,
+                            "GATT connected, discovering services for " + resolvedAddress
+                        )
+
+                        val started = try {
+                            gatt.discoverServices()
+                        } catch (_: Exception) {
+                            false
+                        }
+
+                        if (!started) {
+                            failConnection(
+                                gatt,
+                                "GATT service discovery could not start"
+                            )
                         }
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                         gattClients.remove(resolvedAddress, gatt)
                         registry.unregisterOutboundConnection(resolvedAddress)
-                        setState(resolvedAddress, if (device.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.DISCONNECTED else BleLinkState.NOT_PAIRED)
-                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
+                        val state = if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                            BleLinkState.DISCONNECTED
+                        } else {
+                            BleLinkState.NOT_PAIRED
+                        }
+                        pending.remove(resolvedAddress, completion)
+                            ?.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
+                        setState(resolvedAddress, state)
                         try { gatt.close() } catch (_: Exception) {}
                     }
                 }
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                    android.util.Log.d(TAG, "GATT services discovered for " + resolvedAddress + ", status=" + status)
+                    if (!isCurrentGatt(gatt)) {
+                        try { gatt.close() } catch (_: Exception) {}
+                        return
+                    }
+
+                    android.util.Log.d(
+                        TAG,
+                        "GATT services discovered for " + resolvedAddress + ", status=" + status
+                    )
+
                     if (status != BluetoothGatt.GATT_SUCCESS) {
-                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery failed: $status"))
-                        setState(resolvedAddress, BleLinkState.FAILED)
-                        try { gatt.disconnect() } catch (_: Exception) {}
+                        failConnection(
+                            gatt,
+                            "GATT service discovery failed: $status"
+                        )
                         return
                     }
+
                     val service = gatt.getService(BleRadioTransport.GATT_SERVICE_UUID)
-                    val characteristic = service?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
+                    val characteristic =
+                        service?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
+
                     if (characteristic == null) {
-                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("iTantra GATT service not found"))
-                        setState(resolvedAddress, BleLinkState.FAILED)
-                        try { gatt.disconnect() } catch (_: Exception) {}
+                        failConnection(
+                            gatt,
+                            "iTantra GATT service not found"
+                        )
                         return
                     }
+
                     if (!gatt.setCharacteristicNotification(characteristic, true)) {
-                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Could not enable notifications"))
+                        failConnection(
+                            gatt,
+                            "Could not enable notifications"
+                        )
                         return
                     }
+
                     val descriptor = characteristic.getDescriptor(CCCD_UUID)
                     if (descriptor == null) {
-                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("CCCD descriptor missing"))
+                        failConnection(
+                            gatt,
+                            "CCCD descriptor missing"
+                        )
                         return
                     }
+
                     try {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            val rc = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-                            if (rc != BluetoothStatusCodes.SUCCESS) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed: $rc"))
+                            val rc = gatt.writeDescriptor(
+                                descriptor,
+                                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            )
+                            if (rc != BluetoothStatusCodes.SUCCESS) {
+                                failConnection(
+                                    gatt,
+                                    "Notification descriptor write failed: $rc"
+                                )
+                            }
                         } else {
                             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                            if (!gatt.writeDescriptor(descriptor)) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed"))
+                            if (!gatt.writeDescriptor(descriptor)) {
+                                failConnection(
+                                    gatt,
+                                    "Notification descriptor write failed"
+                                )
+                            }
                         }
                     } catch (e: Exception) {
-                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification setup failed: ${e.message}"))
+                        failConnection(
+                            gatt,
+                            "Notification setup failed: ${e.message}"
+                        )
                     }
                 }
 
-                override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-                    if (descriptor.uuid == CCCD_UUID) pending.remove(resolvedAddress)?.complete(if (status == BluetoothGatt.GATT_SUCCESS) TacticalResult.Success(Unit) else TacticalResult.Failure("CCCD write status=$status"))
+                override fun onDescriptorWrite(
+                    gatt: BluetoothGatt,
+                    descriptor: BluetoothGattDescriptor,
+                    status: Int
+                ) {
+                    if (!isCurrentGatt(gatt) || descriptor.uuid != CCCD_UUID) return
+
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        // The GATT becomes visible to the transport only after
+                        // service discovery + CCCD configuration have both succeeded.
+                        gattClients[resolvedAddress] = gatt
+                        registry.registerOutboundConnection(gatt)
+                        setState(resolvedAddress, BleLinkState.CONNECTED)
+                        android.util.Log.d(
+                            TAG,
+                            "GATT ready for " + resolvedAddress
+                        )
+                        pending.remove(resolvedAddress, completion)
+                            ?.complete(TacticalResult.Success(Unit))
+                    } else {
+                        failConnection(
+                            gatt,
+                            "CCCD write status=$status"
+                        )
+                    }
                 }
 
                 @Deprecated("Use the value overload on API 33+.")
-                override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-                    if (characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID) registry.dispatchRawIncoming(resolvedAddress, characteristic.value)
+                override fun onCharacteristicChanged(
+                    gatt: BluetoothGatt,
+                    characteristic: BluetoothGattCharacteristic
+                ) {
+                    if (gattClients[resolvedAddress] === gatt &&
+                        characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
+                    ) {
+                        registry.dispatchRawIncoming(
+                            resolvedAddress,
+                            characteristic.value
+                        )
+                    }
                 }
 
-                override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-                    if (characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID) registry.dispatchRawIncoming(resolvedAddress, value)
+                override fun onCharacteristicChanged(
+                    gatt: BluetoothGatt,
+                    characteristic: BluetoothGattCharacteristic,
+                    value: ByteArray
+                ) {
+                    if (gattClients[resolvedAddress] === gatt &&
+                        characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
+                    ) {
+                        registry.dispatchRawIncoming(resolvedAddress, value)
+                    }
                 }
 
-                override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-                    if (status == BluetoothGatt.GATT_SUCCESS) registry.onMtuNegotiated(resolvedAddress, mtu)
+                override fun onMtuChanged(
+                    gatt: BluetoothGatt,
+                    mtu: Int,
+                    status: Int
+                ) {
+                    if (status == BluetoothGatt.GATT_SUCCESS &&
+                        (gattClients[resolvedAddress] === gatt || pending[resolvedAddress] === completion)
+                    ) {
+                        registry.onMtuNegotiated(resolvedAddress, mtu)
+                    }
                 }
             }
-            val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE) else {
+
+            val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(
+                    context,
+                    false,
+                    callback,
+                    BluetoothDevice.TRANSPORT_LE
+                )
+            } else {
                 device.connectGatt(context, false, callback)
             }
+
             try {
                 withTimeout(20_000L) { completion.await() }
             } catch (_: TimeoutCancellationException) {
-                pending.remove(resolvedAddress)
+                if (pending.remove(resolvedAddress, completion) != null) {
+                    setState(resolvedAddress, BleLinkState.FAILED)
+                }
+                gattClients.remove(resolvedAddress, gatt)
+                registry.unregisterOutboundConnection(resolvedAddress)
                 try { gatt.disconnect() } catch (_: Exception) {}
                 try { gatt.close() } catch (_: Exception) {}
-                setState(resolvedAddress, BleLinkState.FAILED)
                 TacticalResult.Failure("GATT connection timed out")
             }
         } catch (e: Exception) {
-            pending.remove(resolvedAddress)
-            setState(resolvedAddress, BleLinkState.FAILED)
+            if (pending.remove(resolvedAddress, completion) != null) {
+                setState(resolvedAddress, BleLinkState.FAILED)
+            }
             TacticalResult.Failure("Unable to connect: ${e.message}")
         }
     }
