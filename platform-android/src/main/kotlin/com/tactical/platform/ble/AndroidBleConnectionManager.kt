@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.tactical.platform.ble
 
 import android.Manifest
@@ -170,8 +172,8 @@ class AndroidBleConnectionManager(
                             val rc = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
                             if (rc != BluetoothStatusCodes.SUCCESS) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed: $rc"))
                         } else {
-                            @Suppress("DEPRECATION") descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                            @Suppress("DEPRECATION") if (!gatt.writeDescriptor(descriptor)) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed"))
+                            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            if (!gatt.writeDescriptor(descriptor)) pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed"))
                         }
                     } catch (e: Exception) {
                         pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("Notification setup failed: ${e.message}"))
@@ -195,7 +197,7 @@ class AndroidBleConnectionManager(
                 }
             }
             val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE) else {
-                @Suppress("DEPRECATION") device.connectGatt(context, false, callback)
+                device.connectGatt(context, false, callback)
             }
             try {
                 withTimeout(20_000L) { completion.await() }
