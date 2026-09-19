@@ -11,6 +11,8 @@ import com.tactical.engine.discovery.proximity.RssiProximityEstimator
 import com.tactical.engine.discovery.service.DefaultDiscoveryService
 import com.tactical.engine.discovery.service.DiscoveryService
 import com.tactical.engine.mesh.service.MeshService
+import com.tactical.platform.api.ble.BleConnectionManager
+import com.tactical.platform.api.ble.BleLinkState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,13 +67,15 @@ data class MainUiState(
 class MainViewModel @Inject constructor(
     private val discoveryService: DiscoveryService,
     private val meshService: MeshService,
-    private val identityStore: DeviceIdentityStore
+    private val identityStore: DeviceIdentityStore,
+    private val bleConnectionManager: BleConnectionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     private val estimator = RssiProximityEstimator()
     private var scanJob: Job? = null
+    private var scanLoopJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -113,8 +117,9 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Starts persistent discovery. The timer controls discovery only;
-     * established GATT sessions are deliberately left untouched.
+     * Keeps discovery alive independently from any established connection.
+     * The 10-second timer schedules fresh discovery cycles; it never calls
+     * disconnect on an already connected peer.
      */
     fun startDiscovery() {
         if (scanLoopJob?.isActive == true) return
@@ -137,7 +142,7 @@ class MainViewModel @Inject constructor(
                 _uiState.update { it.copy(isScanning = true) }
                 delay(SINGLE_SCAN_WINDOW_MS)
             } catch (_: Exception) {
-                // A failed radio cycle must not kill persistent discovery.
+                // Keep the 10-second loop alive after an individual radio failure.
             } finally {
                 (discoveryService as? DefaultDiscoveryService)?.stopDiscovery()
                 _uiState.update { it.copy(isScanning = false) }
@@ -149,7 +154,7 @@ class MainViewModel @Inject constructor(
         scanJob = null
     }
 
-    /** Immediate manual scan; it does not tear down persistent discovery. */
+    /** Immediate scan requested by the user. Persistent discovery remains enabled. */
     fun forceDiscovery() {
         if (scanJob?.isActive == true) return
         viewModelScope.launch { runScanCycle() }
@@ -224,8 +229,13 @@ class MainViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        scanLoopJob?.cancel()
         viewModelScope.launch { discoveryService.stop() }
         scanJob?.cancel()
         super.onCleared()
+    }
+    companion object {
+        private const val SINGLE_SCAN_WINDOW_MS = 5000L
+        private const val DISCOVERY_INTERVAL_MS = 10000L
     }
 }
