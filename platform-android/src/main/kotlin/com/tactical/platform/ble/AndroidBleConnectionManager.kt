@@ -74,14 +74,16 @@ class AndroidBleConnectionManager(
                     val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
                     if (appId != null) {
                         rememberPairedPeer(appId, device.address)
-                    }
-                    setState(device.address, BleLinkState.PAIRED)
-                    // Both bonded phones maintain their own outbound GATT
-                    // session. This keeps text transport symmetric and avoids
-                    // depending on server-side notifications for normal sends.
-                    reconnectScope.launch {
-                        delay(500L)
-                        runCatching { reconnectPaired(appId) }
+                        setState(device.address, BleLinkState.PAIRED)
+                        // Both bonded phones maintain their own outbound GATT
+                        // session. This keeps text transport symmetric and avoids
+                        // depending on server-side notifications for normal sends.
+                        reconnectScope.launch {
+                            delay(500L)
+                            runCatching { reconnectPaired(appId) }
+                        }
+                    } else {
+                        setState(device.address, BleLinkState.PAIRED)
                     }
                 }
                 BluetoothDevice.BOND_NONE -> {
