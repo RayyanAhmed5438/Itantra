@@ -83,6 +83,7 @@ class MainViewModel @Inject constructor(
     private var scanLoopJob: Job? = null
     private var healthJob: Job? = null
     private val observedPeerIds = mutableSetOf<String>()
+    private val reconnectJobs = mutableMapOf<String, Job>()
 
     init {
         viewModelScope.launch {
@@ -131,11 +132,22 @@ class MainViewModel @Inject constructor(
                         }
 
                         // Discovery resolves the peer's current BLE address.
-                        // Trigger reconnect immediately for an already-paired
-                        // device instead of waiting for the next 10-second retry.
+                        // Trigger at most one reconnect attempt at a time per
+                        // peer; scan callbacks can fire many times per second.
                         if (bleConnectionManager.pairedDeviceIds().contains(peer.deviceAddress)) {
-                            viewModelScope.launch {
-                                runCatching { bleConnectionManager.reconnectPaired(peer.deviceAddress) }
+                            val existingReconnect = reconnectJobs[peer.deviceAddress]
+                            if (existingReconnect?.isActive != true) {
+                                val job = viewModelScope.launch {
+                                    runCatching {
+                                        bleConnectionManager.reconnectPaired(peer.deviceAddress)
+                                    }
+                                }
+                                reconnectJobs[peer.deviceAddress] = job
+                                job.invokeOnCompletion {
+                                    if (reconnectJobs[peer.deviceAddress] === job) {
+                                        reconnectJobs.remove(peer.deviceAddress)
+                                    }
+                                }
                             }
                         }
                     }
@@ -444,6 +456,8 @@ class MainViewModel @Inject constructor(
         healthJob?.cancel()
         viewModelScope.launch { discoveryService.stop() }
         scanJob?.cancel()
+        reconnectJobs.values.forEach { it.cancel() }
+        reconnectJobs.clear()
         super.onCleared()
     }
     companion object {
