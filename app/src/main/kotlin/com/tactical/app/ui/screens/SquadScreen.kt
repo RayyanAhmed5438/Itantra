@@ -57,7 +57,8 @@ fun SquadScreen(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .navigationBarsPadding()
         ) {
             if (uiState.pairedPeers.isEmpty()) {
