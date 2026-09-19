@@ -130,7 +130,7 @@ class AndroidBleConnectionManager(
                         setState(resolvedAddress, BleLinkState.CONNECTED)
                         try { gatt.discoverServices() } catch (_: Exception) {}
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                        gattClients.remove(deviceAddress, gatt)
+                        gattClients.remove(resolvedAddress, gatt)
                         registry.unregisterOutboundConnection(resolvedAddress)
                         setState(resolvedAddress, if (device.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.DISCONNECTED else BleLinkState.NOT_PAIRED)
                         pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
@@ -140,7 +140,7 @@ class AndroidBleConnectionManager(
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
                     if (status != BluetoothGatt.GATT_SUCCESS) {
-                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("GATT service discovery failed: $status"))
+                        pending.remove(resolvedAddress)?.complete(TacticalResult.Failure("GATT service discovery failed: $status"))
                         return
                     }
                     val service = gatt.getService(BleRadioTransport.GATT_SERVICE_UUID)
@@ -202,15 +202,19 @@ class AndroidBleConnectionManager(
             }
         } catch (e: Exception) {
             pending.remove(deviceAddress)
-            setState(deviceAddress, BleLinkState.FAILED)
+            setState(resolvedAddress, BleLinkState.FAILED)
             TacticalResult.Failure("Unable to connect: ${e.message}")
         }
     }
 
     override suspend fun disconnect(deviceAddress: String) {
-        gattClients.remove(deviceAddress)?.let { try { it.disconnect() } catch (_: Exception) {}; try { it.close() } catch (_: Exception) {} }
-        registry.unregisterOutboundConnection(deviceAddress)
-        setState(deviceAddress, BleLinkState.DISCONNECTED)
+        val resolvedAddress = resolveAddress(deviceAddress) ?: deviceAddress
+        gattClients.remove(resolvedAddress)?.let {
+            try { it.disconnect() } catch (_: Exception) {}
+            try { it.close() } catch (_: Exception) {}
+        }
+        registry.unregisterOutboundConnection(resolvedAddress)
+        setState(resolvedAddress, BleLinkState.DISCONNECTED)
     }
 
     override fun state(deviceAddress: String): Flow<BleLinkState> = stateFlow(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
@@ -268,7 +272,11 @@ class AndroidBleConnectionManager(
     private fun stateFlow(address: String): MutableStateFlow<BleLinkState> = states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
     private fun setState(address: String, state: BleLinkState) { stateFlow(address).value = state }
     private fun initialState(address: String): BleLinkState = try { if (deviceForAddress(address)?.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.PAIRED else BleLinkState.NOT_PAIRED } catch (_: Exception) { BleLinkState.NOT_PAIRED }
-    private fun deviceForAddress(address: String): BluetoothDevice? = try { if (!hasConnectPermission()) null else context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.getRemoteDevice(address) } catch (_: Exception) { null }
+    private fun deviceForAddress(identifier: String): BluetoothDevice? = try {
+        if (!hasConnectPermission()) return null
+        val address = resolveAddress(identifier) ?: return null
+        context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.getRemoteDevice(address)
+    } catch (_: Exception) { null }
     private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
     companion object {
