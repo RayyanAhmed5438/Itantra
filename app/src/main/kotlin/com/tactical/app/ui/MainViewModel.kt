@@ -99,18 +99,24 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->
-                    val existing = state.availablePeers.associateBy { it.deviceAddress }
+                    val existing = (state.availablePeers + state.pairedPeers)
+                        .associateBy { it.deviceAddress }
 
                     val peers = devices.map { device ->
                         val id = device.id.value
                         val previous = existing[id]
+                        val hasRssi = device.rssi != 0
                         PeerNodeUi(
                             deviceAddress = id,
-                            callsign = device.callsign.ifBlank { id },
+                            callsign = device.callsign.ifBlank { previous?.callsign ?: id },
                             isConnected = previous?.isConnected ?: false,
-                            distanceText = formatDistance(estimator.estimate(device.rssi)),
-                            signalBars = signalBars(device.rssi),
-                            linkText = device.link.name,
+                            distanceText = if (hasRssi) {
+                                formatDistance(estimator.estimate(device.rssi))
+                            } else {
+                                previous?.distanceText ?: "Unknown"
+                            },
+                            signalBars = if (hasRssi) signalBars(device.rssi) else (previous?.signalBars ?: 0),
+                            linkText = if (hasRssi) device.link.name else (previous?.linkText ?: device.link.name),
                             bleState = previous?.bleState ?: BleLinkState.NOT_PAIRED
                         )
                     }
