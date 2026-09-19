@@ -48,6 +48,8 @@ class AndroidBleConnectionManager(
     private val states = ConcurrentHashMap<String, MutableStateFlow<BleLinkState>>()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<TacticalResult<Unit>>>()
     private val gattClients = ConcurrentHashMap<String, BluetoothGatt>()
+    private val rssiStates = ConcurrentHashMap<String, MutableStateFlow<Int?>>()
+    private val rssiJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
     private val reconnectScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val prefs by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -96,6 +98,8 @@ class AndroidBleConnectionManager(
                     try { gatt.close() } catch (_: Exception) {}
                 }
                 gattClients.clear()
+                rssiJobs.values.toList().forEach { it.cancel() }
+                rssiJobs.clear()
                 registry.allConnectedAddresses().toList().forEach { registry.unregisterOutboundConnection(it) }
                 states.keys.toList().forEach { setState(it, BleLinkState.DISCONNECTED) }
             } else if (state == BluetoothAdapter.STATE_ON) {
@@ -214,6 +218,7 @@ class AndroidBleConnectionManager(
         ) {
             if (targetGatt != null) {
                 gattClients.remove(resolvedAddress, targetGatt)
+                rssiJobs.remove(resolvedAddress)?.cancel()
                 registry.unregisterOutboundConnection(resolvedAddress)
             }
             if (pending.remove(resolvedAddress, completion)) {
@@ -274,6 +279,7 @@ class AndroidBleConnectionManager(
                         } else {
                             BleLinkState.NOT_PAIRED
                         }
+                        rssiJobs.remove(resolvedAddress)?.cancel()
                         if (pending.remove(resolvedAddress, completion)) {
                             completion.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
                         }
@@ -372,6 +378,7 @@ class AndroidBleConnectionManager(
                         gattClients[resolvedAddress] = gatt
                         registry.registerOutboundConnection(gatt)
                         setState(resolvedAddress, BleLinkState.CONNECTED)
+                        startRssiPolling(resolvedAddress, gatt)
                         android.util.Log.d(
                             TAG,
                             "GATT ready for " + resolvedAddress
@@ -414,6 +421,19 @@ class AndroidBleConnectionManager(
                     }
                 }
 
+                override fun onReadRemoteRssi(
+                    gatt: BluetoothGatt,
+                    rssi: Int,
+                    status: Int
+                ) {
+                    if (status == BluetoothGatt.GATT_SUCCESS &&
+                        gattClients[resolvedAddress] === gatt
+                    ) {
+                        registry.updateRssi(resolvedAddress, rssi)
+                        rssiState(resolvedAddress).value = rssi
+                    }
+                }
+
                 override fun onMtuChanged(
                     gatt: BluetoothGatt,
                     mtu: Int,
@@ -445,6 +465,7 @@ class AndroidBleConnectionManager(
                     setState(resolvedAddress, BleLinkState.FAILED)
                 }
                 gattClients.remove(resolvedAddress, gatt)
+                rssiJobs.remove(resolvedAddress)?.cancel()
                 registry.unregisterOutboundConnection(resolvedAddress)
                 try { gatt.disconnect() } catch (_: Exception) {}
                 try { gatt.close() } catch (_: Exception) {}
@@ -469,6 +490,9 @@ class AndroidBleConnectionManager(
     }
 
     override fun state(deviceAddress: String): Flow<BleLinkState> = stateFlow(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
+
+    override fun rssi(deviceAddress: String): Flow<Int?> =
+        rssiState(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
 
     override fun pairedDeviceIds(): Set<String> =
         prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toSet() ?: emptySet()
@@ -511,6 +535,23 @@ class AndroidBleConnectionManager(
         lastRecovery = epochMs
         scanFailures = 0
         emptyCycles = 0
+    }
+
+    private fun rssiState(address: String): MutableStateFlow<Int?> =
+        rssiStates.computeIfAbsent(address) { MutableStateFlow(null) }
+
+    private fun startRssiPolling(address: String, gatt: BluetoothGatt) {
+        rssiJobs.remove(address)?.cancel()
+        rssiJobs[address] = reconnectScope.launch {
+            while (gattClients[address] === gatt) {
+                try {
+                    gatt.readRemoteRssi()
+                } catch (_: Exception) {
+                    // A failed RSSI read is transient.
+                }
+                delay(2500L)
+            }
+        }
     }
 
     private fun resolveAddress(identifier: String): String? {
