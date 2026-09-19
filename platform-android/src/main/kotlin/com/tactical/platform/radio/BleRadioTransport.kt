@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import kotlinx.coroutines.launch
 import android.os.Build
 import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.radio.RadioTransport
