@@ -2,7 +2,10 @@ package com.tactical.app.ui
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
@@ -23,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
-import com.tactical.platform.api.ble.BleLinkState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -40,6 +42,15 @@ class MainActivity : ComponentActivity() {
     private var startupCheckPending = false
     private var meshServiceStarted = false
     private val wirelessWarning = mutableStateOf<String?>(null)
+
+    private val wirelessStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                BluetoothManager.ACTION_STATE_CHANGED,
+                WifiManager.WIFI_STATE_CHANGED_ACTION -> ensureWirelessEnabled()
+            }
+        }
+    }
 
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -117,6 +128,25 @@ class MainActivity : ComponentActivity() {
         }
 
         requestStartupPermissions()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter().apply {
+            addAction(BluetoothManager.ACTION_STATE_CHANGED)
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(wirelessStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(wirelessStateReceiver, filter)
+        }
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(wirelessStateReceiver) }
+        super.onStop()
     }
 
     private fun requestStartupPermissions() {
