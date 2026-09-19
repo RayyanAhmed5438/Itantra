@@ -109,7 +109,7 @@ class AndroidBleAdvertiser(
                         continuation.resumeWith(
                             Result.failure(
                                 IllegalStateException(
-                                    "advertise() failed, errorCode=$errorCode"
+                                    "advertise() failed, errorCode=$errorCode (${advertiseErrorName(errorCode)})"
                                 )
                             )
                         )
@@ -173,6 +173,18 @@ class AndroidBleAdvertiser(
 
         private const val MANUFACTURER_ID = 0xFFFF
 
-        private const val MAX_MANUFACTURER_DATA_BYTES = 27
+        // With connectable legacy advertising, Android reserves the AD flags field.
+        // Keeping the manufacturer payload at 24 bytes leaves the full packet within
+        // the 31-byte legacy advertising limit.
+        private const val MAX_MANUFACTURER_DATA_BYTES = 24
+
+        private fun advertiseErrorName(errorCode: Int): String = when (errorCode) {
+            AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "DATA_TOO_LARGE"
+            AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "TOO_MANY_ADVERTISERS"
+            AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "ALREADY_STARTED"
+            AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "INTERNAL_ERROR"
+            AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "FEATURE_UNSUPPORTED"
+            else -> "UNKNOWN"
+        }
     }
 }
