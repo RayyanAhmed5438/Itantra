@@ -148,7 +148,7 @@ class MainViewModel @Inject constructor(
 
         scanLoopJob = viewModelScope.launch {
             runCatching { discoveryService.start() }
-            while (isActive) {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
                 runScanCycle()
                 delay(DISCOVERY_INTERVAL_MS)
             }
