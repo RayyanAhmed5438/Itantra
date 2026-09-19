@@ -1,0 +1,249 @@
+package com.tactical.platform.ble
+
+import android.Manifest
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
+import com.tactical.domain.result.TacticalResult
+import com.tactical.platform.api.ble.BleConnectionManager
+import com.tactical.platform.api.ble.BleDiagnostics
+import com.tactical.platform.api.ble.BleLinkState
+import com.tactical.platform.radio.BleConnectionRegistry
+import com.tactical.platform.radio.BleRadioTransport
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeout
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/** Explicit pairing and persistent BLE GATT client sessions. */
+class AndroidBleConnectionManager(
+    private val context: Context,
+    private val registry: BleConnectionRegistry
+) : BleConnectionManager {
+
+    private val states = ConcurrentHashMap<String, MutableStateFlow<BleLinkState>>()
+    private val pending = ConcurrentHashMap<String, CompletableDeferred<TacticalResult<Unit>>>()
+    private val gattClients = ConcurrentHashMap<String, BluetoothGatt>()
+    private var lastAdvertisingOk = false
+    private var lastScanningOk = false
+    private var emptyCycles = 0
+    private var scanFailures = 0
+    private var lastRecovery = 0L
+
+    private val bondReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            } ?: return
+            when (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)) {
+                BluetoothDevice.BOND_BONDED -> setState(device.address, BleLinkState.PAIRED)
+                BluetoothDevice.BOND_NONE -> setState(device.address, BleLinkState.NOT_PAIRED)
+            }
+        }
+    }
+
+    init {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(bondReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION") context.registerReceiver(bondReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        }
+    }
+
+    override suspend fun pair(deviceAddress: String): TacticalResult<Unit> {
+        if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
+        val device = deviceForAddress(deviceAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
+        if (device.bondState == BluetoothDevice.BOND_BONDED) {
+            setState(deviceAddress, BleLinkState.PAIRED)
+            return TacticalResult.Success(Unit)
+        }
+        setState(deviceAddress, BleLinkState.PAIRING)
+        return try {
+            if (!device.createBond()) {
+                setState(deviceAddress, BleLinkState.FAILED)
+                TacticalResult.Failure("Android pairing could not be started")
+            } else {
+                withTimeout(30_000L) {
+                    while (device.bondState == BluetoothDevice.BOND_BONDING) delay(250L)
+                }
+                if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                    setState(deviceAddress, BleLinkState.PAIRED)
+                    TacticalResult.Success(Unit)
+                } else {
+                    setState(deviceAddress, BleLinkState.FAILED)
+                    TacticalResult.Failure("Bluetooth pairing did not complete")
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            setState(deviceAddress, BleLinkState.FAILED)
+            TacticalResult.Failure("Bluetooth pairing timed out")
+        } catch (e: Exception) {
+            setState(deviceAddress, BleLinkState.FAILED)
+            TacticalResult.Failure("Bluetooth pairing failed: ${e.message}")
+        }
+    }
+
+    override suspend fun connect(deviceAddress: String): TacticalResult<Unit> {
+        if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
+        val device = deviceForAddress(deviceAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
+        if (device.bondState != BluetoothDevice.BOND_BONDED) return TacticalResult.Failure("Pair the device before connecting")
+        if (gattClients.containsKey(deviceAddress)) {
+            setState(deviceAddress, BleLinkState.CONNECTED)
+            return TacticalResult.Success(Unit)
+        }
+        setState(deviceAddress, BleLinkState.CONNECTING)
+        val completion = CompletableDeferred<TacticalResult<Unit>>()
+        pending[deviceAddress] = completion
+        return try {
+            val callback = object : BluetoothGattCallback() {
+                override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                    if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                        gattClients[deviceAddress] = gatt
+                        registry.registerOutboundConnection(gatt)
+                        setState(deviceAddress, BleLinkState.CONNECTED)
+                        try { gatt.discoverServices() } catch (_: Exception) {}
+                    } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                        gattClients.remove(deviceAddress, gatt)
+                        registry.unregisterOutboundConnection(deviceAddress)
+                        setState(deviceAddress, if (device.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.DISCONNECTED else BleLinkState.NOT_PAIRED)
+                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
+                        try { gatt.close() } catch (_: Exception) {}
+                    }
+                }
+
+                override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("GATT service discovery failed: $status"))
+                        return
+                    }
+                    val service = gatt.getService(BleRadioTransport.GATT_SERVICE_UUID)
+                    val characteristic = service?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
+                    if (characteristic == null) {
+                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("iTantra GATT service not found"))
+                        try { gatt.disconnect() } catch (_: Exception) {}
+                        return
+                    }
+                    if (!gatt.setCharacteristicNotification(characteristic, true)) {
+                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Could not enable notifications"))
+                        return
+                    }
+                    val descriptor = characteristic.getDescriptor(CCCD_UUID)
+                    if (descriptor == null) {
+                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("CCCD descriptor missing"))
+                        return
+                    }
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            val rc = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                            if (rc != BluetoothStatusCodes.SUCCESS) pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed: $rc"))
+                        } else {
+                            @Suppress("DEPRECATION") descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            @Suppress("DEPRECATION") if (!gatt.writeDescriptor(descriptor)) pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Notification descriptor write failed"))
+                        }
+                    } catch (e: Exception) {
+                        pending.remove(deviceAddress)?.complete(TacticalResult.Failure("Notification setup failed: ${e.message}"))
+                    }
+                }
+
+                override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+                    if (descriptor.uuid == CCCD_UUID) pending.remove(deviceAddress)?.complete(if (status == BluetoothGatt.GATT_SUCCESS) TacticalResult.Success(Unit) else TacticalResult.Failure("CCCD write status=$status"))
+                }
+
+                override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+                    if (characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID) registry.dispatchRawIncoming(deviceAddress, characteristic.value)
+                }
+
+                override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+                    if (characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID) registry.dispatchRawIncoming(deviceAddress, value)
+                }
+
+                override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                    if (status == BluetoothGatt.GATT_SUCCESS) registry.onMtuNegotiated(deviceAddress, mtu)
+                }
+            }
+            val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE) else {
+                @Suppress("DEPRECATION") device.connectGatt(context, false, callback)
+            }
+            try {
+                withTimeout(20_000L) { completion.await() }
+            } catch (_: TimeoutCancellationException) {
+                pending.remove(deviceAddress)
+                try { gatt.disconnect() } catch (_: Exception) {}
+                try { gatt.close() } catch (_: Exception) {}
+                setState(deviceAddress, BleLinkState.FAILED)
+                TacticalResult.Failure("GATT connection timed out")
+            }
+        } catch (e: Exception) {
+            pending.remove(deviceAddress)
+            setState(deviceAddress, BleLinkState.FAILED)
+            TacticalResult.Failure("Unable to connect: ${e.message}")
+        }
+    }
+
+    override suspend fun disconnect(deviceAddress: String) {
+        gattClients.remove(deviceAddress)?.let { try { it.disconnect() } catch (_: Exception) {}; try { it.close() } catch (_: Exception) {} }
+        registry.unregisterOutboundConnection(deviceAddress)
+        setState(deviceAddress, BleLinkState.DISCONNECTED)
+    }
+
+    override fun state(deviceAddress: String): Flow<BleLinkState> = stateFlow(deviceAddress).asStateFlow()
+
+    override suspend fun reconnectPaired(deviceAddress: String): TacticalResult<Unit> {
+        return if (deviceForAddress(deviceAddress)?.bondState == BluetoothDevice.BOND_BONDED) connect(deviceAddress) else TacticalResult.Failure("Peer is not paired")
+    }
+
+    override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
+        disconnect(deviceAddress)
+        val device = deviceForAddress(deviceAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
+        if (device.bondState != BluetoothDevice.BOND_BONDED) {
+            val paired = pair(deviceAddress)
+            if (paired is TacticalResult.Failure) return paired
+        }
+        return connect(deviceAddress)
+    }
+
+    override fun diagnostics(): Flow<BleDiagnostics> = MutableStateFlow(
+        BleDiagnostics(lastAdvertisingOk, lastScanningOk, registry.allConnectedAddresses().size, emptyCycles, scanFailures, lastRecovery, if (scanFailures >= 3) "BLE scan has failed repeatedly" else null)
+    ).asStateFlow()
+
+    fun updateDiscoveryHealth(advertisingOk: Boolean, scanningOk: Boolean, emptyCycle: Boolean) {
+        lastAdvertisingOk = advertisingOk
+        lastScanningOk = scanningOk
+        scanFailures = if (scanningOk) 0 else scanFailures + 1
+        emptyCycles = if (emptyCycle) emptyCycles + 1 else 0
+    }
+
+    fun markRecovery(epochMs: Long) {
+        lastRecovery = epochMs
+        scanFailures = 0
+        emptyCycles = 0
+    }
+
+    private fun stateFlow(address: String): MutableStateFlow<BleLinkState> = states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
+    private fun setState(address: String, state: BleLinkState) { stateFlow(address).value = state }
+    private fun initialState(address: String): BleLinkState = try { if (deviceForAddress(address)?.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.PAIRED else BleLinkState.NOT_PAIRED } catch (_: Exception) { BleLinkState.NOT_PAIRED }
+    private fun deviceForAddress(address: String): BluetoothDevice? = try { if (!hasConnectPermission()) null else context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.getRemoteDevice(address) } catch (_: Exception) { null }
+    private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    companion object {
+        private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+    }
+}
