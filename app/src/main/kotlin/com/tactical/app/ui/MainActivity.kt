@@ -1,6 +1,7 @@
 package com.tactical.app.ui
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -46,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private val wirelessStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                BluetoothManager.ACTION_STATE_CHANGED,
+                BluetoothAdapter.ACTION_STATE_CHANGED,
                 WifiManager.WIFI_STATE_CHANGED_ACTION -> ensureWirelessEnabled()
             }
         }
@@ -133,7 +134,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         val filter = IntentFilter().apply {
-            addAction(BluetoothManager.ACTION_STATE_CHANGED)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
