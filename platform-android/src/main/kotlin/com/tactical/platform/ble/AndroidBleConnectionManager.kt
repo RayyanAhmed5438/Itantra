@@ -278,11 +278,17 @@ class AndroidBleConnectionManager(
     private fun stateFlow(address: String): MutableStateFlow<BleLinkState> = states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
     private fun setState(address: String, state: BleLinkState) { stateFlow(address).value = state }
     private fun initialState(address: String): BleLinkState = try { if (deviceForAddress(address)?.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.PAIRED else BleLinkState.NOT_PAIRED } catch (_: Exception) { BleLinkState.NOT_PAIRED }
-    private fun deviceForAddress(identifier: String): BluetoothDevice? = try {
+    private fun deviceForAddress(identifier: String): BluetoothDevice? {
         if (!hasConnectPermission()) return null
-        val address = resolveAddress(identifier) ?: return null
-        context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.getRemoteDevice(address)
-    } catch (_: Exception) { null }
+        return try {
+            val address = resolveAddress(identifier) ?: return null
+            context.getSystemService(android.bluetooth.BluetoothManager::class.java)
+                ?.adapter
+                ?.getRemoteDevice(address)
+        } catch (_: Exception) {
+            null
+        }
+    }
     private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
     companion object {
