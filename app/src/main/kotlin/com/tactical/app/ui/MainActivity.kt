@@ -195,7 +195,10 @@ class MainActivity : ComponentActivity() {
             else -> "Wi-Fi is off. Turn it on."
         }
 
-        if (bluetoothOn && wifiOn) {
+        // BLE is the primary transport and must keep working even when
+        // Wi-Fi is disabled (for example, while the user is using the
+        // phone's hotspot). Wi-Fi state is informational for now.
+        if (bluetoothOn) {
             startupCheckPending = false
             if (!meshServiceStarted) {
                 meshServiceStarted = true
