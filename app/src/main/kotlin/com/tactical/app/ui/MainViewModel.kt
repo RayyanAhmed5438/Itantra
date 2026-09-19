@@ -129,6 +129,15 @@ class MainViewModel @Inject constructor(
                         if (observedPeerIds.add(peer.deviceAddress)) {
                             observePeerState(peer.deviceAddress)
                         }
+
+                        // Discovery resolves the peer's current BLE address.
+                        // Trigger reconnect immediately for an already-paired
+                        // device instead of waiting for the next 10-second retry.
+                        if (bleConnectionManager.pairedDeviceIds().contains(peer.deviceAddress)) {
+                            viewModelScope.launch {
+                                runCatching { bleConnectionManager.reconnectPaired(peer.deviceAddress) }
+                            }
+                        }
                     }
 
                     val pairedIds = bleConnectionManager.pairedDeviceIds()
