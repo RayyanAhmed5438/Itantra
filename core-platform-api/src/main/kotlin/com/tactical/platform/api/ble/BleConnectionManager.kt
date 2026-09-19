@@ -13,6 +13,8 @@ interface BleConnectionManager {
     suspend fun connect(deviceAddress: String): TacticalResult<Unit>
     suspend fun disconnect(deviceAddress: String)
     fun state(deviceAddress: String): Flow<BleLinkState>
+    /** Emits the latest RSSI measured from the active GATT connection. */
+    fun rssi(deviceAddress: String): Flow<Int?>
     suspend fun reconnectPaired(deviceAddress: String): TacticalResult<Unit>
     suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit>
     /** Returns application-level IDs for iTantra peers that this device has paired with. */
