@@ -91,7 +91,7 @@ class MainViewModel @Inject constructor(
                     state.copy(
                         squadPeers = devices.map { device ->
                             PeerNodeUi(
-                                deviceAddress = device.callsign.ifBlank { device.id.value },
+                                deviceAddress = device.id.value,
                                 callsign = device.callsign.ifBlank { device.id.value },
                                 isConnected = device.link != LinkType.STALE,
                                 distanceText = formatDistance(estimator.estimate(device.rssi)),
