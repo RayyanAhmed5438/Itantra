@@ -92,26 +92,38 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
-                val peers = devices.map { device ->
-                    PeerNodeUi(
-                        deviceAddress = device.id.value,
-                        callsign = device.callsign.ifBlank { device.id.value },
-                        isConnected = false,
-                        distanceText = formatDistance(estimator.estimate(device.rssi)),
-                        signalBars = signalBars(device.rssi),
-                        linkText = device.link.name
+                _uiState.update { state ->
+                    val existing = state.availablePeers.associateBy { it.deviceAddress }
+
+                    val peers = devices.map { device ->
+                        val id = device.id.value
+                        val previous = existing[id]
+                        PeerNodeUi(
+                            deviceAddress = id,
+                            callsign = device.callsign.ifBlank { id },
+                            isConnected = previous?.isConnected ?: false,
+                            distanceText = formatDistance(estimator.estimate(device.rssi)),
+                            signalBars = signalBars(device.rssi),
+                            linkText = device.link.name,
+                            bleState = previous?.bleState ?: BleLinkState.NOT_PAIRED
+                        )
+                    }
+
+                    peers.forEach { peer ->
+                        if (observedPeerIds.add(peer.deviceAddress)) {
+                            observePeerState(peer.deviceAddress)
+                        }
+                    }
+
+                    val pairedIds = bleConnectionManager.pairedDeviceIds()
+                    state.copy(
+                        squadPeers = peers,
+                        availablePeers = peers,
+                        pairedPeers = peers.filter { it.deviceAddress in pairedIds }
                     )
                 }
 
-                peers.forEach { peer ->
-                    if (observedPeerIds.add(peer.deviceAddress)) {
-                        observePeerState(peer.deviceAddress)
-                    }
-                }
-
                 val pairedIds = bleConnectionManager.pairedDeviceIds()
-                val paired = peers.filter { it.deviceAddress in pairedIds }
-
                 pairedIds.forEach { peerId ->
                     if (reconnectingPairedIds.add(peerId)) {
                         viewModelScope.launch {
@@ -122,14 +134,6 @@ class MainViewModel @Inject constructor(
                             }
                         }
                     }
-                }
-
-                _uiState.update { state ->
-                    state.copy(
-                        squadPeers = peers,
-                        availablePeers = peers,
-                        pairedPeers = paired
-                    )
                 }
             }
         }
