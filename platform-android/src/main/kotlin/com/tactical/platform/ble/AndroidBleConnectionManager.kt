@@ -186,6 +186,7 @@ class AndroidBleConnectionManager(
                     if (descriptor.uuid == CCCD_UUID) pending.remove(resolvedAddress)?.complete(if (status == BluetoothGatt.GATT_SUCCESS) TacticalResult.Success(Unit) else TacticalResult.Failure("CCCD write status=$status"))
                 }
 
+                @Deprecated("Use the value overload on API 33+.")
                 override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
                     if (characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID) registry.dispatchRawIncoming(resolvedAddress, characteristic.value)
                 }
