@@ -1,6 +1,7 @@
 package com.tactical.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -113,7 +114,19 @@ fun PeerCard(peer: PeerNodeUi) {
     Card(
         colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (peer.isConnected) {
+                    Modifier.border(
+                        width = 1.5.dp,
+                        color = RedTacticalStatusGreen,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            )
     ) {
         Row(
             modifier = Modifier
