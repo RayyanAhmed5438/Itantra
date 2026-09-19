@@ -1,9 +1,12 @@
 package com.tactical.app.ui
 
 import android.Manifest
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.net.wifi.WifiManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -27,11 +30,28 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private var startupCheckPending = false
 
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        if (grants.values.all { it }) ensureWirelessEnabled() else openWirelessSettings()
+        if (grants.values.all { it }) {
+            ensureWirelessEnabled()
+        } else {
+            openAppWirelessSettings()
+        }
+    }
+
+    private val requestBluetoothEnable = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            ensureWirelessEnabled()
+        } else {
+            // Do not trap the user in the Bluetooth prompt. Open the normal
+            // wireless settings page so they can enable it manually.
+            openBluetoothSettings()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,9 +63,7 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableIntStateOf(0) }
 
                 Scaffold(
-                    topBar = {
-                        AppHeader(deviceCount = state.squadPeers.size)
-                    },
+                    topBar = { AppHeader(deviceCount = state.squadPeers.size) },
                     bottomBar = {
                         AppBottomNavigation(
                             selectedTab = selectedTab,
@@ -60,18 +78,9 @@ class MainActivity : ComponentActivity() {
                             .padding(padding)
                     ) {
                         when (selectedTab) {
-                            0 -> DevicesScreen(
-                                uiState = state,
-                                onScan = viewModel::startDiscovery
-                            )
-                            1 -> SquadScreen(
-                                uiState = state,
-                                onRefresh = viewModel::startDiscovery
-                            )
-                            2 -> MessagesScreen(
-                                uiState = state,
-                                onSendMessage = viewModel::sendTextMessage
-                            )
+                            0 -> DevicesScreen(state, viewModel::startDiscovery)
+                            1 -> SquadScreen(state, onRefresh = viewModel::startDiscovery)
+                            2 -> MessagesScreen(state, viewModel::sendTextMessage)
                         }
                     }
                 }
@@ -91,9 +100,10 @@ class MainActivity : ComponentActivity() {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            } else {
+                // Required by Wi-Fi Direct on Android 12L and lower.
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
         }.distinct()
 
         val missing = permissions.filter {
@@ -111,20 +121,74 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureWirelessEnabled() {
-        val bluetoothAdapter = getSystemService(BluetoothManager::class.java)?.adapter
-        val bluetoothOff = bluetoothAdapter?.isEnabled == false
+        if (isFinishing || isDestroyed) return
 
-        val wifiOff =
-            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == false
+        val bluetoothAdapter =
+            getSystemService(BluetoothManager::class.java)?.adapter
 
-        if (bluetoothOff || wifiOff) {
-            openWirelessSettings()
-        } else {
-            startMeshService()
+        if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled) {
+            startupCheckPending = true
+
+            runCatching {
+                requestBluetoothEnable.launch(
+                    Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                )
+            }.onFailure {
+                openBluetoothSettings()
+            }
+            return
+        }
+
+        val wifiManager = getSystemService(WIFI_SERVICE) as? WifiManager
+        val wifiEnabled = wifiManager?.isWifiEnabled == true
+
+        if (!wifiEnabled) {
+            startupCheckPending = true
+            openWifiSettings()
+            return
+        }
+
+        // Wi-Fi Direct service discovery requires Location Services to be
+        // enabled by the system even when the app does not use location data.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val locationEnabled =
+                (getSystemService(LOCATION_SERVICE) as? LocationManager)?.isLocationEnabled == true
+            if (!locationEnabled) {
+                startupCheckPending = true
+                openLocationSettings()
+                return
+            }
+        }
+
+        startupCheckPending = false
+        startMeshService()
+    }
+
+    private fun openBluetoothSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        }.onFailure {
+            openAppWirelessSettings()
         }
     }
 
-    private fun openWirelessSettings() {
+    private fun openWifiSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+        }.onFailure {
+            openAppWirelessSettings()
+        }
+    }
+
+    private fun openLocationSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        }.onFailure {
+            openAppWirelessSettings()
+        }
+    }
+
+    private fun openAppWirelessSettings() {
         runCatching {
             startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
         }.onFailure {
@@ -142,14 +206,25 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
 
+        if (!startupCheckPending) return
+
         val bluetoothOn =
             getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
 
         val wifiOn =
             (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true
 
-        if (bluetoothOn && wifiOn) {
+        val locationOn =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.P ||
+                (getSystemService(LOCATION_SERVICE) as? LocationManager)?.isLocationEnabled == true
+
+        if (bluetoothOn && wifiOn && locationOn) {
+            startupCheckPending = false
             startMeshService()
+        } else if (bluetoothOn && !wifiOn) {
+            openWifiSettings()
+        } else if (bluetoothOn && wifiOn && !locationOn) {
+            openLocationSettings()
         }
     }
 }

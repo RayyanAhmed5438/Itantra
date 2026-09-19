@@ -24,14 +24,14 @@ import com.tactical.protocol.hashing.PacketHasher
 import com.tactical.protocol.hashing.XxHashPacketHasher
 import com.tactical.protocol.serialization.BinaryPacketSerializer
 import com.tactical.protocol.serialization.PacketSerializer
+import com.tactical.platform.api.ble.BleBeaconAdvertiser
+import com.tactical.platform.api.ble.BleBeaconScanner
+import com.tactical.platform.api.wifi.WifiDirectManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
-import com.tactical.platform.api.ble.BleBeaconAdvertiser
-import com.tactical.platform.api.ble.BleBeaconScanner
-import com.tactical.platform.api.wifi.WifiDirectManager
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -135,12 +135,16 @@ object MeshModule {
         scanner: BeaconScanner,
         catalog: DeviceCatalog,
         emitter: BeaconEmitter,
-        wifiDirectManager: WifiDirectManager
+        wifiDirectManager: WifiDirectManager,
+        @LocalDeviceIdValue localDeviceIdValue: String,
+        @LocalCallsign localCallsign: String
     ): DiscoveryService =
         DefaultDiscoveryService(
             scanner = scanner,
             catalog = catalog,
             emitter = emitter,
-            wifiDirectManager = wifiDirectManager
+            wifiDirectManager = wifiDirectManager,
+            localDeviceId = localDeviceIdValue,
+            localCallsign = localCallsign
         )
 }
