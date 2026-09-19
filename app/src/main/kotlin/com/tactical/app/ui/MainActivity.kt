@@ -1,6 +1,7 @@
 package com.tactical.app.ui
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.net.wifi.WifiManager
@@ -27,11 +28,27 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private var startupCheckPending = false
 
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        if (grants.values.all { it }) ensureWirelessEnabled() else openWirelessSettings()
+        if (grants.values.all { it }) {
+            ensureWirelessEnabled()
+        } else {
+            openAppWirelessSettings()
+        }
+    }
+
+    /**
+     * Android 13+ does not allow a normal app to silently call
+     * BluetoothAdapter.enable(). This system activity asks the user to
+     * turn Bluetooth on, which is the supported startup flow.
+     */
+    private val requestBluetoothEnable = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        ensureWirelessEnabled()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,20 +128,41 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureWirelessEnabled() {
-        val bluetoothAdapter = getSystemService(BluetoothManager::class.java)?.adapter
-        val bluetoothOff = bluetoothAdapter?.isEnabled == false
+        if (isFinishing || isDestroyed) return
 
-        val wifiOff =
-            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == false
+        val bluetoothAdapter =
+            getSystemService(BluetoothManager::class.java)?.adapter
 
-        if (bluetoothOff || wifiOff) {
-            openWirelessSettings()
-        } else {
-            startMeshService()
+        if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled) {
+            startupCheckPending = true
+            requestBluetoothEnable.launch(
+                Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            )
+            return
+        }
+
+        val wifiManager = getSystemService(WIFI_SERVICE) as? WifiManager
+        val wifiEnabled = wifiManager?.isWifiEnabled == true
+
+        if (!wifiEnabled) {
+            startupCheckPending = true
+            openWifiSettings()
+            return
+        }
+
+        startupCheckPending = false
+        startMeshService()
+    }
+
+    private fun openWifiSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+        }.onFailure {
+            openAppWirelessSettings()
         }
     }
 
-    private fun openWirelessSettings() {
+    private fun openAppWirelessSettings() {
         runCatching {
             startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
         }.onFailure {
@@ -142,6 +180,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
 
+        if (!startupCheckPending) return
+
         val bluetoothOn =
             getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
 
@@ -149,7 +189,14 @@ class MainActivity : ComponentActivity() {
             (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true
 
         if (bluetoothOn && wifiOn) {
+            startupCheckPending = false
             startMeshService()
+        } else {
+            // If the user returned from the Bluetooth prompt with BT enabled
+            // but Wi-Fi still disabled, send them directly to Wi-Fi settings.
+            if (bluetoothOn && !wifiOn) {
+                openWifiSettings()
+            }
         }
     }
 }
