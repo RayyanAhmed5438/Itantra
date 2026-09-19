@@ -4,6 +4,7 @@ package com.tactical.platform.ble
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -79,11 +80,34 @@ class AndroidBleConnectionManager(
         }
     }
 
+    private val adapterStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            if (state == BluetoothAdapter.STATE_OFF || state == BluetoothAdapter.STATE_TURNING_OFF) {
+                android.util.Log.d(TAG, "Bluetooth turned off; marking BLE links disconnected")
+                gattClients.values.toList().forEach { gatt ->
+                    try { gatt.disconnect() } catch (_: Exception) {}
+                    try { gatt.close() } catch (_: Exception) {}
+                }
+                gattClients.clear()
+                registry.allConnectedAddresses().toList().forEach { registry.unregisterOutboundConnection(it) }
+                states.keys.toList().forEach { setState(it, BleLinkState.DISCONNECTED) }
+            }
+        }
+    }
+
     init {
+        val bondFilter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        val adapterFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(bondReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED), Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(bondReceiver, bondFilter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(adapterStateReceiver, adapterFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            @Suppress("DEPRECATION") context.registerReceiver(bondReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+            @Suppress("DEPRECATION")
+            context.registerReceiver(bondReceiver, bondFilter)
+            @Suppress("DEPRECATION")
+            context.registerReceiver(adapterStateReceiver, adapterFilter)
         }
     }
 
@@ -128,6 +152,11 @@ class AndroidBleConnectionManager(
 
     override suspend fun connect(deviceAddress: String): TacticalResult<Unit> {
         if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
+        val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            setState(deviceAddress, BleLinkState.DISCONNECTED)
+            return TacticalResult.Failure("Bluetooth is off")
+        }
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
         val device = deviceForAddress(resolvedAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
@@ -251,7 +280,16 @@ class AndroidBleConnectionManager(
         prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toSet() ?: emptySet()
 
     override suspend fun reconnectPaired(deviceAddress: String): TacticalResult<Unit> {
-        return if (deviceForAddress(deviceAddress)?.bondState == BluetoothDevice.BOND_BONDED) connect(deviceAddress) else TacticalResult.Failure("Peer is not paired")
+        val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            setState(deviceAddress, BleLinkState.DISCONNECTED)
+            return TacticalResult.Failure("Bluetooth is off")
+        }
+        return if (deviceForAddress(deviceAddress)?.bondState == BluetoothDevice.BOND_BONDED) {
+            connect(deviceAddress)
+        } else {
+            TacticalResult.Failure("Peer is not paired")
+        }
     }
 
     override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
