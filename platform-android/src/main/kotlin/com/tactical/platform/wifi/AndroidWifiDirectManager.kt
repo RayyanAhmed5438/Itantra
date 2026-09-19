@@ -46,17 +46,14 @@ class AndroidWifiDirectManager(
         }
     }
 
-    private fun addLocalService(
-        serviceInfo: WifiP2pDnsSdServiceInfo,
-        continuation: kotlinx.coroutines.CancellableContinuation<TacticalResult<Unit>>
-    ) {
+    private fun addLocalService(serviceInfo: WifiP2pDnsSdServiceInfo, continuation: kotlinx.coroutines.CancellableContinuation<TacticalResult<Unit>>) {
         try {
             wifiP2pManager.addLocalService(wifichannel, serviceInfo, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     if (continuation.isActive) continuation.resume(TacticalResult.Success(Unit))
                 }
                 override fun onFailure(reason: Int) {
-                    if (continuation.isActive) continuation.resume(TacticalResult.Failure("iTantra Wi-Fi service registration failed: " + reason))
+                    if (continuation.isActive) continuation.resume(TacticalResult.Failure("iTantra Wi-Fi service registration failed: $reason"))
                 }
             })
         } catch (e: SecurityException) {
@@ -93,39 +90,34 @@ class AndroidWifiDirectManager(
         }
 
         val serviceListener = WifiP2pManager.DnsSdServiceResponseListener { instanceName, _, device ->
-            android.util.Log.d(TAG, "iTantra Wi-Fi service: " + instanceName + " @ " + device.deviceAddress)
+            android.util.Log.d(TAG, "iTantra Wi-Fi service: $instanceName @ ${device.deviceAddress}")
         }
 
         try {
             wifiP2pManager.setDnsSdResponseListeners(wifichannel, serviceListener, txtListener)
-
             val serviceRequest = WifiP2pDnsSdServiceRequest.newInstance()
             wifiP2pManager.addServiceRequest(wifichannel, serviceRequest, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     try {
                         wifiP2pManager.discoverServices(wifichannel, object : WifiP2pManager.ActionListener {
                             override fun onSuccess() { android.util.Log.d(TAG, "iTantra Wi-Fi service discovery started") }
-                            override fun onFailure(reason: Int) { android.util.Log.w(TAG, "Wi-Fi service discovery failed: " + reason) }
+                            override fun onFailure(reason: Int) { android.util.Log.w(TAG, "Wi-Fi service discovery failed: $reason") }
                         })
                     } catch (e: SecurityException) {
                         close(SecurityException("Wi-Fi Direct permission denied", e))
                     }
                 }
                 override fun onFailure(reason: Int) {
-                    close(IllegalStateException("Wi-Fi service request failed: " + reason))
+                    close(IllegalStateException("Wi-Fi service request failed: $reason"))
                 }
             })
-
-            awaitClose {
-                runCatching { wifiP2pManager.removeServiceRequest(wifichannel, serviceRequest, null) }
-            }
+            awaitClose { runCatching { wifiP2pManager.removeServiceRequest(wifichannel, serviceRequest, null) } }
         } catch (e: SecurityException) {
             close(SecurityException("Wi-Fi Direct permission denied", e))
         } catch (e: Exception) {
             close(e)
         }
     }
-
     override suspend fun connect(deviceId: String): TacticalResult<Unit> {
         if (!hasWifiDirectPermission()) return TacticalResult.Failure("Missing Wi-Fi Direct permission")
         return suspendCancellableCoroutine { continuation ->
