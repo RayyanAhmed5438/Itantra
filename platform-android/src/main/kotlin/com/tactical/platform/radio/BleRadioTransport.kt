@@ -197,7 +197,10 @@ class BleRadioTransport(
             return TacticalResult.Failure("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before calling broadcast()")
         }
 
+        // Only bonded BLE peers participate in application broadcasts.
+        // Pairing is the explicit gate before a peer enters the squad.
         val inboundDevices = connectionRegistry.inboundConnectedDevices()
+            .filter { it.bondState == BluetoothDevice.BOND_BONDED }
         val outboundGatts = connectionRegistry.outboundConnectedGatts()
 
         if (inboundDevices.isEmpty() && outboundGatts.isEmpty()) {
