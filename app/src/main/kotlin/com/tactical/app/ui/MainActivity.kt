@@ -1,13 +1,11 @@
 package com.tactical.app.ui
 
 import android.Manifest
-import android.app.Activity
 import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +13,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
@@ -48,7 +47,7 @@ class MainActivity : ComponentActivity() {
         if (grants.values.all { it }) {
             ensureWirelessEnabled()
         } else {
-            openAppWirelessSettings()
+            wirelessWarning.value = "Bluetooth / Wi-Fi permissions are required."
         }
     }
 
@@ -173,14 +172,6 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             startupCheckPending = true
-        }
-    }
-
-    private fun openAppWirelessSettings() {
-        runCatching {
-            startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
-        }.onFailure {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
         }
     }
 
