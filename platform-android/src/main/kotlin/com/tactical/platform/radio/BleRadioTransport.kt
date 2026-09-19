@@ -233,7 +233,7 @@ class BleRadioTransport(
                     }
                     BluetoothAdapter.STATE_ON -> {
                         android.util.Log.d(TAG, "Bluetooth restored; reopening BLE GATT server")
-                        scope.launch {
+                        launch {
                             delay(750L)
                             openGattServer()
                         }
@@ -253,7 +253,7 @@ class BleRadioTransport(
         // When Bluetooth was ON at startup, open the server immediately.
         // When it was OFF or permissions are still being granted, retry until
         // the radio/permission becomes available.
-        scope.launch {
+        launch {
             while (gattServer == null) {
                 if (hasBluetoothConnectPermission()) {
                     openGattServer()
