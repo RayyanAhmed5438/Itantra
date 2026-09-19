@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -39,7 +39,9 @@ fun MessagesScreen(uiState: MainUiState, onSendMessage: (String) -> Unit, modifi
         Spacer(Modifier.height(10.dp))
         Row {
             OutlinedTextField(value = input, onValueChange = { input = it }, placeholder = { Text("Write message…", color = RedTacticalTextSecondary) }, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = RedTacticalSurface, unfocusedContainerColor = RedTacticalSurface, focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = RedTacticalPrimary, unfocusedBorderColor = RedTacticalSurfaceBorder), shape = RoundedCornerShape(14.dp))
-            IconButton(onClick = { val message = input.trim(); if (message.isNotEmpty()) { onSendMessage(message); input = "" } }) { Icon(Icons.Default.Send, "Send", tint = RedTacticalPrimaryBright) }
+            IconButton(onClick = { val message = input.trim(); if (message.isNotEmpty()) { onSendMessage(message); input = "" } }) {
+                Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = RedTacticalPrimaryBright)
+            }
         }
     }
 }
