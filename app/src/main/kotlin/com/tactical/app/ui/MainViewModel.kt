@@ -2,29 +2,29 @@ package com.tactical.app.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tactical.app.di.DeviceIdentityStore
+import com.tactical.domain.identity.DeviceId
+import com.tactical.domain.identity.LinkType
+import com.tactical.domain.packet.TextPacket
+import com.tactical.domain.result.TacticalResult
+import com.tactical.engine.discovery.proximity.RssiProximityEstimator
+import com.tactical.engine.discovery.service.DefaultDiscoveryService
+import com.tactical.engine.discovery.service.DiscoveryService
+import com.tactical.engine.mesh.service.MeshService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
-import com.tactical.engine.discovery.proximity.RssiProximityEstimator
-import com.tactical.engine.discovery.service.DiscoveryService
-import com.tactical.domain.identity.LinkType
-import kotlinx.coroutines.flow.collectLatest
-
-enum class PttState {
-    IDLE, RECORDING, PROCESSING, SENDING, SENT
-}
 
 data class PeerNodeUi(
     val callsign: String,
     val isConnected: Boolean,
     val distanceText: String,
-    val signalBars: Int
+    val signalBars: Int,
+    val linkText: String
 )
 
 data class ChatMessageUi(
@@ -37,159 +37,32 @@ data class ChatMessageUi(
 )
 
 data class NetworkMetrics(
-    val rttMs: Int = 42,
-    val hopCount: Int = 2,
-    val packetLossPercent: Int = 2,
-    val transportName: String = "Wi-Fi Direct"
-)
-
-data class EmergencyAlertData(
-    val sender: String = "COMMANDER",
-    val timestampText: String = "10:32 AM",
-    val hindiText: String = "कृपया तुरंत सुरक्षित स्थान पर जाएं!",
-    val englishText: String = "Please move to a safe location immediately.",
-    val durationSeconds: Int = 4
+    val rttMs: Int = 0,
+    val hopCount: Int = 0,
+    val packetLossPercent: Int = 0,
+    val transportName: String = "BLE / Wi-Fi Direct"
 )
 
 data class MainUiState(
-    val pttState: PttState = PttState.IDLE,
-    val recordingSeconds: Int = 0,
-    val sendingSeconds: Int = 0,
     val selectedLanguage: String = "हिन्दी",
-    val isWalkieTalkieOn: Boolean = true,
-    val isVoxOn: Boolean = true,
-    val isVoxListeningOverlayVisible: Boolean = false,
-    val isWalkieTalkieScreenVisible: Boolean = false,
-    val emergencyHoldProgress: Float = 0f,
-    val activeEmergencyAlert: EmergencyAlertData? = null,
     val squadPeers: List<PeerNodeUi> = emptyList(),
     val messages: List<ChatMessageUi> = emptyList(),
-    val networkMetrics: NetworkMetrics = NetworkMetrics()
+    val sentMessages: List<ChatMessageUi> = emptyList(),
+    val receivedMessages: List<ChatMessageUi> = emptyList(),
+    val networkMetrics: NetworkMetrics = NetworkMetrics(),
+    val isScanning: Boolean = false
 )
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val discoveryService: DiscoveryService
+    private val discoveryService: DiscoveryService,
+    private val meshService: MeshService,
+    private val identityStore: DeviceIdentityStore
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
-
-    private var recordingJob: Job? = null
-    private var holdPanicJob: Job? = null
-
-    fun selectLanguage(lang: String) {
-        _uiState.update { it.copy(selectedLanguage = lang) }
-    }
-
-    fun toggleWalkieTalkie() {
-        _uiState.update { it.copy(isWalkieTalkieOn = !it.isWalkieTalkieOn) }
-    }
-
-    fun toggleVox() {
-        _uiState.update { it.copy(isVoxOn = !it.isVoxOn) }
-    }
-
-    fun showWalkieTalkieScreen(show: Boolean) {
-        _uiState.update { it.copy(isWalkieTalkieScreenVisible = show) }
-    }
-
-    fun showVoxListeningOverlay(show: Boolean) {
-        _uiState.update { it.copy(isVoxListeningOverlayVisible = show) }
-    }
-
-    fun startPtt() {
-        if (_uiState.value.pttState != PttState.IDLE) return
-        _uiState.update { it.copy(pttState = PttState.RECORDING, recordingSeconds = 0) }
-
-        recordingJob = viewModelScope.launch {
-            var secs = 0
-            while (_uiState.value.pttState == PttState.RECORDING) {
-                delay(1000)
-                secs++
-                _uiState.update { it.copy(recordingSeconds = secs) }
-                if (secs >= 4) {
-                    stopPttAndTransmit()
-                    break
-                }
-            }
-        }
-    }
-
-    fun stopPttAndTransmit() {
-        recordingJob?.cancel()
-        recordingJob = null
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(pttState = PttState.PROCESSING) }
-            delay(1200)
-
-            _uiState.update { it.copy(pttState = PttState.SENDING, sendingSeconds = 1) }
-            delay(1000)
-
-            _uiState.update { it.copy(pttState = PttState.SENT) }
-            
-            // Append transcribed voice message to chat log
-            val newMsg = ChatMessageUi(
-                sender = "YOU",
-                text = "यह मदद चाहिए",
-                timestampText = "Just now",
-                statusText = "Sent successfully",
-                isVoice = true
-            )
-            _uiState.update { it.copy(messages = listOf(newMsg) + it.messages) }
-
-            delay(1500)
-            _uiState.update { it.copy(pttState = PttState.IDLE) }
-        }
-    }
-
-    fun startEmergencyHold() {
-        holdPanicJob?.cancel()
-        holdPanicJob = viewModelScope.launch {
-            var steps = 0
-            val maxSteps = 20
-            while (steps < maxSteps) {
-                delay(100)
-                steps++
-                _uiState.update { it.copy(emergencyHoldProgress = steps.toFloat() / maxSteps) }
-            }
-            // Trigger emergency broadcast & show alert popup
-            triggerEmergencyAlert()
-        }
-    }
-
-    fun cancelEmergencyHold() {
-        holdPanicJob?.cancel()
-        holdPanicJob = null
-        _uiState.update { it.copy(emergencyHoldProgress = 0f) }
-    }
-
-    fun triggerEmergencyAlert() {
-        _uiState.update {
-            it.copy(
-                emergencyHoldProgress = 0f,
-                activeEmergencyAlert = EmergencyAlertData()
-            )
-        }
-    }
-
-    fun dismissEmergencyAlert() {
-        _uiState.update { it.copy(activeEmergencyAlert = null) }
-    }
-
-    fun sendTextMessage(text: String) {
-        if (text.isBlank()) return
-        val newMsg = ChatMessageUi(
-            sender = "YOU",
-            text = text,
-            timestampText = "Just now",
-            statusText = "Delivered"
-        )
-        _uiState.update { it.copy(messages = listOf(newMsg) + it.messages) }
-    }
-
-    private val proximityEstimator = RssiProximityEstimator()
+    private val estimator = RssiProximityEstimator()
+    private var scanJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -197,49 +70,99 @@ class MainViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(
                         squadPeers = devices.map { device ->
-                            val distance = proximityEstimator.estimate(device.rssi)
-
                             PeerNodeUi(
-                                callsign = device.callsign.ifBlank {
-                                    device.id.value
-                                },
+                                callsign = device.callsign.ifBlank { device.id.value },
                                 isConnected = device.link != LinkType.STALE,
-                                distanceText = formatDistance(distance),
-                                signalBars = signalBars(device.rssi)
+                                distanceText = formatDistance(estimator.estimate(device.rssi)),
+                                signalBars = signalBars(device.rssi),
+                                linkText = device.link.name
                             )
                         }
                     )
                 }
             }
         }
-    }
 
-    private fun formatDistance(distance: Double): String {
-        if (distance < 0) return "Unknown"
-
-        return if (distance < 100) {
-            "${distance.toInt()} m"
-        } else {
-            "${(distance / 1000.0).formatOneDecimal()} km"
+        viewModelScope.launch {
+            meshService.receive().collect { packet ->
+                if (packet is TextPacket) {
+                    val message = ChatMessageUi(
+                        sender = packet.sender.value.take(12),
+                        text = packet.text,
+                        timestampText = "Just now",
+                        statusText = "Received"
+                    )
+                    _uiState.update {
+                        it.copy(
+                            messages = listOf(message) + it.messages,
+                            receivedMessages = listOf(message) + it.receivedMessages
+                        )
+                    }
+                }
+            }
         }
     }
 
-    private fun signalBars(rssi: Int): Int {
-        return when {
-            rssi >= -55 -> 4
-            rssi >= -65 -> 3
-            rssi >= -75 -> 2
-            else -> 1
+    fun startDiscovery() {
+        if (scanJob?.isActive == true) return
+        (discoveryService as? DefaultDiscoveryService)?.startDiscovery()
+        _uiState.update { it.copy(isScanning = true) }
+        scanJob = viewModelScope.launch {
+            delay(5000L)
+            _uiState.update { it.copy(isScanning = false) }
         }
     }
 
-    private fun Double.formatOneDecimal(): String =
-        String.format(java.util.Locale.US, "%.1f", this)
+    fun sendTextMessage(text: String) {
+        val value = text.trim()
+        if (value.isBlank()) return
+
+        val pending = ChatMessageUi("YOU", value, "Just now", "Sending…")
+        _uiState.update {
+            it.copy(messages = listOf(pending) + it.messages, sentMessages = listOf(pending) + it.sentMessages)
+        }
+
+        viewModelScope.launch {
+            val result = meshService.send(
+                TextPacket(
+                    sender = DeviceId(identityStore.deviceIdValue),
+                    text = value,
+                    languageCode = "und",
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+            val status = when (result) {
+                is TacticalResult.Success -> "Sent"
+                is TacticalResult.Failure -> "Queued"
+            }
+            _uiState.update { state ->
+                state.copy(
+                    messages = state.messages.mapIndexed { index, msg ->
+                        if (index == 0 && msg.sender == "YOU" && msg.text == value) msg.copy(statusText = status) else msg
+                    },
+                    sentMessages = state.sentMessages.mapIndexed { index, msg ->
+                        if (index == 0 && msg.text == value) msg.copy(statusText = status) else msg
+                    }
+                )
+            }
+        }
+    }
+
+    private fun formatDistance(distance: Double): String =
+        if (distance < 0) "Unknown"
+        else if (distance < 1000) "${distance.toInt()} m"
+        else String.format(Locale.US, "%.1f km", distance / 1000.0)
+
+    private fun signalBars(rssi: Int) = when {
+        rssi >= -55 -> 4
+        rssi >= -65 -> 3
+        rssi >= -75 -> 2
+        else -> 1
+    }
 
     override fun onCleared() {
-        viewModelScope.launch {
-            discoveryService.stop()
-        }
+        viewModelScope.launch { discoveryService.stop() }
+        scanJob?.cancel()
         super.onCleared()
     }
 }

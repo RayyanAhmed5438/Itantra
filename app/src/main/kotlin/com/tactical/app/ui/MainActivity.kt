@@ -1,18 +1,23 @@
 package com.tactical.app.ui
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import com.tactical.app.service.TacticalMeshService
 import com.tactical.app.ui.components.*
 import com.tactical.app.ui.screens.*
@@ -21,159 +26,83 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     private val viewModel: MainViewModel by viewModels()
 
-    private val requestPermissionLauncher = registerForActivityResult(
+    private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        val denied = result.filterValues { !it }.keys
-        if (denied.isNotEmpty()) {
-            android.util.Log.w("MainActivity", "Some permissions denied: $denied")
-        }
-
-        // Only the permissions actually required to start scanning/advertising
-        // for THIS API level — mirrors requiredTransportPermissions() below,
-        // rather than hardcoding ACCESS_FINE_LOCATION which isn't requested
-        // (or needed) at all on API 33+.
-        val transportPermissionsGranted = requiredTransportPermissions()
-            .all { result[it] == true }
-
-        if (transportPermissionsGranted) {
-            startMeshService()
-        } else {
-            android.util.Log.e(
-                "MainActivity",
-                "Mesh service not started: required transport permissions were denied"
-            )
-        }
+    ) { grants ->
+        if (grants.values.all { it }) ensureWirelessEnabled() else openWirelessSettings()
     }
-
-    private fun requiredTransportPermissions(): List<String> {
-        val permissions = mutableListOf<String>()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-        } else {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-
-        return permissions
-    }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-
         setContent {
             RedTacticalTheme {
-                val uiState by viewModel.uiState.collectAsState()
+                val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(RedTacticalBackground)
-                ) {
-                    Scaffold(
-                        topBar = { AppHeader(deviceCount = uiState.squadPeers.count { it.isConnected }) },
-                        bottomBar = {
-                            AppBottomNavigation(
-                                selectedTab = selectedTab,
-                                onTabSelected = { selectedTab = it }
-                            )
-                        },
-                        containerColor = RedTacticalBackground
-                    ) { innerPadding ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                        ) {
-                            when (selectedTab) {
-                                0 -> PttHomeScreen(
-                                    uiState = uiState,
-                                    onLanguageSelected = { viewModel.selectLanguage(it) },
-                                    onStartPtt = { viewModel.startPtt() },
-                                    onStopPtt = { viewModel.stopPttAndTransmit() },
-                                    onToggleWalkieTalkie = { viewModel.toggleWalkieTalkie() },
-                                    onToggleVox = { viewModel.toggleVox() },
-                                    onStartEmergencyHold = { viewModel.startEmergencyHold() },
-                                    onCancelEmergencyHold = { viewModel.cancelEmergencyHold() },
-                                    onOpenWalkieTalkieScreen = { viewModel.showWalkieTalkieScreen(true) },
-                                    onOpenVoxOverlay = { viewModel.showVoxListeningOverlay(true) }
-                                )
-
-                                1 -> SquadScreen(
-                                    uiState = uiState,
-                                    onRefresh = {}
-                                )
-
-                                2 -> MessagesScreen(
-                                    uiState = uiState,
-                                    onSendMessage = { viewModel.sendTextMessage(it) }
-                                )
-                            }
-
-                            // Walkie Talkie Screen
-                            if (uiState.isWalkieTalkieScreenVisible) {
-                                WalkieTalkieScreen(
-                                    onDismiss = { viewModel.showWalkieTalkieScreen(false) }
-                                )
-                            }
-
-                            // VOX Listening Overlay
-                            if (uiState.isVoxListeningOverlayVisible) {
-                                VoxListeningOverlay(
-                                    onDismiss = { viewModel.showVoxListeningOverlay(false) }
-                                )
-                            }
+                Scaffold(
+                    topBar = { AppHeader(state.squadPeers.size) },
+                    bottomBar = { AppBottomNavigation(selectedTab) { selectedTab = it } },
+                    containerColor = RedTacticalBackground
+                ) { padding ->
+                    Box(Modifier.fillMaxSize().padding(padding)) {
+                        when (selectedTab) {
+                            0 -> DevicesScreen(state, viewModel::startDiscovery)
+                            1 -> SquadScreen(state, viewModel::startDiscovery)
+                            2 -> MessagesScreen(state, viewModel::sendTextMessage)
                         }
-                    }
-
-                    // Emergency Alert Modal Overlay
-                    uiState.activeEmergencyAlert?.let { alert ->
-                        EmergencyAlertDialog(
-                            alertData = alert,
-                            onAcknowledge = { viewModel.dismissEmergencyAlert() }
-                        )
                     }
                 }
             }
         }
-        checkAndRequestPermissions()
+        requestStartupPermissions()
+    }
+
+    private fun requestStartupPermissions() {
+        val permissions = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+                add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }.distinct()
+
+        val missing = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isEmpty()) ensureWirelessEnabled()
+        else requestPermissions.launch(missing.toTypedArray())
+    }
+
+    private fun ensureWirelessEnabled() {
+        val bluetoothOff = BluetoothAdapter.getDefaultAdapter()?.isEnabled == false
+        val wifiOff = (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == false
+        if (bluetoothOff || wifiOff) openWirelessSettings() else startMeshService()
+    }
+
+    private fun openWirelessSettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+        }.onFailure {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
     }
 
     private fun startMeshService() {
-        val intent = Intent(this, TacticalMeshService::class.java)
-        startForegroundService(intent)
+        ContextCompat.startForegroundService(this, Intent(this, TacticalMeshService::class.java))
     }
 
-    private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-        permissions += requiredTransportPermissions()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            }
-        } else {
-            permissions.add(Manifest.permission.BLUETOOTH)
-            permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
-            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    override fun onResume() {
+        super.onResume()
+        if (BluetoothAdapter.getDefaultAdapter()?.isEnabled == true &&
+            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true) {
+            startMeshService()
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        requestPermissionLauncher.launch(permissions.distinct().toTypedArray())
     }
 }
