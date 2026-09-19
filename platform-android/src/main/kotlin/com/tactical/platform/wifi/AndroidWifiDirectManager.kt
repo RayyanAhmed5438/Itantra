@@ -99,7 +99,7 @@ class AndroidWifiDirectManager(
         try {
             wifiP2pManager.setDnsSdResponseListeners(wifichannel, serviceListener, txtListener)
 
-            val serviceRequest = WifiP2pDnsSdServiceRequest.newInstance("_itantra._presence._tcp")
+            val serviceRequest = WifiP2pDnsSdServiceRequest.newInstance()
             wifiP2pManager.addServiceRequest(wifichannel, serviceRequest, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     try {
