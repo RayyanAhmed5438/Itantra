@@ -78,7 +78,13 @@ class MainActivity : ComponentActivity() {
                             .padding(padding)
                     ) {
                         when (selectedTab) {
-                            0 -> DevicesScreen(state, viewModel::startDiscovery)
+                            0 -> DevicesScreen(
+                                uiState = state,
+                                onScan = viewModel::forceDiscovery,
+                                onPair = viewModel::pairPeer,
+                                onConnect = viewModel::connectPeer,
+                                onRepair = viewModel::repairPeer
+                            )
                             1 -> SquadScreen(state, onRefresh = viewModel::startDiscovery)
                             2 -> MessagesScreen(state, viewModel::sendTextMessage)
                         }
