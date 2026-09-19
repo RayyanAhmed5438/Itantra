@@ -115,6 +115,10 @@ class AndroidBleScanner(
                         "TACTICAL BLE BEACON: ${payload.contentToString()}"
                     )
 
+                    BleBeaconPayloadCodec.decode(payload)?.let { packet ->
+                        BlePeerAddressRegistry.remember(packet.sender.value, result.device.address)
+                    }
+
                     trySend(
                         ScannedBleDevice(
                             deviceId = result.device.address,
@@ -143,6 +147,10 @@ class AndroidBleScanner(
 
                         val payload = manufacturerData.valueAt(index)
                             ?: continue
+
+                        BleBeaconPayloadCodec.decode(payload)?.let { packet ->
+                            BlePeerAddressRegistry.remember(packet.sender.value, result.device.address)
+                        }
 
                         trySend(
                             ScannedBleDevice(
