@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import com.tactical.platform.api.ble.BleLinkState
 import androidx.compose.ui.Modifier
@@ -64,7 +68,20 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableIntStateOf(0) }
 
                 Scaffold(
-                    topBar = { AppHeader(deviceCount = state.squadPeers.size) },
+                    topBar = {
+                        TopAppBar(
+                            title = {
+                                Text(
+                                    text = "Itantra",
+                                    color = Color.White
+                                )
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = RedTacticalBackground,
+                                titleContentColor = Color.White
+                            )
+                        )
+                    },
                     bottomBar = {
                         AppBottomNavigation(
                             selectedTab = selectedTab,
@@ -82,9 +99,7 @@ class MainActivity : ComponentActivity() {
                             0 -> DevicesScreen(
                                 uiState = state,
                                 onScan = viewModel::forceDiscovery,
-                                onPair = viewModel::pairPeer,
-                                onConnect = viewModel::connectPeer,
-                                onRepair = viewModel::repairPeer
+                                onPair = viewModel::pairPeer
                             )
                             1 -> SquadScreen(state, onRefresh = viewModel::forceDiscovery)
                             2 -> MessagesScreen(state, viewModel::sendTextMessage)
