@@ -76,6 +76,13 @@ class AndroidBleConnectionManager(
                         rememberPairedPeer(appId, device.address)
                     }
                     setState(device.address, BleLinkState.PAIRED)
+                    // Both bonded phones maintain their own outbound GATT
+                    // session. This keeps text transport symmetric and avoids
+                    // depending on server-side notifications for normal sends.
+                    reconnectScope.launch {
+                        delay(500L)
+                        runCatching { reconnectPaired(appId) }
+                    }
                 }
                 BluetoothDevice.BOND_NONE -> {
                     val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
@@ -510,21 +517,13 @@ class AndroidBleConnectionManager(
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
 
-        if (registry.inboundDevice(resolvedAddress) != null ||
-            gattClients.containsKey(resolvedAddress)
-        ) {
+        // Each paired phone keeps one outbound GATT client session.
+        // An inbound session may already exist because the peer connected first,
+        // but it must not suppress our own outbound session: the outbound path
+        // is what gives this device a reliable send/receive channel.
+        if (gattClients.containsKey(resolvedAddress)) {
             setState(resolvedAddress, BleLinkState.CONNECTED)
             return TacticalResult.Success(Unit)
-        }
-
-        val peerId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress) ?: deviceAddress
-        if (!shouldInitiate(peerId)) {
-            setState(resolvedAddress, BleLinkState.DISCONNECTED)
-            android.util.Log.d(
-                TAG,
-                "Not initiating outbound GATT for " + peerId + "; waiting for peer to connect"
-            )
-            return TacticalResult.Failure("Waiting for peer to establish the BLE link")
         }
 
         return if (deviceForAddress(resolvedAddress)?.bondState == BluetoothDevice.BOND_BONDED) {
