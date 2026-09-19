@@ -2,7 +2,10 @@ package com.tactical.platform.radio
 
 import android.Manifest
 import android.bluetooth.*
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import com.tactical.domain.result.TacticalResult
@@ -145,61 +148,108 @@ class BleRadioTransport(
             }
         }
 
-        val service = BluetoothGattService(GATT_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val characteristic = BluetoothGattCharacteristic(
-            PACKET_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_WRITE or
-                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_WRITE
-        )
+        fun closeGattServer() {
+            try {
+                gattServer?.close()
+            } catch (e: SecurityException) {
+                // Permission revoked or Bluetooth stack already unavailable.
+            } catch (_: Exception) {
+                // Bluetooth stack may already have torn down the server.
+            }
+            gattServer = null
+        }
 
-        // Required for a client to subscribe to notifications from this GATT server.
-        val cccd = BluetoothGattDescriptor(
-            CCCD_UUID,
-            BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
-        )
-        characteristic.addDescriptor(cccd)
-        service.addCharacteristic(characteristic)
+        fun openGattServer() {
+            if (!hasBluetoothConnectPermission()) {
+                android.util.Log.w(TAG, "Cannot open BLE GATT server: missing BLUETOOTH_CONNECT permission")
+                return
+            }
 
+            val currentAdapter = try {
+                bluetoothAdapter
+            } catch (_: Exception) {
+                null
+            }
 
+            if (currentAdapter == null || !currentAdapter.isEnabled) {
+                android.util.Log.d(TAG, "BLE GATT server waiting for Bluetooth to turn ON")
+                return
+            }
 
-        gattServer = try {
-            bluetoothManager.openGattServer(context, serverCallback)?.also {
-                if (!it.addService(service)) {
-                    android.util.Log.w(
-                        TAG,
-                        "Failed to add BLE GATT service"
-                    )
-                    it.close()
+            closeGattServer()
+
+            val service = BluetoothGattService(
+                GATT_SERVICE_UUID,
+                BluetoothGattService.SERVICE_TYPE_PRIMARY
+            )
+            val characteristic = BluetoothGattCharacteristic(
+                PACKET_CHARACTERISTIC_UUID,
+                BluetoothGattCharacteristic.PROPERTY_WRITE or
+                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
+                    BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                BluetoothGattCharacteristic.PERMISSION_WRITE
+            )
+            val cccd = BluetoothGattDescriptor(
+                CCCD_UUID,
+                BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+            )
+            characteristic.addDescriptor(cccd)
+            service.addCharacteristic(characteristic)
+
+            try {
+                val opened = bluetoothManager.openGattServer(context, serverCallback)
+                if (opened == null) {
+                    android.util.Log.w(TAG, "BLE GATT server could not be opened")
+                    return
+                }
+                if (!opened.addService(service)) {
+                    android.util.Log.w(TAG, "Failed to add BLE GATT service")
+                    opened.close()
+                    return
+                }
+                gattServer = opened
+                android.util.Log.d(TAG, "BLE GATT server ready")
+            } catch (e: SecurityException) {
+                android.util.Log.w(TAG, "BLE GATT server unavailable: permission denied", e)
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "BLE GATT server unavailable", e)
+            }
+        }
+
+        val adapterReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+                when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+                    BluetoothAdapter.STATE_OFF,
+                    BluetoothAdapter.STATE_TURNING_OFF -> {
+                        android.util.Log.d(TAG, "Bluetooth turned off; closing BLE GATT server")
+                        closeGattServer()
+                        connectionRegistry.inboundConnectedDevices()
+                            .forEach { connectionRegistry.unregisterInboundConnection(it) }
+                    }
+                    BluetoothAdapter.STATE_ON -> {
+                        android.util.Log.d(TAG, "Bluetooth restored; reopening BLE GATT server")
+                        scope.launch {
+                            delay(750L)
+                            openGattServer()
+                        }
+                    }
                 }
             }
-        } catch (e: SecurityException) {
-            android.util.Log.w(
-                TAG,
-                "BLE GATT server unavailable: permission denied",
-                e
-            )
-            close()
-            return@callbackFlow
-        } catch (e: Exception) {
-            android.util.Log.w(
-                TAG,
-                "BLE GATT server unavailable",
-                e
-            )
-            close()
-            return@callbackFlow
         }
 
-        if (gattServer == null) {
-            android.util.Log.w(
-                TAG,
-                "BLE GATT server could not be opened"
-            )
-            close()
-            return@callbackFlow
+        val adapterFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(adapterReceiver, adapterFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(adapterReceiver, adapterFilter)
         }
+
+        // When Bluetooth was ON at startup, open the server immediately. When
+        // it was OFF, keep this flow alive so the STATE_ON receiver can create
+        // the server later instead of permanently terminating incoming BLE.
+        openGattServer()
 
         val clientFragmentListener: (String, ByteArray) -> Unit = { address, fragment ->
             reassembler.onFragmentReceived(address, fragment)?.let { complete ->
@@ -216,12 +266,8 @@ class BleRadioTransport(
 
         awaitClose {
             connectionRegistry.removeRawIncomingListener(clientFragmentListener)
-            try {
-                gattServer?.close()
-            } catch (e: SecurityException) {
-                // Permission revoked mid-session — nothing left to clean up safely.
-            }
-            gattServer = null
+            runCatching { context.unregisterReceiver(adapterReceiver) }
+            closeGattServer()
         }
     }
 
