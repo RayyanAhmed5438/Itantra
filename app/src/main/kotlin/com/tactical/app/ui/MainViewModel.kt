@@ -289,6 +289,33 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
+
+        // RSSI is read directly from the established GATT session, so the
+        // distance/signal display keeps updating between discovery scans.
+        viewModelScope.launch {
+            bleConnectionManager.rssi(deviceAddress).collect { rssi ->
+                if (rssi == null) return@collect
+
+                _uiState.update { state ->
+                    fun updatePeer(peer: PeerNodeUi): PeerNodeUi {
+                        return if (peer.deviceAddress == deviceAddress) {
+                            peer.copy(
+                                distanceText = formatDistance(estimator.estimate(rssi)),
+                                signalBars = signalBars(rssi)
+                            )
+                        } else {
+                            peer
+                        }
+                    }
+
+                    state.copy(
+                        squadPeers = state.squadPeers.map(::updatePeer),
+                        availablePeers = state.availablePeers.map(::updatePeer),
+                        pairedPeers = state.pairedPeers.map(::updatePeer)
+                    )
+                }
+            }
+        }
     }
 
     fun connectPeer(deviceAddress: String) {
