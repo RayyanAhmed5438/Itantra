@@ -64,7 +64,7 @@ class AndroidBleAdvertiser(
             .setTxPowerLevel(
                 AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
             )
-            .setConnectable(false)
+            .setConnectable(true)
             .build()
 
         val data = AdvertiseData.Builder()
