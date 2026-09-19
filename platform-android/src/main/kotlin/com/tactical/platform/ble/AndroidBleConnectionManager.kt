@@ -213,10 +213,9 @@ class AndroidBleConnectionManager(
         val device = deviceForAddress(resolvedAddress)
             ?: return TacticalResult.Failure("Bluetooth device not found")
 
-        if (device.bondState != BluetoothDevice.BOND_BONDED) {
-            return TacticalResult.Failure("Pair the device before connecting")
-        }
-
+        // The app-level paired list is the explicit pairing gate.
+        // Android's system bond may be absent after a system/app reset; BLE GATT
+        // itself can still establish the transport without requiring that bond.
         // gattClients contains only fully initialized/ready GATT sessions.
         gattClients[resolvedAddress]?.let {
             setState(resolvedAddress, BleLinkState.CONNECTED)
@@ -264,7 +263,11 @@ class AndroidBleConnectionManager(
         }
 
         setState(resolvedAddress, BleLinkState.CONNECTING)
-        android.util.Log.d(TAG, "GATT connect requested for " + resolvedAddress)
+        android.util.Log.d(
+            TAG,
+            "GATT connect requested for " + resolvedAddress +
+                " (bondState=" + device.bondState + ")"
+        )
 
         return try {
             val callback = object : BluetoothGattCallback() {
@@ -306,7 +309,9 @@ class AndroidBleConnectionManager(
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                         gattClients.remove(resolvedAddress, gatt)
                         registry.unregisterOutboundConnection(resolvedAddress)
-                        val state = if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                        val appId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress)
+                        val appPaired = appId != null && pairedDeviceIds().contains(appId)
+                        val state = if (appPaired) {
                             BleLinkState.DISCONNECTED
                         } else {
                             BleLinkState.NOT_PAIRED
@@ -562,11 +567,15 @@ class AndroidBleConnectionManager(
         }
 
         android.util.Log.d(TAG, "BLE initiator; reconnecting to " + deviceAddress)
-        return if (deviceForAddress(resolvedAddress)?.bondState == BluetoothDevice.BOND_BONDED) {
-            connect(deviceAddress)
-        } else {
-            TacticalResult.Failure("Peer is not paired")
-        }
+        val device = deviceForAddress(resolvedAddress)
+            ?: return TacticalResult.Failure("Bluetooth device not found")
+        android.util.Log.d(
+            TAG,
+            "BLE initiator resolved " + deviceAddress +
+                " -> " + resolvedAddress +
+                ", bondState=" + device.bondState
+        )
+        connect(deviceAddress)
     }
 
     override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
@@ -581,10 +590,14 @@ class AndroidBleConnectionManager(
 
     override fun onInboundConnected(device: BluetoothDevice) {
         val appId = BlePeerAddressRegistry.applicationIdFor(device.address) ?: return
-        if (device.bondState == BluetoothDevice.BOND_BONDED) {
+        if (pairedDeviceIds().contains(appId)) {
             rememberPeer(appId, device.address)
             setState(device.address, BleLinkState.CONNECTED)
-            android.util.Log.d(TAG, "Inbound BLE link ready for " + appId)
+            android.util.Log.d(
+                TAG,
+                "Inbound BLE link ready for " + appId +
+                    " (bondState=" + device.bondState + ")"
+            )
         }
     }
 
