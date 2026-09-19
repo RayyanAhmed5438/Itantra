@@ -36,26 +36,48 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             RedTacticalTheme {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
 
                 Scaffold(
-                    topBar = { AppHeader(state.squadPeers.size) },
-                    bottomBar = { AppBottomNavigation(selectedTab) { selectedTab = it } },
+                    topBar = {
+                        AppHeader(deviceCount = state.squadPeers.size)
+                    },
+                    bottomBar = {
+                        AppBottomNavigation(
+                            selectedTab = selectedTab,
+                            onTabSelected = { tab -> selectedTab = tab }
+                        )
+                    },
                     containerColor = RedTacticalBackground
                 ) { padding ->
-                    Box(Modifier.fillMaxSize().padding(padding)) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                    ) {
                         when (selectedTab) {
-                            0 -> DevicesScreen(state, viewModel::startDiscovery)
-                            1 -> SquadScreen(state, viewModel::startDiscovery)
-                            2 -> MessagesScreen(state, viewModel::sendTextMessage)
+                            0 -> DevicesScreen(
+                                uiState = state,
+                                onScan = viewModel::startDiscovery
+                            )
+                            1 -> SquadScreen(
+                                uiState = state,
+                                onRefresh = viewModel::startDiscovery
+                            )
+                            2 -> MessagesScreen(
+                                uiState = state,
+                                onSendMessage = viewModel::sendTextMessage
+                            )
                         }
                     }
                 }
             }
         }
+
         requestStartupPermissions()
     }
 
@@ -66,24 +88,40 @@ class MainActivity : ComponentActivity() {
                 add(Manifest.permission.BLUETOOTH_CONNECT)
                 add(Manifest.permission.BLUETOOTH_ADVERTISE)
             }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
             }
+
             add(Manifest.permission.ACCESS_FINE_LOCATION)
         }.distinct()
 
         val missing = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                this,
+                it
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
 
-        if (missing.isEmpty()) ensureWirelessEnabled()
-        else requestPermissions.launch(missing.toTypedArray())
+        if (missing.isEmpty()) {
+            ensureWirelessEnabled()
+        } else {
+            requestPermissions.launch(missing.toTypedArray())
+        }
     }
 
     private fun ensureWirelessEnabled() {
-        val bluetoothOff = BluetoothAdapter.getDefaultAdapter()?.isEnabled == false
-        val wifiOff = (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == false
-        if (bluetoothOff || wifiOff) openWirelessSettings() else startMeshService()
+        val bluetoothOff =
+            BluetoothAdapter.getDefaultAdapter()?.isEnabled == false
+
+        val wifiOff =
+            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == false
+
+        if (bluetoothOff || wifiOff) {
+            openWirelessSettings()
+        } else {
+            startMeshService()
+        }
     }
 
     private fun openWirelessSettings() {
@@ -95,13 +133,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startMeshService() {
-        ContextCompat.startForegroundService(this, Intent(this, TacticalMeshService::class.java))
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, TacticalMeshService::class.java)
+        )
     }
 
     override fun onResume() {
         super.onResume()
-        if (BluetoothAdapter.getDefaultAdapter()?.isEnabled == true &&
-            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true) {
+
+        if (
+            BluetoothAdapter.getDefaultAdapter()?.isEnabled == true &&
+            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true
+        ) {
             startMeshService()
         }
     }
