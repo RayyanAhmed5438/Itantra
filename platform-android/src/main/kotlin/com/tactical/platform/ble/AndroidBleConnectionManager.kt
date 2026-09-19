@@ -216,8 +216,9 @@ class AndroidBleConnectionManager(
                 gattClients.remove(resolvedAddress, targetGatt)
                 registry.unregisterOutboundConnection(resolvedAddress)
             }
-            pending.remove(resolvedAddress, completion)
-                ?.complete(TacticalResult.Failure(message))
+            if (pending.remove(resolvedAddress, completion)) {
+                completion.complete(TacticalResult.Failure(message))
+            }
             setState(resolvedAddress, state)
             if (targetGatt != null) {
                 try { targetGatt.disconnect() } catch (_: Exception) {}
@@ -229,7 +230,7 @@ class AndroidBleConnectionManager(
         android.util.Log.d(TAG, "GATT connect requested for " + resolvedAddress)
 
         return try {
-            val callback = object : BluetoothGattCallback {
+            val callback = object : BluetoothGattCallback() {
 
                 private fun isCurrentGatt(gatt: BluetoothGatt): Boolean =
                     pending[resolvedAddress] === completion || gattClients[resolvedAddress] === gatt
@@ -273,8 +274,9 @@ class AndroidBleConnectionManager(
                         } else {
                             BleLinkState.NOT_PAIRED
                         }
-                        pending.remove(resolvedAddress, completion)
-                            ?.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
+                        if (pending.remove(resolvedAddress, completion)) {
+                            completion.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
+                        }
                         setState(resolvedAddress, state)
                         try { gatt.close() } catch (_: Exception) {}
                     }
@@ -374,8 +376,9 @@ class AndroidBleConnectionManager(
                             TAG,
                             "GATT ready for " + resolvedAddress
                         )
-                        pending.remove(resolvedAddress, completion)
-                            ?.complete(TacticalResult.Success(Unit))
+                        if (pending.remove(resolvedAddress, completion)) {
+                            completion.complete(TacticalResult.Success(Unit))
+                        }
                     } else {
                         failConnection(
                             gatt,
