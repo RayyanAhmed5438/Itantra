@@ -10,6 +10,8 @@ import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,7 +25,7 @@ import com.tactical.app.ui.PeerNodeUi
 import com.tactical.app.ui.theme.*
 
 @Composable
-fun DevicesScreen(uiState: MainUiState, onScan: () -> Unit, modifier: Modifier = Modifier) {
+fun DevicesScreen(uiState: MainUiState, onScan: () -> Unit, onPair: (String) -> Unit = {}, onConnect: (String) -> Unit = {}, onRepair: (String) -> Unit = {}, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().background(RedTacticalBackground).padding(20.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -50,25 +52,80 @@ fun DevicesScreen(uiState: MainUiState, onScan: () -> Unit, modifier: Modifier =
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-                items(uiState.squadPeers) { peer -> AvailableDeviceCard(peer) }
+                items(uiState.squadPeers) { peer -> AvailableDeviceCard(peer, onPair, onConnect, onRepair) }
             }
         }
     }
 }
 
 @Composable
-private fun AvailableDeviceCard(peer: PeerNodeUi) {
-    Card(colors = CardDefaults.cardColors(containerColor = RedTacticalSurface), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(peer.callsign, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Spacer(Modifier.height(3.dp))
-                Text("${peer.linkText} • ${peer.distanceText}", color = RedTacticalTextSecondary, fontSize = 11.sp)
+private fun AvailableDeviceCard(
+    peer: PeerNodeUi,
+    onPair: (String) -> Unit,
+    onConnect: (String) -> Unit,
+    onRepair: (String) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(peer.callsign, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(3.dp))
+                    Text("${peer.linkText} • ${peer.distanceText}", color = RedTacticalTextSecondary, fontSize = 11.sp)
+                }
+                Text(
+                    peer.bleState.name.replace('_', ' '),
+                    color = if (peer.isConnected || peer.bleState == com.tactical.platform.api.ble.BleLinkState.PAIRED)
+                        RedTacticalStatusGreen else RedTacticalStatusYellow,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (peer.isConnected) "AVAILABLE" else "SEEN", color = if (peer.isConnected) RedTacticalStatusGreen else RedTacticalStatusYellow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.Default.SignalCellularAlt, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                when (peer.bleState) {
+                    com.tactical.platform.api.ble.BleLinkState.NOT_PAIRED,
+                    com.tactical.platform.api.ble.BleLinkState.FAILED -> {
+                        OutlinedButton(onClick = { onPair(peer.deviceAddress) }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("PAIR")
+                        }
+                    }
+                    com.tactical.platform.api.ble.BleLinkState.PAIRED,
+                    com.tactical.platform.api.ble.BleLinkState.DISCONNECTED -> {
+                        Button(onClick = { onConnect(peer.deviceAddress) }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("CONNECT")
+                        }
+                        OutlinedButton(onClick = { onRepair(peer.deviceAddress) }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Build, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("REPAIR")
+                        }
+                    }
+                    com.tactical.platform.api.ble.BleLinkState.CONNECTED -> {
+                        OutlinedButton(onClick = { onRepair(peer.deviceAddress) }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Build, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("REPAIR CONNECTION")
+                        }
+                    }
+                    else -> {
+                        OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
+                            Text("WORKING…")
+                        }
+                    }
+                }
             }
         }
     }
