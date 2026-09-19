@@ -83,7 +83,6 @@ class MainViewModel @Inject constructor(
     private var scanLoopJob: Job? = null
     private var healthJob: Job? = null
     private val observedPeerIds = mutableSetOf<String>()
-    private val reconnectingPairedIds = mutableSetOf<String>()
 
     init {
         viewModelScope.launch {
