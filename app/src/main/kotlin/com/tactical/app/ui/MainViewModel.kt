@@ -105,7 +105,7 @@ class MainViewModel @Inject constructor(
         }
 
         healthJob = viewModelScope.launch {
-            while (coroutineContext.isActive) {
+            while (viewModelScope.coroutineContext.isActive) {
                 delay(5000L)
                 if (scanLoopJob?.isActive != true) startDiscovery()
                 // Recovery guard: restart discovery when it has repeatedly stopped making progress.
@@ -148,7 +148,7 @@ class MainViewModel @Inject constructor(
 
         scanLoopJob = viewModelScope.launch {
             runCatching { discoveryService.start() }
-            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+            while (viewModelScope.coroutineContext.isActive) {
                 runScanCycle()
                 delay(DISCOVERY_INTERVAL_MS)
             }
