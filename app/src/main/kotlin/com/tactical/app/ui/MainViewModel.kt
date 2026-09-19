@@ -14,6 +14,7 @@ import com.tactical.engine.mesh.service.MeshService
 import com.tactical.platform.api.ble.BleConnectionManager
 import com.tactical.platform.api.ble.BleLinkState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -105,7 +106,6 @@ class MainViewModel @Inject constructor(
         }
 
         healthJob = viewModelScope.launch {
-        healthJob = viewModelScope.launch {
             try {
                 while (true) {
                     try {
@@ -156,13 +156,19 @@ class MainViewModel @Inject constructor(
 
         scanLoopJob = viewModelScope.launch {
             runCatching { discoveryService.start() }
-            while (viewModelScope.coroutineContext.isActive) {
-                try {
-                    runScanCycle()
-                    delay(DISCOVERY_INTERVAL_MS)
-                } catch (_: kotlinx.coroutines.CancellationException) {
-                    break
+            try {
+                while (true) {
+                    try {
+                        runScanCycle()
+                        delay(DISCOVERY_INTERVAL_MS)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Keep periodic discovery alive after transient errors.
+                    }
                 }
+            } catch (_: CancellationException) {
+                // Normal cancellation of the ViewModel scope.
             }
         }
     }
