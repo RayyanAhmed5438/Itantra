@@ -69,6 +69,10 @@ class AndroidBleConnectionManager(
                     setState(device.address, BleLinkState.PAIRED)
                 }
                 BluetoothDevice.BOND_NONE -> {
+                    val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
+                    if (appId != null) {
+                        forgetPairedPeer(appId)
+                    }
                     setState(device.address, BleLinkState.NOT_PAIRED)
                 }
             }
@@ -286,6 +290,16 @@ class AndroidBleConnectionManager(
             .putString(PREF_ADDRESS_PREFIX + appId, address)
             .apply()
         BlePeerAddressRegistry.remember(appId, address)
+    }
+
+    private fun forgetPairedPeer(appId: String) {
+        val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: return
+        if (ids.remove(appId)) {
+            prefs.edit()
+                .putStringSet(PAIRED_IDS_KEY, ids)
+                .remove(PREF_ADDRESS_PREFIX + appId)
+                .apply()
+        }
     }
 
     private fun stateFlow(address: String): MutableStateFlow<BleLinkState> = states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
