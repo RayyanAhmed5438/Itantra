@@ -95,6 +95,11 @@ class MainViewModel @Inject constructor(
                 observePeerState(pairedId)
             }
         }
+        viewModelScope.launch {
+            bleConnectionManager.pairedDeviceIds().forEach { pairedId ->
+                runCatching { bleConnectionManager.reconnectPaired(pairedId) }
+            }
+        }
 
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
@@ -140,18 +145,6 @@ class MainViewModel @Inject constructor(
                     )
                 }
 
-                val pairedIds = bleConnectionManager.pairedDeviceIds()
-                pairedIds.forEach { peerId ->
-                    if (reconnectingPairedIds.add(peerId)) {
-                        viewModelScope.launch {
-                            try {
-                                bleConnectionManager.reconnectPaired(peerId)
-                            } finally {
-                                reconnectingPairedIds.remove(peerId)
-                            }
-                        }
-                    }
-                }
             }
         }
 

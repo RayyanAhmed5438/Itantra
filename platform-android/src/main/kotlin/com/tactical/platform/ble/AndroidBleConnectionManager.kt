@@ -178,10 +178,27 @@ class AndroidBleConnectionManager(
             setState(resolvedAddress, BleLinkState.CONNECTED)
             return TacticalResult.Success(Unit)
         }
+
+        pending[resolvedAddress]?.let { existing ->
+            return try {
+                withTimeout(20_000L) { existing.await() }
+            } catch (_: TimeoutCancellationException) {
+                TacticalResult.Failure("Existing GATT connection attempt timed out")
+            }
+        }
+
+        val completion = CompletableDeferred<TacticalResult<Unit>>()
+        val existing = pending.putIfAbsent(resolvedAddress, completion)
+        if (existing != null) {
+            return try {
+                withTimeout(20_000L) { existing.await() }
+            } catch (_: TimeoutCancellationException) {
+                TacticalResult.Failure("Existing GATT connection attempt timed out")
+            }
+        }
+
         setState(resolvedAddress, BleLinkState.CONNECTING)
         android.util.Log.d(TAG, "GATT connect requested for " + resolvedAddress)
-        val completion = CompletableDeferred<TacticalResult<Unit>>()
-        pending[resolvedAddress] = completion
         return try {
             val callback = object : BluetoothGattCallback() {
                 override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
