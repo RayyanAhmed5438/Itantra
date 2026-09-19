@@ -10,6 +10,7 @@ import com.tactical.platform.api.radio.RadioTransport
 import com.tactical.platform.api.radio.RawPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -147,7 +148,9 @@ class BleRadioTransport(
         val service = BluetoothGattService(GATT_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
         val characteristic = BluetoothGattCharacteristic(
             PACKET_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PROPERTY_WRITE or
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
             BluetoothGattCharacteristic.PERMISSION_WRITE
         )
 
@@ -274,11 +277,7 @@ class BleRadioTransport(
             val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(gatt.device.address))
             var peerOk = true
             for (chunk in chunks) {
-                val written = try {
-                    gatt.writeChunk(characteristicOut, chunk)
-                } catch (e: SecurityException) {
-                    false
-                }
+                val written = writeChunkWithRetry(gatt, characteristicOut, chunk)
                 if (!written) {
                     peerOk = false
                     break
@@ -318,21 +317,41 @@ class BleRadioTransport(
         false
     }
 
-    /** Writes using the API 33+ overload for the same reason. */
-    private fun BluetoothGatt.writeChunk(characteristic: BluetoothGattCharacteristic, value: ByteArray): Boolean = try {
+    /** Tries a few times because Android may briefly reject a GATT
+     * operation while the controller is busy with another packet. */
+    private suspend fun writeChunkWithRetry(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray
+    ): Boolean {
+        repeat(3) {
+            if (gatt.writeChunk(characteristic, value)) return true
+            delay(20L)
+        }
+        return false
+    }
+
+    /** Writes without response; the server characteristic explicitly supports
+     * this mode, avoiding the response-operation bottleneck for fragments. */
+    private fun BluetoothGatt.writeChunk(
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray
+    ): Boolean = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             writeCharacteristic(
                 characteristic,
                 value,
-                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             ) == BluetoothStatusCodes.SUCCESS
         } else {
+            @Suppress("DEPRECATION")
+            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             @Suppress("DEPRECATION")
             characteristic.value = value
             @Suppress("DEPRECATION")
             writeCharacteristic(characteristic)
         }
-    } catch (e: SecurityException) {
+    } catch (_: SecurityException) {
         false
     }
     companion object {
