@@ -22,11 +22,13 @@ import java.util.Locale
 import javax.inject.Inject
 
 data class PeerNodeUi(
+    val deviceAddress: String,
     val callsign: String,
     val isConnected: Boolean,
     val distanceText: String,
     val signalBars: Int,
-    val linkText: String
+    val linkText: String,
+    val bleState: BleLinkState = BleLinkState.NOT_PAIRED
 )
 
 data class ChatMessageUi(
@@ -76,14 +78,20 @@ class MainViewModel @Inject constructor(
     private val estimator = RssiProximityEstimator()
     private var scanJob: Job? = null
     private var scanLoopJob: Job? = null
+    private var healthJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            startDiscovery()
+        }
+
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->
                     state.copy(
                         squadPeers = devices.map { device ->
                             PeerNodeUi(
+                                deviceAddress = device.callsign.ifBlank { device.id.value },
                                 callsign = device.callsign.ifBlank { device.id.value },
                                 isConnected = device.link != LinkType.STALE,
                                 distanceText = formatDistance(estimator.estimate(device.rssi)),
@@ -92,6 +100,20 @@ class MainViewModel @Inject constructor(
                             )
                         }
                     )
+                }
+            }
+        }
+
+        healthJob = viewModelScope.launch {
+            while (isActive) {
+                delay(5000L)
+                if (scanLoopJob?.isActive != true) startDiscovery()
+                // Recovery guard: restart discovery when it has repeatedly stopped making progress.
+                if (discoveryService is DefaultDiscoveryService) {
+                    val peers = discoveryService.peers().value
+                    if (peers.isEmpty()) {
+                        runCatching { discoveryService.start() }
+                    }
                 }
             }
         }
@@ -164,6 +186,18 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch { bleConnectionManager.pair(deviceAddress) }
     }
 
+    fun observePeerState(deviceAddress: String) {
+        viewModelScope.launch {
+            bleConnectionManager.state(deviceAddress).collect { linkState ->
+                _uiState.update { state ->
+                    state.copy(squadPeers = state.squadPeers.map { peer ->
+                        if (peer.deviceAddress == deviceAddress) peer.copy(bleState = linkState, isConnected = linkState == BleLinkState.CONNECTED) else peer
+                    })
+                }
+            }
+        }
+    }
+
     fun connectPeer(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.connect(deviceAddress) }
     }
@@ -230,6 +264,7 @@ class MainViewModel @Inject constructor(
 
     override fun onCleared() {
         scanLoopJob?.cancel()
+        healthJob?.cancel()
         viewModelScope.launch { discoveryService.stop() }
         scanJob?.cancel()
         super.onCleared()
