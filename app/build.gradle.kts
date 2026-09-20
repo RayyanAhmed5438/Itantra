@@ -44,16 +44,11 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
-            // Moonshine Voice also ships libonnxruntime.so. Keep the
-            // application's ONNX Runtime copy, which matches its JNI wrapper.
-            pickFirsts += "**/libonnxruntime.so"
         }
     }
 }
 
 dependencies {
-    implementation(libs.onnxruntime.android)
-
     implementation(project(":core-domain"))
     implementation(project(":core-protocol"))
     implementation(project(":core-platform-api"))
