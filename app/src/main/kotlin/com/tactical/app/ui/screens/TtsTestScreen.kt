@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,9 +53,8 @@ import com.tactical.platform.speech.mms.MmsTtsTestResult
 @Composable
 fun TtsTestScreen(
     installedLanguages: List<MmsTtsLanguage>,
-    isImporting: Boolean,
-    importMessage: String?,
-    onImportZip: () -> Unit,
+    isLoadingModels: Boolean,
+    modelMessage: String?,
     onSpeak: suspend (MmsTtsLanguage, String) -> MmsTtsTestResult,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -123,43 +123,28 @@ fun TtsTestScreen(
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "MODEL PACK",
+                            "BUNDLED MODEL PACK",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
                         Text(
                             installedLanguages.size.toString() + "/" +
-                                MmsTtsLanguage.ALL.size + " languages installed",
+                                MmsTtsLanguage.ALL.size + " languages ready",
                             color = RedTacticalTextSecondary,
                             fontSize = 11.sp
                         )
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
-
-                Button(
-                    onClick = onImportZip,
-                    enabled = !isImporting,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = RedTacticalPrimary
-                    )
-                ) {
-                    Icon(Icons.Default.Inventory2, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isImporting) "IMPORTING…" else "IMPORT quantized_models.zip")
-                }
-
-                importMessage?.let {
-                    Spacer(Modifier.height(7.dp))
+                modelMessage?.let {
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         it,
-                        color = if (it.startsWith("Imported")) {
-                            RedTacticalStatusGreen
-                        } else {
-                            RedTacticalTextSecondary
+                        color = when {
+                            isLoadingModels -> RedTacticalTextSecondary
+                            it.startsWith("TTS models ready") -> RedTacticalStatusGreen
+                            else -> RedTacticalPrimaryBright
                         },
                         fontSize = 11.sp
                     )
@@ -270,10 +255,10 @@ fun TtsTestScreen(
             }
         }
 
-        if (!selectedInstalled) {
+        if (!selectedInstalled && !isLoadingModels) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "Import the model pack before testing this language.",
+                "No bundled model is available for this language.",
                 color = RedTacticalTextSecondary,
                 fontSize = 11.sp
             )
