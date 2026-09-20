@@ -12,14 +12,13 @@ only for preprocessing/decoding. The actual neural network inference is done
 by the uploaded ONNX encoder and decoder with ONNX Runtime CPU.
 
 Example:
-  python tools/test_whisper_onnx.py .\models.zip english.wav --language en
-  python tools/test_whisper_onnx.py .\models.zip hindi.wav --language hi
+  python tools/test_whisper_onnx.py .\\models.zip english.wav --language en
+  python tools/test_whisper_onnx.py .\\models.zip hindi.wav --language hi
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import zipfile
 from pathlib import Path
 
@@ -92,35 +91,6 @@ def read_audio(path: Path) -> np.ndarray:
 
     return audio
 
-
-def create_decoder_inputs(
-    decoder: ort.InferenceSession,
-    prefix_tokens: list[int],
-) -> dict[str, np.ndarray]:
-    inputs: dict[str, np.ndarray] = {}
-
-    token_name = required_input(decoder, "tokens")
-    self_k_name = required_input(decoder, "in_n_layer_self_k_cache")
-    self_v_name = required_input(decoder, "in_n_layer_self_v_cache")
-    cross_k_name = required_input(decoder, "n_layer_cross_k")
-    cross_v_name = required_input(decoder, "n_layer_cross_v")
-    offset_name = required_input(decoder, "offset")
-
-    inputs[token_name] = np.asarray([prefix_tokens], dtype=np.int64)
-    inputs[self_k_name] = np.zeros(
-        (N_LAYERS, 1, CACHE_LENGTH, D_MODEL),
-        dtype=np.float32,
-    )
-    inputs[self_v_name] = np.zeros(
-        (N_LAYERS, 1, CACHE_LENGTH, D_MODEL),
-        dtype=np.float32,
-    )
-    inputs[offset_name] = np.asarray([0], dtype=np.int64)
-
-    # Filled after the encoder runs.
-    inputs[cross_k_name] = None  # type: ignore[assignment]
-    inputs[cross_v_name] = None  # type: ignore[assignment]
-    return inputs
 
 
 def _log_softmax(logits: np.ndarray) -> np.ndarray:
@@ -392,12 +362,16 @@ def main() -> int:
     print("EOS token:", eos_token_id)
     print("Running decoder...")
 
-    generated = decode_greedy(
+    generated = decode_beam_search(
         decoder=decoder,
         cross_k=cross_k,
         cross_v=cross_v,
         prefix_tokens=prefix_tokens,
         eos_token_id=eos_token_id,
+        tokenizer=tokenizer,
+        beam_size=args.beam_size,
+        max_new_tokens=args.max_new_tokens,
+        length_penalty=args.length_penalty,
     )
 
     all_tokens = prefix_tokens + generated
