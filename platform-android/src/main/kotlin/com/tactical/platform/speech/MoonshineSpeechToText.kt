@@ -11,6 +11,7 @@ import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.domain.speech.TranscriptionChunk
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
