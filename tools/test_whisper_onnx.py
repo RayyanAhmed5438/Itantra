@@ -231,6 +231,11 @@ def main() -> int:
     print("Audio:", args.audio_path)
     print("Audio duration: %.2f s" % (audio.size / SAMPLE_RATE))
 
+    # For Hindi, keep this first test intentionally short. It makes it easier
+    # to distinguish tokenizer/decoder issues from long-form decoding errors.
+    if args.language == "hi":
+        print("Hindi sanity-check: use a short utterance for this run.")
+
     feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
     tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-base")
 
@@ -274,12 +279,14 @@ def main() -> int:
     print("Cross-K shape:", cross_k.shape)
     print("Cross-V shape:", cross_v.shape)
 
+    # Use an explicit Whisper prefix instead of relying on tokenizer state.
+    # This is:
+    # <|startoftranscript|> <|language|> <|transcribe|> <|notimestamps|>
     tokenizer.set_prefix_tokens(
         language=args.language,
         task="transcribe",
         predict_timestamps=False,
     )
-
     prefix_tokens = list(tokenizer.prefix_tokens)
     eos_token_id = int(tokenizer.eos_token_id or EOT_FALLBACK)
 
@@ -303,9 +310,17 @@ def main() -> int:
         normalize=False,
     ).strip()
 
+    # Also print Unicode code points/escaped form so Devanagari vs Latin
+    # output can be distinguished without relying on terminal font/rendering.
+    escaped = text.encode("unicode_escape").decode("ascii")
+
     print("Generated token count:", len(generated))
+    print("RAW TOKEN IDS:")
+    print(all_tokens)
     print("TRANSCRIPTION:")
     print(text or "<empty>")
+    print("TRANSCRIPTION UNICODE:")
+    print(escaped or "<empty>")
     print("SUCCESS")
     return 0
 
