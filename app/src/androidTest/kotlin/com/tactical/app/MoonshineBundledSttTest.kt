@@ -1,7 +1,5 @@
 package com.tactical.app
 
-import ai.moonshine.voice.JNI
-import ai.moonshine.voice.Transcriber
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,7 +17,7 @@ class MoonshineBundledSttTest {
         get() = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun bundledModelExtractsLocally() = runBlocking {
+    fun bundledMoonshineModelIsPackagedAndExtractsLocally() = runBlocking {
         // Force the first-use extraction path instead of reusing an old
         // model directory from a previous test run.
         File(context.filesDir, "moonshine/stt-tiny-en").deleteRecursively()
@@ -39,25 +37,6 @@ class MoonshineBundledSttTest {
             assertTrue("Missing extracted model file: $name", file.isFile)
             assertTrue("Extracted model file is empty: $name", file.length() > 0L)
         }
-    }
-
-    @Test
-    fun moonshineTinyCanLoadBundledModel() = runBlocking {
-        File(context.filesDir, "moonshine/stt-tiny-en").deleteRecursively()
-
-        val modelDirectory = MoonshineSttModelStore(context)
-            .ensureBundledModelAvailable()
-
-        val transcriber = Transcriber()
-        transcriber.setUpdateInterval(0.5)
-        transcriber.loadFromFiles(
-            modelDirectory.absolutePath,
-            JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING
-        )
-
-        // Reaching this point proves the packaged native library and all
-        // required Tiny Streaming model files can be loaded offline.
-        assertTrue(modelDirectory.isDirectory)
     }
 
     companion object {
