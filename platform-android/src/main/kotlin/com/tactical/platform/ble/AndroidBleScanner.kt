@@ -92,12 +92,7 @@ class AndroidBleScanner(
                 callbackType: Int,
                 result: ScanResult
             ) {
-                android.util.Log.d(
-                    TAG,
-                    "SCAN RESULT: device=${result.device.address}, rssi=${result.rssi}"
-                )
-
-                val manufacturerData =
+val manufacturerData =
                     result.scanRecord?.manufacturerSpecificData
                         ?: return
 
@@ -110,13 +105,7 @@ class AndroidBleScanner(
 
                     val payload = manufacturerData.valueAt(index)
                         ?: continue
-
-                    android.util.Log.d(
-                        TAG,
-                        "TACTICAL BLE BEACON: ${payload.contentToString()}"
-                    )
-
-                    BleBeaconPayloadCodec.decode(payload)?.let { packet ->
+BleBeaconPayloadCodec.decode(payload)?.let { packet ->
                         BlePeerAddressRegistry.remember(packet.sender.value, result.device.address)
                     }
 
@@ -208,24 +197,13 @@ class AndroidBleScanner(
             )
             return@callbackFlow
         }
-
-        android.util.Log.d(
-            TAG,
-            "TACTICAL BLE SCAN STARTED"
-        )
-
-        awaitClose {
+awaitClose {
             try {
                 le.stopScan(callback)
             } catch (_: SecurityException) {
                 // Permission was revoked.
             }
-
-            android.util.Log.d(
-                TAG,
-                "TACTICAL BLE SCAN STOPPED"
-            )
-        }
+}
     }
 
     companion object {
