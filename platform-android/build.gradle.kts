@@ -12,8 +12,6 @@ android {
         minSdk = 28
         // targetSdk is not set on library modules (AGP ignores it there);
         // the app module's targetSdk governs runtime behavior.
-
-
     }
 
     buildFeatures {
@@ -34,8 +32,8 @@ android {
     }
 
     packaging {
-        // TFLite/ONNX ship native .so libs for multiple ABIs; avoid
-        // duplicate-file merge failures from transitive deps.
+        // TFLite/ONNX/Moonshine ship native .so libs for multiple ABIs.
+        // Avoid duplicate-file merge failures from transitive dependencies.
         jniLibs {
             useLegacyPackaging = false
         }
@@ -43,26 +41,18 @@ android {
 }
 
 dependencies {
-    // Contracts this module implements
     implementation(project(":core-domain"))
     implementation(project(":core-platform-api"))
     implementation(project(":core-protocol"))
-
-    // Coroutines (callbackFlow for BLE/Wi-Fi callback-based APIs)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // On-device inference backends — `implementation`, never `api`, so
-    // dependent modules (engine-speech, feature-ptt, app) never see these
-    // types directly. SpeechBackendModule is the only seam.
     implementation(libs.tensorflow.lite)
     implementation(libs.onnxruntime.android)
+    implementation(libs.moonshine.voice)
 
-//    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
-//    testImplementation(libs.robolectric)
 }
