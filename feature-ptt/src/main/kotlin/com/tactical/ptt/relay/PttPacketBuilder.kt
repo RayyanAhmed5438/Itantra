@@ -5,11 +5,11 @@ import com.tactical.domain.speech.TranscriptionChunk
 import com.tactical.ptt.session.PttSession
 
 /**
- * Constructs a TextPacket from session metadata and a finalized
- * transcription chunk. Uses chunk.languageCode (what the multilingual
- * STT model actually detected for this utterance), not
- * session.languageTag, since the two could differ mid-session — see
- * PttSession's open question about languageTag's actual purpose.
+ * Constructs a TextPacket from a finalized transcription chunk.
+ *
+ * The active STT backend is English-only, so the current packet language code
+ * is "en". Keeping it on the transcription chunk preserves the existing wire
+ * contract and leaves room for a future multilingual backend.
  */
 class PttPacketBuilder {
     fun build(session: PttSession, chunk: TranscriptionChunk): TextPacket =
