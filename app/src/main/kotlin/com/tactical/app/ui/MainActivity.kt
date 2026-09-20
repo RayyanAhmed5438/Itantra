@@ -43,17 +43,23 @@ import com.tactical.app.ui.screens.MessagesScreen
 import com.tactical.app.ui.screens.SquadScreen
 import com.tactical.app.ui.screens.TtsTestScreen
 import com.tactical.app.ui.theme.RedTacticalBackground
-import dagger.hilt.android.AndroidEntryPoint
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsModelStore
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
-    private lateinit var ttsModelStore: MmsTtsModelStore
-    private lateinit var mmsTtsEngine: MmsTtsEngine
+
+    @Inject
+    lateinit var ttsModelStore: MmsTtsModelStore
+
+    @Inject
+    lateinit var mmsTtsEngine: MmsTtsEngine
+
     private var startupCheckPending = false
     private var meshServiceStarted = false
     private val wirelessWarning = mutableStateOf<String?>(null)
@@ -101,10 +107,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        ttsModelStore = androidx.core.app.ComponentActivityCompat
-            .getActivityResultRegistry(this)
-            .let { @Suppress("UNUSED_VARIABLE") _ -> error("unreachable") }
 
         setContent {
             RedTacticalTheme {
