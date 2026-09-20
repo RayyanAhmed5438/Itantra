@@ -7,13 +7,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,26 +61,25 @@ class MainActivity : ComponentActivity() {
     private var startupCheckPending = false
     private var meshServiceStarted = false
     private val wirelessWarning = mutableStateOf<String?>(null)
-    private val ttsImporting = mutableStateOf(false)
-    private val ttsImportMessage = mutableStateOf<String?>(null)
+    private val ttsLoading = mutableStateOf(false)
+    private val ttsMessage = mutableStateOf<String?>(null)
+    private val ttsLanguages = mutableStateOf<List<com.tactical.platform.speech.mms.MmsTtsLanguage>>(emptyList())
 
-    private val pickTtsZip = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri ?: return@registerForActivityResult
+    private fun loadBundledTtsModels() {
+        if (ttsLoading.value) return
         lifecycleScope.launch {
-            ttsImporting.value = true
-            ttsImportMessage.value = "Importing model pack…"
-            runCatching {
-                mmsTtsEngine.close()
-                ttsModelStore.importZip(uri)
-            }.onSuccess { count ->
-                ttsImportMessage.value = "Imported " + count + " language model(s)."
-            }.onFailure { error ->
-                ttsImportMessage.value =
-                    "Import failed: " + (error.message ?: error.javaClass.simpleName)
-            }
-            ttsImporting.value = false
+            ttsLoading.value = true
+            ttsMessage.value = "Loading bundled TTS models…"
+            runCatching { ttsModelStore.ensureBundledModelsAvailable() }
+                .onSuccess {
+                    ttsLanguages.value = ttsModelStore.installedLanguages()
+                    ttsMessage.value = "TTS models ready: " + ttsLanguages.value.size + "/10 languages."
+                }
+                .onFailure { error ->
+                    ttsLanguages.value = ttsModelStore.installedLanguages()
+                    ttsMessage.value = "TTS model load failed: " + (error.message ?: error.javaClass.simpleName)
+                }
+            ttsLoading.value = false
         }
     }
 
@@ -114,19 +111,15 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var showTtsLab by remember { mutableStateOf(false) }
 
+                LaunchedEffect(showTtsLab) {
+                    if (showTtsLab) loadBundledTtsModels()
+                }
+
                 if (showTtsLab) {
                     TtsTestScreen(
-                        installedLanguages = ttsModelStore.installedLanguages(),
-                        isImporting = ttsImporting.value,
-                        importMessage = ttsImportMessage.value,
-                        onImportZip = {
-                            pickTtsZip.launch(
-                                arrayOf(
-                                    "application/zip",
-                                    "application/octet-stream"
-                                )
-                            )
-                        },
+                        installedLanguages = ttsLanguages.value,
+                        isLoadingModels = ttsLoading.value,
+                        modelMessage = ttsMessage.value,
                         onSpeak = { language, text ->
                             mmsTtsEngine.synthesizeAndPlay(language, text)
                         },
