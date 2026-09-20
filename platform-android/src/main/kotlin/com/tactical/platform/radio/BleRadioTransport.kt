@@ -138,6 +138,16 @@ class BleRadioTransport(
                 connectionRegistry.onMtuNegotiated(device.address, mtu)
             }
 
+            override fun onNotificationSent(
+                device: BluetoothDevice,
+                status: Int
+            ) {
+                android.util.Log.d(
+                    TAG,
+                    "Notification sent to " + device.address + ", status=" + status
+                )
+            }
+
             override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     connectionRegistry.registerInboundConnection(device)
