@@ -30,16 +30,6 @@ android {
             jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
         }
     }
-
-    packaging {
-        // Moonshine ships its own ONNX Runtime native library. MMS TTS also
-        // uses the ONNX Runtime Java API, so both dependencies legitimately
-        // require ORT but AGP must package only one copy of the native .so.
-        jniLibs {
-            useLegacyPackaging = false
-            pickFirsts += "**/libonnxruntime.so"
-        }
-    }
 }
 
 dependencies {
@@ -52,7 +42,9 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     implementation(libs.tensorflow.lite)
-    implementation(libs.onnxruntime.android)
+    // The app supplies ONNX Runtime at runtime so its native library is
+    // packaged before Moonshine's bundled copy.
+    compileOnly(libs.onnxruntime.android)
     implementation(libs.moonshine.voice)
 
     testImplementation(libs.kotlinx.coroutines.test)
