@@ -294,6 +294,36 @@ def main() -> int:
     print("Inputs:", [x.name for x in session.get_inputs()])
     print("Outputs:", [x.name for x in session.get_outputs()])
 
+    # Run one real synthesis request through the quantized model. Loading a
+    # graph is not enough: this catches runtime operator/type/shape problems
+    # and verifies that the waveform output is usable before Android packaging.
+    validation_text = "Hello. This is a test of English speech synthesis on the device."
+    validation_ids = np.asarray(
+        [reader.tokenize_mms(validation_text)],
+        dtype=np.int64,
+    )
+    validation_inputs = {reader.input_ids_name: validation_ids}
+    if reader.attention_mask_name is not None:
+        validation_inputs[reader.attention_mask_name] = np.ones(
+            validation_ids.shape,
+            dtype=np.int64,
+        )
+
+    print("Running validation inference...")
+    outputs = session.run(None, validation_inputs)
+    waveform = np.asarray(outputs[0], dtype=np.float32).reshape(-1)
+
+    if waveform.size == 0:
+        raise RuntimeError("Validation inference returned an empty waveform")
+    if not np.isfinite(waveform).all():
+        raise RuntimeError("Validation waveform contains NaN or infinity")
+
+    print("Validation text:", validation_text)
+    print("Waveform samples:", waveform.size)
+    print("Waveform duration: %.2f s" % (waveform.size / 16000.0))
+    print("Waveform min/max: %.6f / %.6f" % (float(waveform.min()), float(waveform.max())))
+    print("Waveform RMS: %.6f" % float(np.sqrt(np.mean(np.square(waveform)))))
+
     metadata = {
         "source_repo": MODEL_REPO,
         "source_file": MODEL_FILE,
