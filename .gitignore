@@ -45,3 +45,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Large local TTS model pack (bundled into debug APK but not committed to Git)
+app/src/main/assets/models/quantized_models.zip
