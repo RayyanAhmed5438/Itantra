@@ -1,7 +1,6 @@
 package com.tactical.platform.speech.mms
 
 import android.content.Context
-import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,6 +11,16 @@ import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Stores the bundled MMS-TTS model pack under app-private storage.
+ *
+ * The ZIP is bundled into the APK at:
+ *   assets/models/quantized_models.zip
+ *
+ * The archive is extracted lazily the first time the TTS Model Lab is opened.
+ * The large ONNX files are kept outside the APK's asset-access path after
+ * extraction so ONNX Runtime can memory-map/read ordinary files.
+ */
 @Singleton
 class MmsTtsModelStore @Inject constructor(
     @ApplicationContext private val context: Context
@@ -19,17 +28,22 @@ class MmsTtsModelStore @Inject constructor(
     val rootDirectory: File
         get() = File(context.filesDir, "tts_models")
 
-    suspend fun importZip(uri: Uri): Int = withContext(Dispatchers.IO) {
-        val tempRoot = File(context.cacheDir, "tts_import_" + System.currentTimeMillis())
+    suspend fun ensureBundledModelsAvailable(): Int = withContext(Dispatchers.IO) {
+        val installed = installedLanguages()
+        if (installed.size == MmsTtsLanguage.ALL.size) return@withContext installed.size
+
+        val tempRoot = File(
+            context.cacheDir,
+            "tts_bundle_" + System.currentTimeMillis()
+        )
         tempRoot.mkdirs()
 
         try {
-            var importedLanguages = emptySet<String>()
+            val input = context.assets.open(BUNDLED_ZIP_ASSET)
 
-            val input = context.contentResolver.openInputStream(uri)
-                ?: throw IOException("Could not open selected ZIP file")
-
-            ZipInputStream(BufferedInputStream(input, BUFFER_SIZE)).use { zip ->
+            ZipInputStream(
+                BufferedInputStream(input, BUFFER_SIZE)
+            ).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     val normalized = entry.name.replace('\\', '/')
@@ -55,7 +69,10 @@ class MmsTtsModelStore @Inject constructor(
                     val output = File(tempRoot, relative)
                     val canonicalRoot = tempRoot.canonicalFile
                     val canonicalOutput = output.canonicalFile
-                    if (!canonicalOutput.path.startsWith(canonicalRoot.path + File.separator)) {
+                    if (!canonicalOutput.path.startsWith(
+                            canonicalRoot.path + File.separator
+                        )
+                    ) {
                         throw IOException("Unsafe ZIP entry: " + entry.name)
                     }
 
@@ -63,24 +80,24 @@ class MmsTtsModelStore @Inject constructor(
                     output.outputStream().use { out ->
                         zip.copyTo(out, BUFFER_SIZE)
                     }
-                    importedLanguages = importedLanguages + language.modelCode
                     zip.closeEntry()
                 }
             }
 
-            val validLanguages = importedLanguages
-                .mapNotNull(MmsTtsLanguage::fromModelCode)
-                .filter { isComplete(tempRoot.resolve(it.modelCode)) }
+            val completeLanguages = MmsTtsLanguage.ALL.filter {
+                isComplete(tempRoot.resolve(it.modelCode))
+            }
 
-            if (validLanguages.isEmpty()) {
+            if (completeLanguages.size != MmsTtsLanguage.ALL.size) {
                 throw IOException(
-                    "The ZIP did not contain a complete MMS-TTS language model. " +
-                        "Expected model.int8.onnx, vocab.json, tokenizer_config.json and config.json."
+                    "Bundled TTS archive is incomplete: " +
+                        completeLanguages.size + "/" +
+                        MmsTtsLanguage.ALL.size + " language models found"
                 )
             }
 
             rootDirectory.mkdirs()
-            validLanguages.forEach { language ->
+            completeLanguages.forEach { language ->
                 val source = tempRoot.resolve(language.modelCode)
                 val destination = rootDirectory.resolve(language.modelCode)
                 destination.deleteRecursively()
@@ -90,7 +107,13 @@ class MmsTtsModelStore @Inject constructor(
                 }
             }
 
-            validLanguages.size
+            completeLanguages.size
+        } catch (e: IOException) {
+            throw IOException(
+                "Could not extract bundled TTS model pack from " +
+                    BUNDLED_ZIP_ASSET + ": " + e.message,
+                e
+            )
         } finally {
             tempRoot.deleteRecursively()
         }
@@ -112,11 +135,15 @@ class MmsTtsModelStore @Inject constructor(
     }
 
     private fun isComplete(directory: File): Boolean =
-        REQUIRED_FILES.all { File(directory, it).isFile && File(directory, it).length() > 0L }
+        REQUIRED_FILES.all {
+            File(directory, it).isFile && File(directory, it).length() > 0L
+        }
 
     companion object {
+        private const val BUNDLED_ZIP_ASSET = "models/quantized_models.zip"
         private const val ZIP_ROOT = "quantized_models"
         private const val BUFFER_SIZE = 64 * 1024
+
         private val ALLOWED_FILES = setOf(
             "config.json",
             "tokenizer_config.json",
@@ -124,6 +151,7 @@ class MmsTtsModelStore @Inject constructor(
             "tokens.txt",
             "model.int8.onnx"
         )
+
         private val REQUIRED_FILES = setOf(
             "config.json",
             "tokenizer_config.json",
