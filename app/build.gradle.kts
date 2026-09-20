@@ -44,15 +44,16 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
-            // Moonshine Voice and ONNX Runtime both contain this native
-            // library. The app packages a single copy; both are aligned to
-            // ONNX Runtime 1.23.2.
+            // Moonshine Voice also ships libonnxruntime.so. Keep the
+            // application's ONNX Runtime copy, which matches its JNI wrapper.
             pickFirsts += "**/libonnxruntime.so"
         }
     }
 }
 
 dependencies {
+    implementation(libs.onnxruntime.android)
+
     implementation(project(":core-domain"))
     implementation(project(":core-protocol"))
     implementation(project(":core-platform-api"))
@@ -81,8 +82,4 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
 
     implementation(libs.kotlinx.coroutines.android)
-
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.runner)
-    androidTestImplementation(libs.androidx.test.core)
 }
