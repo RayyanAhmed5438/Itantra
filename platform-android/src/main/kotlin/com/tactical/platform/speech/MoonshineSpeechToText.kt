@@ -1,15 +1,11 @@
 package com.tactical.platform.speech
 
-import ai.moonshine.voice.AssetDownloader
 import ai.moonshine.voice.JNI
-import ai.moonshine.voice.ModelSpec
 import ai.moonshine.voice.Transcriber
 import ai.moonshine.voice.TranscriptEvent
-import android.content.Context
 import com.tactical.domain.audio.AudioFrame
-import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.domain.speech.TranscriptionChunk
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.tactical.platform.api.speech.SpeechToText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -27,11 +23,13 @@ import javax.inject.Inject
  *
  * The existing AudioRecorder remains the microphone source. PCM16 mono audio
  * frames are converted to normalized float samples and fed into Moonshine's
- * streaming Transcriber. The model is downloaded once into filesDir and then
- * reused offline on later launches.
+ * streaming Transcriber.
+ *
+ * The Tiny Streaming model is bundled in the APK and lazily extracted into
+ * app-private storage on first use. No network access is required.
  */
 class MoonshineSpeechToText @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val modelStore: MoonshineSttModelStore
 ) : SpeechToText {
 
     private val loadMutex = Mutex()
@@ -105,17 +103,7 @@ class MoonshineSpeechToText @Inject constructor(
 
     private suspend fun loadTranscriber(): Transcriber = loadMutex.withLock {
         cachedTranscriber ?: run {
-            val modelDir = context.filesDir.resolve("moonshine/stt-tiny-en").apply { mkdirs() }
-
-            AssetDownloader().ensureModelPresent(
-                modelDir,
-                ModelSpec.stt(
-                    LANGUAGE_CODE,
-                    JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING,
-                    false
-                ),
-                null
-            )
+            val modelDir = modelStore.ensureBundledModelAvailable()
 
             Transcriber().also {
                 it.setUpdateInterval(0.5)
