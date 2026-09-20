@@ -10,7 +10,7 @@ The script:
   5. verifies that the result contains no ConvInteger nodes,
   6. writes the result to the requested output path.
 
-Use Python 3.11/3.12 in a fresh virtual environment for the most
+Use Python 3.13 in a fresh virtual environment for the most
 predictable ONNX Runtime tooling setup.
 
 The output model is intentionally NOT committed by this script.
@@ -35,8 +35,6 @@ from onnxruntime.quantization import (
     QuantType,
     quantize_static,
 )
-from tokenizers import Tokenizer
-
 
 MODEL_REPO = "Xenova/mms-tts-eng"
 MODEL_FILE = "onnx/model.onnx"
@@ -72,15 +70,16 @@ def resolve_input_name(session: ort.InferenceSession, wanted: str) -> str | None
 
 
 class MmsCalibrationReader(CalibrationDataReader):
-    def __init__(self, model_path: Path, tokenizer_path: Path) -> None:
+    def __init__(self, model_path: Path, vocab_path: Path) -> None:
         self.session = ort.InferenceSession(
             str(model_path),
             providers=["CPUExecutionProvider"],
         )
 
-        self.tokenizer = Tokenizer.from_file(str(tokenizer_path))
-        self.input_names = [x.name for x in self.session.get_inputs()]
+        with vocab_path.open("r", encoding="utf-8") as handle:
+            self.vocab: dict[str, int] = json.load(handle)
 
+        self.input_names = [x.name for x in self.session.get_inputs()]
         self.input_ids_name = resolve_input_name(self.session, "input_ids")
         self.attention_mask_name = resolve_input_name(
             self.session, "attention_mask"
@@ -94,10 +93,8 @@ class MmsCalibrationReader(CalibrationDataReader):
 
         self.samples: list[dict[str, np.ndarray]] = []
         for text in CALIBRATION_TEXTS:
-            encoded = self.tokenizer.encode(text)
-
             ids = np.asarray(
-                [encoded.ids],
+                [self.tokenize_mms(text)],
                 dtype=np.int64,
             )
 
@@ -111,9 +108,6 @@ class MmsCalibrationReader(CalibrationDataReader):
                     dtype=np.int64,
                 )
 
-            # This export normally has only input_ids and attention_mask.
-            # Fail clearly instead of silently feeding the wrong type if
-            # a future model revision introduces another required input.
             known = {
                 self.input_ids_name,
                 self.attention_mask_name,
@@ -131,6 +125,25 @@ class MmsCalibrationReader(CalibrationDataReader):
 
         self._index = 0
 
+    def tokenize_mms(self, text: str) -> list[int]:
+        # Matches MMS/VitsTokenizer defaults for this English model:
+        # lowercase, keep only vocabulary characters, trim outer whitespace,
+        # then insert blank id 0 at the beginning, between characters, and
+        # at the end.
+        filtered = "".join(
+            character
+            for character in text.lower()
+            if character in self.vocab
+        ).strip()
+
+        character_ids = [self.vocab.get(character, 38) for character in filtered]
+
+        result = [0]
+        for token_id in character_ids:
+            result.append(token_id)
+            result.append(0)
+        return result
+
     def get_next(self) -> dict[str, np.ndarray] | None:
         if self._index >= len(self.samples):
             return None
@@ -141,6 +154,7 @@ class MmsCalibrationReader(CalibrationDataReader):
 
     def rewind(self) -> None:
         self._index = 0
+
 
 
 def inspect_model(path: Path) -> dict[str, Any]:
@@ -213,7 +227,7 @@ def main() -> int:
         )
     )
 
-    tokenizer_path = Path(
+    vocab_path = Path(
         hf_hub_download(
             repo_id=MODEL_REPO,
             filename=TOKENIZER_FILE,
@@ -229,7 +243,7 @@ def main() -> int:
     print("Source outputs:", before["outputs"])
     print("Source ConvInteger nodes:", len(before["conv_integer_nodes"]))
 
-    reader = MmsCalibrationReader(model_path, tokenizer_path)
+    reader = MmsCalibrationReader(model_path, vocab_path)
 
     output.parent.mkdir(parents=True, exist_ok=True)
 
