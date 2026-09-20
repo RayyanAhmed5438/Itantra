@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +42,7 @@ import com.tactical.app.ui.screens.MessagesScreen
 import com.tactical.app.ui.screens.SquadScreen
 import com.tactical.app.ui.screens.TtsTestScreen
 import com.tactical.app.ui.theme.RedTacticalBackground
+import com.tactical.app.ui.theme.RedTacticalTheme
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsModelStore
 import dagger.hilt.android.AndroidEntryPoint
