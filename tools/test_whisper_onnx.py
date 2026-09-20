@@ -123,13 +123,45 @@ def create_decoder_inputs(
     return inputs
 
 
-def decode_greedy(
+def _log_softmax(logits: np.ndarray) -> np.ndarray:
+    logits = np.asarray(logits, dtype=np.float64)
+    shifted = logits - np.max(logits)
+    return shifted - np.log(np.sum(np.exp(shifted)))
+
+
+def _suppress_special_tokens(
+    log_probs: np.ndarray,
+    tokenizer: WhisperTokenizer,
+    allowed_tokens: set[int],
+) -> None:
+    # During transcribe/no-timestamps decoding, language/task/timestamp and
+    # other control tokens should not be emitted as normal text.
+    for token_id in tokenizer.all_special_ids:
+        if token_id not in allowed_tokens and 0 <= token_id < log_probs.size:
+            log_probs[token_id] = -np.inf
+
+
+def decode_beam_search(
     decoder: ort.InferenceSession,
     cross_k: np.ndarray,
     cross_v: np.ndarray,
     prefix_tokens: list[int],
     eos_token_id: int,
+    tokenizer: WhisperTokenizer,
+    beam_size: int = 3,
+    max_new_tokens: int = MAX_NEW_TOKENS,
+    length_penalty: float = 1.0,
 ) -> list[int]:
+    """Small Whisper-style beam search over the custom decoder export.
+
+    Each beam owns its decoder KV cache. This is intentionally a simple,
+    correctness-first implementation for model evaluation, not the final
+    mobile decoder. A beam size of 3 keeps desktop testing manageable.
+    """
+
+    if beam_size < 1:
+        raise ValueError("beam_size must be >= 1")
+
     token_name = required_input(decoder, "tokens")
     self_k_name = required_input(decoder, "in_n_layer_self_k_cache")
     self_v_name = required_input(decoder, "in_n_layer_self_v_cache")
@@ -137,63 +169,111 @@ def decode_greedy(
     cross_v_name = required_input(decoder, "n_layer_cross_v")
     offset_name = required_input(decoder, "offset")
 
-    self_k = np.zeros(
+    self_k0 = np.zeros(
         (N_LAYERS, 1, CACHE_LENGTH, D_MODEL),
         dtype=np.float32,
     )
-    self_v = np.zeros(
+    self_v0 = np.zeros(
         (N_LAYERS, 1, CACHE_LENGTH, D_MODEL),
         dtype=np.float32,
     )
 
-    outputs = decoder.run(
+    # First decoder pass consumes the whole Whisper prefix.
+    first_outputs = decoder.run(
         None,
         {
             token_name: np.asarray([prefix_tokens], dtype=np.int64),
-            self_k_name: self_k,
-            self_v_name: self_v,
+            self_k_name: self_k0,
+            self_v_name: self_v0,
             cross_k_name: cross_k,
             cross_v_name: cross_v,
             offset_name: np.asarray([0], dtype=np.int64),
         },
     )
 
-    logits = outputs[0]
-    next_token = int(np.argmax(logits[0, -1]))
-    generated = [next_token]
-    self_k = np.asarray(outputs[1], dtype=np.float32)
-    self_v = np.asarray(outputs[2], dtype=np.float32)
+    first_log_probs = _log_softmax(first_outputs[0][0, -1])
+    _suppress_special_tokens(
+        first_log_probs,
+        tokenizer,
+        allowed_tokens={eos_token_id},
+    )
 
-    if next_token == eos_token_id:
-        return generated
+    candidate_ids = np.argsort(first_log_probs)[-beam_size:][::-1]
 
-    current_offset = len(prefix_tokens)
-
-    for _ in range(MAX_NEW_TOKENS - 1):
-        outputs = decoder.run(
-            None,
+    beams: list[dict[str, object]] = []
+    for token_id in candidate_ids:
+        token = int(token_id)
+        beams.append(
             {
-                token_name: np.asarray([[next_token]], dtype=np.int64),
-                self_k_name: self_k,
-                self_v_name: self_v,
-                cross_k_name: cross_k,
-                cross_v_name: cross_v,
-                offset_name: np.asarray([current_offset], dtype=np.int64),
-            },
+                "tokens": [token],
+                "score": float(first_log_probs[token]),
+                "self_k": np.asarray(first_outputs[1], dtype=np.float32),
+                "self_v": np.asarray(first_outputs[2], dtype=np.float32),
+                "finished": token == eos_token_id,
+            }
         )
 
-        logits = outputs[0]
-        next_token = int(np.argmax(logits[0, -1]))
-        generated.append(next_token)
+    def rank(item: dict[str, object]) -> float:
+        length = max(1, len(item["tokens"]))  # type: ignore[arg-type]
+        return float(item["score"]) / (length ** length_penalty)  # type: ignore[arg-type]
 
-        self_k = np.asarray(outputs[1], dtype=np.float32)
-        self_v = np.asarray(outputs[2], dtype=np.float32)
-        current_offset += 1
+    if all(bool(x["finished"]) for x in beams):
+        best = max(beams, key=rank)
+        return list(best["tokens"])  # type: ignore[arg-type]
 
-        if next_token == eos_token_id:
+    for step in range(1, max_new_tokens):
+        expansions: list[dict[str, object]] = []
+
+        for beam in beams:
+            if bool(beam["finished"]):
+                expansions.append(beam)
+                continue
+
+            tokens = beam["tokens"]  # type: ignore[assignment]
+            next_token = int(tokens[-1])
+            current_offset = len(prefix_tokens) + len(tokens) - 1
+
+            outputs = decoder.run(
+                None,
+                {
+                    token_name: np.asarray([[next_token]], dtype=np.int64),
+                    self_k_name: beam["self_k"],  # type: ignore[arg-type]
+                    self_v_name: beam["self_v"],  # type: ignore[arg-type]
+                    cross_k_name: cross_k,
+                    cross_v_name: cross_v,
+                    offset_name: np.asarray([current_offset], dtype=np.int64),
+                },
+            )
+
+            log_probs = _log_softmax(outputs[0][0, -1])
+            _suppress_special_tokens(
+                log_probs,
+                tokenizer,
+                allowed_tokens={eos_token_id},
+            )
+
+            top_ids = np.argsort(log_probs)[-beam_size:][::-1]
+            for token_id in top_ids:
+                token = int(token_id)
+                new_tokens = list(tokens) + [token]
+                expansions.append(
+                    {
+                        "tokens": new_tokens,
+                        "score": float(beam["score"]) + float(log_probs[token]),  # type: ignore[arg-type]
+                        "self_k": np.asarray(outputs[1], dtype=np.float32),
+                        "self_v": np.asarray(outputs[2], dtype=np.float32),
+                        "finished": token == eos_token_id,
+                    }
+                )
+
+        expansions.sort(key=rank, reverse=True)
+        beams = expansions[:beam_size]
+
+        if all(bool(x["finished"]) for x in beams):
             break
 
-    return generated
+    best = max(beams, key=rank)
+    return list(best["tokens"])  # type: ignore[arg-type]
 
 
 def main() -> int:
@@ -204,6 +284,23 @@ def main() -> int:
         "--language",
         required=True,
         choices=("en", "hi"),
+    )
+    parser.add_argument(
+        "--beam-size",
+        type=int,
+        default=3,
+        help="Beam size for evaluation. 1 reproduces greedy decoding.",
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=96,
+    )
+    parser.add_argument(
+        "--length-penalty",
+        type=float,
+        default=1.0,
+        help="Beam-search length normalization exponent.",
     )
     args = parser.parse_args()
 
