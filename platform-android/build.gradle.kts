@@ -32,10 +32,12 @@ android {
     }
 
     packaging {
-        // TFLite/ONNX/Moonshine ship native .so libs for multiple ABIs.
-        // Avoid duplicate-file merge failures from transitive dependencies.
+        // Moonshine ships its own ONNX Runtime native library. MMS TTS also
+        // uses the ONNX Runtime Java API, so both dependencies legitimately
+        // require ORT but AGP must package only one copy of the native .so.
         jniLibs {
             useLegacyPackaging = false
+            pickFirsts += "**/libonnxruntime.so"
         }
     }
 }
