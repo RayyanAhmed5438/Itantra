@@ -439,6 +439,11 @@ class AndroidBleConnectionManager(
                     if (gattClients[resolvedAddress] === gatt &&
                         characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
                     ) {
+                        android.util.Log.d(
+                            TAG,
+                            "Incoming BLE notification from " + resolvedAddress +
+                                ", bytes=" + characteristic.value.size
+                        )
                         registry.dispatchRawIncoming(
                             resolvedAddress,
                             characteristic.value
@@ -454,6 +459,11 @@ class AndroidBleConnectionManager(
                     if (gattClients[resolvedAddress] === gatt &&
                         characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
                     ) {
+                        android.util.Log.d(
+                            TAG,
+                            "Incoming BLE notification from " + resolvedAddress +
+                                ", bytes=" + value.size
+                        )
                         registry.dispatchRawIncoming(resolvedAddress, value)
                     }
                 }
