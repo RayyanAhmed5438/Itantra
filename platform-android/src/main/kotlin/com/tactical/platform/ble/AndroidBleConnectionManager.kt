@@ -555,8 +555,7 @@ class AndroidBleConnectionManager(
         if (!shouldInitiate(deviceAddress)) {
             if (registry.inboundDevice(resolvedAddress) != null) {
                 setState(resolvedAddress, BleLinkState.CONNECTED)
-                android.util.Log.d(TAG, "BLE passive link ready for " + deviceAddress)
-                return TacticalResult.Success(Unit)
+return TacticalResult.Success(Unit)
             }
 
             // Passive peers do not create a second outbound GATT session.
@@ -565,17 +564,9 @@ class AndroidBleConnectionManager(
             android.util.Log.d(TAG, "BLE passive; waiting for initiator " + deviceAddress)
             return TacticalResult.Failure("Waiting for peer to connect")
         }
-
-        android.util.Log.d(TAG, "BLE initiator; reconnecting to " + deviceAddress)
-        val device = deviceForAddress(resolvedAddress)
+val device = deviceForAddress(resolvedAddress)
             ?: return TacticalResult.Failure("Bluetooth device not found")
-        android.util.Log.d(
-            TAG,
-            "BLE initiator resolved " + deviceAddress +
-                " -> " + resolvedAddress +
-                ", bondState=" + device.bondState
-        )
-        return connect(deviceAddress)
+return connect(deviceAddress)
     }
 
     override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
