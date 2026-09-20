@@ -189,7 +189,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("build/tts/mms-tts-eng-q8-q dq/model.int8.onnx"),
+        default=Path("build/tts/mms-tts-eng-qdq/model.int8.onnx"),
         help="Output ONNX path.",
     )
     args = parser.parse_args()
