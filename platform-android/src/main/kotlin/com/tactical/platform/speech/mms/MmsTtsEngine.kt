@@ -45,6 +45,7 @@ class MmsTtsEngine @Inject constructor(
 
             val startNs = System.nanoTime()
             val inputIdsName = findInputName(currentSession, "input_ids")
+                ?: throw IllegalStateException("MMS-TTS input_ids tensor is missing")
             val attentionMaskName = findInputName(
                 currentSession,
                 "attention_mask",
@@ -126,6 +127,10 @@ class MmsTtsEngine @Inject constructor(
         val (frame, result) = synthesize(language, text)
         play(frame, result.sampleRate)
         return result
+    }
+
+    fun close() {
+        closeLoadedSession()
     }
 
     private fun ensureLoaded(language: MmsTtsLanguage, directory: File) {
