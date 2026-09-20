@@ -2,19 +2,32 @@ package com.tactical.platform.speech
 
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.api.speech.TextToSpeech
+import com.tactical.platform.speech.backend.tflite.TfliteSpeechToText
 import com.tactical.platform.speech.backend.tflite.TfliteTextToSpeech
 import dagger.Binds
 import dagger.Module
-import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Backend selection seam for speech.
+ * THE ONE FILE YOU EDIT TO SWAP INFERENCE BACKENDS.
  *
- * STT is Moonshine's English-only streaming recognizer.
- * TTS remains on the existing MMS implementation elsewhere in platform-android.
+ * Binds SpeechToText/TextToSpeech to exactly one backend package —
+ * currently TFLite. To switch to ONNX Runtime Mobile, change the two
+ * @Binds return types below to com.tactical.platform.speech.backend.onnx.
+ * OnnxSpeechToText / OnnxTextToSpeech and nothing else needs to change —
+ * engine-speech and every feature module only ever see the
+ * SpeechToText/TextToSpeech interfaces from core-platform-api, never a
+ * concrete backend type.
+ *
+ * Deliberately does NOT bind ModelProvider or ModelDownloadManager here —
+ * those are backend-independent (both backends read the same extracted
+ * model files the same way, via AssetModelProvider), so they belong in a
+ * general platform Hilt module, not this backend-swap seam. That general
+ * module isn't among platform-android's listed files yet — flag for
+ * whoever wires DI that AssetModelProvider/DynamicModelDownloadManager
+ * still need a @Binds/@Provides home somewhere.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -22,9 +35,8 @@ abstract class SpeechBackendModule {
 
     @Binds
     @Singleton
-    abstract fun bindSpeechToText(impl: MoonshineSpeechToText): SpeechToText
+    abstract fun bindSpeechToText(impl: TfliteSpeechToText): SpeechToText
 
-    // Kept for the legacy backend API; the app's active TTS path uses MMS directly.
     @Binds
     @Singleton
     abstract fun bindTextToSpeech(impl: TfliteTextToSpeech): TextToSpeech
