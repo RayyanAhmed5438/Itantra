@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
@@ -15,34 +16,69 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.tactical.app.service.TacticalMeshService
-import com.tactical.app.ui.components.*
-import com.tactical.app.ui.screens.*
-import com.tactical.app.ui.theme.*
+import com.tactical.app.ui.components.AppBottomNavigation
+import com.tactical.app.ui.screens.DevicesScreen
+import com.tactical.app.ui.screens.MessagesScreen
+import com.tactical.app.ui.screens.SquadScreen
+import com.tactical.app.ui.screens.TtsTestScreen
+import com.tactical.app.ui.theme.RedTacticalBackground
 import dagger.hilt.android.AndroidEntryPoint
+import com.tactical.platform.speech.mms.MmsTtsEngine
+import com.tactical.platform.speech.mms.MmsTtsModelStore
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private lateinit var ttsModelStore: MmsTtsModelStore
+    private lateinit var mmsTtsEngine: MmsTtsEngine
     private var startupCheckPending = false
     private var meshServiceStarted = false
     private val wirelessWarning = mutableStateOf<String?>(null)
+    private val ttsImporting = mutableStateOf(false)
+    private val ttsImportMessage = mutableStateOf<String?>(null)
+
+    private val pickTtsZip = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri ?: return@registerForActivityResult
+        lifecycleScope.launch {
+            ttsImporting.value = true
+            ttsImportMessage.value = "Importing model pack…"
+            runCatching {
+                mmsTtsEngine.close()
+                ttsModelStore.importZip(uri)
+            }.onSuccess { count ->
+                ttsImportMessage.value = "Imported " + count + " language model(s)."
+            }.onFailure { error ->
+                ttsImportMessage.value =
+                    "Import failed: " + (error.message ?: error.javaClass.simpleName)
+            }
+            ttsImporting.value = false
+        }
+    }
 
     private val wirelessStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -66,61 +102,104 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        ttsModelStore = androidx.core.app.ComponentActivityCompat
+            .getActivityResultRegistry(this)
+            .let { @Suppress("UNUSED_VARIABLE") _ -> error("unreachable") }
+
         setContent {
             RedTacticalTheme {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
+                var showTtsLab by remember { mutableStateOf(false) }
 
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = {
-                                Text(
-                                    text = "Itantra",
-                                    color = Color.White
+                if (showTtsLab) {
+                    TtsTestScreen(
+                        installedLanguages = ttsModelStore.installedLanguages(),
+                        isImporting = ttsImporting.value,
+                        importMessage = ttsImportMessage.value,
+                        onImportZip = {
+                            pickTtsZip.launch(
+                                arrayOf(
+                                    "application/zip",
+                                    "application/octet-stream"
                                 )
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = RedTacticalBackground,
-                                titleContentColor = Color.White
                             )
-                        )
-                    },
-                    bottomBar = {
-                        AppBottomNavigation(
-                            selectedTab = selectedTab,
-                            onTabSelected = { tab -> selectedTab = tab }
-                        )
-                    },
-                    containerColor = RedTacticalBackground
-                ) { padding ->
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(padding)
-                    ) {
-                        when (selectedTab) {
-                            0 -> DevicesScreen(
-                                uiState = state,
-                                onScan = viewModel::forceDiscovery,
-                                onPair = viewModel::pairPeer
+                        },
+                        onSpeak = { language, text ->
+                            mmsTtsEngine.synthesizeAndPlay(language, text)
+                        },
+                        onDismiss = { showTtsLab = false }
+                    )
+                } else {
+                    Scaffold(
+                        topBar = {
+                            TopAppBar(
+                                title = {
+                                    Text(
+                                        text = "Itantra",
+                                        color = Color.White
+                                    )
+                                },
+                                actions = {
+                                    IconButton(onClick = { showTtsLab = true }) {
+                                        Icon(
+                                            Icons.Default.RecordVoiceOver,
+                                            contentDescription = "TTS Model Lab",
+                                            tint = Color.White
+                                        )
+                                    }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = RedTacticalBackground,
+                                    titleContentColor = Color.White
+                                )
                             )
-                            1 -> SquadScreen(state, onRefresh = viewModel::forceDiscovery)
-                            2 -> MessagesScreen(state, viewModel::sendTextMessage)
-                        }
+                        },
+                        bottomBar = {
+                            AppBottomNavigation(
+                                selectedTab = selectedTab,
+                                onTabSelected = { tab -> selectedTab = tab }
+                            )
+                        },
+                        containerColor = RedTacticalBackground
+                    ) { padding ->
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(padding)
+                        ) {
+                            when (selectedTab) {
+                                0 -> DevicesScreen(
+                                    uiState = state,
+                                    onScan = viewModel::forceDiscovery,
+                                    onPair = viewModel::pairPeer
+                                )
+                                1 -> SquadScreen(
+                                    state,
+                                    onRefresh = viewModel::forceDiscovery
+                                )
+                                2 -> MessagesScreen(
+                                    state,
+                                    viewModel::sendTextMessage
+                                )
+                            }
 
-                        wirelessWarning.value?.let { message ->
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .fillMaxWidth(),
-                                color = Color(0xFF7A1F1F)
-                            ) {
-                                Text(
-                                    text = message,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                                )
+                            wirelessWarning.value?.let { message ->
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .fillMaxWidth(),
+                                    color = Color(0xFF7A1F1F)
+                                ) {
+                                    Text(
+                                        text = message,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 10.dp
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -138,7 +217,11 @@ class MainActivity : ComponentActivity() {
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(wirelessStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(
+                wirelessStateReceiver,
+                filter,
+                Context.RECEIVER_NOT_EXPORTED
+            )
         } else {
             @Suppress("DEPRECATION")
             registerReceiver(wirelessStateReceiver, filter)
@@ -161,7 +244,6 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
             } else {
-                // Required by Wi-Fi Direct on Android 12L and lower.
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
         }.distinct()
@@ -195,9 +277,6 @@ class MainActivity : ComponentActivity() {
             else -> "Wi-Fi is off. Turn it on."
         }
 
-        // BLE is the primary transport and must keep working even when
-        // Wi-Fi is disabled (for example, while the user is using the
-        // phone's hotspot). Wi-Fi state is informational for now.
         if (bluetoothOn) {
             startupCheckPending = false
             if (!meshServiceStarted) {
