@@ -49,6 +49,3 @@ Thumbs.db
 # Large local TTS model pack (bundled into debug APK but not committed to Git)
 app/src/main/assets/models/quantized_models.zip
 
-# Bundled Moonshine Tiny STT model pack (generated locally from the downloaded model cache)
-app/src/main/assets/models/moonshine_stt_tiny_en.zip
-platform-android/src/main/assets/models/moonshine_stt_tiny_en.zip
