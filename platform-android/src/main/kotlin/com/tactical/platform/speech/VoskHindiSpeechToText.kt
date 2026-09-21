@@ -10,8 +10,6 @@ import kotlinx.coroutines.flow.flowOn
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
-import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.sync.Mutex
