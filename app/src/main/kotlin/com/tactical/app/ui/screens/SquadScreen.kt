@@ -108,13 +108,14 @@ fun SquadScreen(
                     else -> "Hold to record • release to transcribe and send"
                 }
 
-                Surface(
-                    enabled = uiState.pttSessionState == SessionState.IDLE || pttHeld,
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (pttHeld) RedTacticalPrimaryBright else RedTacticalPrimary,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(58.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (pttHeld) RedTacticalPrimaryBright else RedTacticalPrimary
+                        )
                         .pointerInput(uiState.pttSessionState) {
                             detectTapGestures(
                                 onPress = {
