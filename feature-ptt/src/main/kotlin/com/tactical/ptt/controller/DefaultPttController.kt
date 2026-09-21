@@ -29,7 +29,7 @@ class DefaultPttController(
     private val hapticFeedback: PttHapticFeedback,
     private val scope: CoroutineScope,
     private val audioConfig: AudioConfig = AudioConfig(),
-    private val releaseGraceMs: Long = 600L
+    private val releaseGraceMs: Long = 1500L
 ) : PttController {
 
     private val _state = MutableStateFlow(PttState())
@@ -45,7 +45,12 @@ class DefaultPttController(
         currentSession = session
 
         _state.update {
-            it.copy(sessionState = SessionState.ARMED, lastTranscription = null, lastResult = null)
+            it.copy(
+                sessionState = SessionState.ARMED,
+                sessionId = session.sessionId,
+                lastTranscription = null,
+                lastResult = null
+            )
         }
         hapticFeedback.onPress()
 
