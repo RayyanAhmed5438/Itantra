@@ -78,7 +78,7 @@ class DefaultPttController(
                     it.copy(
                         sessionState = SessionState.IDLE,
                         lastResult = TacticalResult.Failure(
-                            message = t.message ?: t.javaClass.simpleName
+                            error = t.message ?: t.javaClass.simpleName
                         )
                     )
                 }
