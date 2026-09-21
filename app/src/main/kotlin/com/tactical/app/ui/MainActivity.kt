@@ -220,7 +220,9 @@ class MainActivity : ComponentActivity() {
                             if (showSettings) {
                                 SettingsScreen(
                                     selectedLanguageCode = state.selectedLanguageCode,
-                                    onLanguageSelected = viewModel::setSelectedLanguage
+                                    onLanguageSelected = viewModel::setSelectedLanguage,
+                                    username = state.username,
+                                    onUsernameSave = viewModel::setUsername
                                 )
                             } else {
                                 when (selectedTab) {
