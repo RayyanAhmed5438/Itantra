@@ -75,6 +75,7 @@ data class NetworkMetrics(
 )
 
 data class MainUiState(
+    val username: String = "",
     val selectedLanguageCode: String = "hi",
     val selectedLanguage: String = "हिन्दी",
     val squadPeers: List<PeerNodeUi> = emptyList(),
@@ -106,6 +107,7 @@ class MainViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(
         MainUiState(
+            username = identityStore.callsign,
             selectedLanguageCode = speechLanguagePreferences.selectedLanguageCode,
             selectedLanguage = displayLanguageName(speechLanguagePreferences.selectedLanguageCode),
             pairedPeers = localAppDataStore.loadPairedDevices()
@@ -520,7 +522,7 @@ class MainViewModel @Inject constructor(
         }.fold(
             onSuccess = {
                 _uiState.update { state ->
-                    state.copy()
+                    state.copy(username = cleaned)
                 }
                 null
             },
