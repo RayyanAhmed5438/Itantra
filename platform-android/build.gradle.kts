@@ -9,6 +9,12 @@ import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.google.devtools.ksp)
+}
+
 abstract class PatchMoonshineAarTask : DefaultTask() {
     @get:InputFiles
     abstract val sourceFiles: ConfigurableFileCollection
@@ -52,12 +58,6 @@ abstract class PatchMoonshineAarTask : DefaultTask() {
             }
         }
     }
-}
-
-plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.hilt)
-    alias(libs.plugins.google.devtools.ksp)
 }
 
 android {
