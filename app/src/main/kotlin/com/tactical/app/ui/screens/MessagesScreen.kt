@@ -144,26 +144,20 @@ private fun MessageRow(
     message: ChatMessageUi,
     isSent: Boolean
 ) {
-    val borderColor = when {
-        isSent && message.isVoice -> RedTacticalPrimary
-        isSent -> RedTacticalStatusGreen
-        else -> Color.Transparent
+    val borderColor = if (message.isVoice) {
+        RedTacticalPrimary
+    } else {
+        RedTacticalStatusGreen
     }
 
-    val borderWidth = if (isSent) 1.dp else 0.dp
+    val borderWidth = 1.dp
 
     Card(
         colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (isSent) {
-                    Modifier.border(borderWidth, borderColor, RoundedCornerShape(12.dp))
-                } else {
-                    Modifier
-                }
-            )
+            .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(
@@ -195,7 +189,11 @@ private fun MessageRow(
 
             Text(
                 message.statusText,
-                color = if (isSent && message.isVoice) RedTacticalPrimary else if (isSent) RedTacticalStatusGreen else RedTacticalTextSecondary,
+                color = if (message.isVoice) {
+                    RedTacticalPrimary
+                } else {
+                    RedTacticalStatusGreen
+                },
                 fontSize = 10.sp
             )
         }
