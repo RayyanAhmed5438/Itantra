@@ -103,16 +103,22 @@ android {
     }
 }
 
-dependencies {
-    val moonshinePatchedAttribute =
-        Attribute.of("com.tactical.moonshine.patched", Boolean::class.javaObjectType)
+val moonshinePatchedAttribute =
+    Attribute.of("com.tactical.moonshine.patched", Boolean::class.javaObjectType)
 
+components {
+    withModule("ai.moonshine:moonshine-voice") {
+        allVariants {
+            attributes {
+                attribute(moonshinePatchedAttribute, false)
+            }
+        }
+    }
+}
+
+dependencies {
     attributesSchema {
         attribute(moonshinePatchedAttribute)
-    }
-
-    artifactTypes {
-        getByName("aar").attributes.attribute(moonshinePatchedAttribute, false)
     }
 
     // Patch Moonshine's AAR inside Gradle's dependency graph so its bundled
