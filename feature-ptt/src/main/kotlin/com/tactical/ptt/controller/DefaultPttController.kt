@@ -29,7 +29,7 @@ class DefaultPttController(
     private val hapticFeedback: PttHapticFeedback,
     private val scope: CoroutineScope,
     private val audioConfig: AudioConfig = AudioConfig(),
-    private val releaseGraceMs: Long = 1500L
+    private val releaseGraceMs: Long = 5000L
 ) : PttController {
 
     private val _state = MutableStateFlow(PttState())
