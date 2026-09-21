@@ -97,16 +97,12 @@ val patchMoonshineAar = tasks.register("patchMoonshineAar") {
     }
 }
 
-tasks.named("preBuild").configure {
-    dependsOn(patchMoonshineAar)
-}
-
 dependencies {
     // Moonshine Voice is bundled through a build-time patched AAR so its
     // private minimal libonnxruntime.so does not collide with the full
     // Microsoft ORT used by the existing MMS TTS engine.
     add("moonshineSource", "ai.moonshine:moonshine-voice:${libs.versions.moonshineVoice.get()}")
-    implementation(files(patchedMoonshineAar))
+    implementation(files(patchedMoonshineAar).builtBy(patchMoonshineAar))
 
     // Contracts this module implements
     implementation(project(":core-domain"))
