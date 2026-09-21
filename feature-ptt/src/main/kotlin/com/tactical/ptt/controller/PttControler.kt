@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 data class PttState(
     val sessionState: SessionState = SessionState.IDLE,
+    val sessionId: String? = null,
     val lastTranscription: String? = null,
     val lastResult: TacticalResult<Unit>? = null
 )
