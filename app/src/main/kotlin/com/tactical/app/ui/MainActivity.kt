@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
@@ -79,7 +80,7 @@ class MainActivity : ComponentActivity() {
             runCatching { ttsModelStore.ensureBundledModelsAvailable() }
                 .onSuccess {
                     ttsLanguages.value = ttsModelStore.installedLanguages()
-                    ttsMessage.value = "TTS models ready: " + ttsLanguages.value.size + "/10 languages."
+                    ttsMessage.value = "TTS models ready: " + ttsLanguages.value.size + " bundled languages."
                 }
                 .onFailure { error ->
                     ttsLanguages.value = ttsModelStore.installedLanguages()
@@ -136,19 +137,63 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         topBar = {
                             TopAppBar(
+                                navigationIcon = {
+                                    if (showSettings) {
+                                        IconButton(onClick = { showSettings = false }) {
+                                            Icon(
+                                                Icons.Default.ArrowBack,
+                                                contentDescription = "Back",
+                                                tint = Color.White
+                                            )
+                                        }
+                                    }
+                                },
                                 title = {
-                                    Text(
-                                        text = "Itantra",
-                                        color = Color.White
-                                    )
+                                    androidx.compose.foundation.layout.Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (showSettings) "Settings" else "Itantra",
+                                            color = Color.White
+                                        )
+                                        if (!showSettings) {
+                                            androidx.compose.foundation.layout.Spacer(
+                                                Modifier.width(6.dp)
+                                            )
+                                            Surface(
+                                                color = Color(0xFF3A1414),
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = state.selectedLanguage,
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 7.dp,
+                                                        vertical = 4.dp
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
                                 },
                                 actions = {
-                                    IconButton(onClick = { showTtsLab = true }) {
-                                        Icon(
-                                            Icons.Default.RecordVoiceOver,
-                                            contentDescription = "TTS Model Lab",
-                                            tint = Color.White
-                                        )
+                                    if (!showSettings) {
+                                        IconButton(onClick = { showTtsLab = true }) {
+                                            Icon(
+                                                Icons.Default.RecordVoiceOver,
+                                                contentDescription = "TTS Model Lab",
+                                                tint = Color.White
+                                            )
+                                        }
+                                        IconButton(onClick = { showSettings = true }) {
+                                            Icon(
+                                                Icons.Default.Settings,
+                                                contentDescription = "Settings",
+                                                tint = Color.White
+                                            )
+                                        }
                                     }
                                 },
                                 colors = TopAppBarDefaults.topAppBarColors(
