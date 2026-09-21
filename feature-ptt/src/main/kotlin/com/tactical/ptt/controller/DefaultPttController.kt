@@ -58,15 +58,29 @@ class DefaultPttController(
         val frames = audioRecorder.start(audioConfig)
 
         sessionJob = scope.launch {
-            speechToText.transcribe(frames).collect { chunk ->
-                if (chunk.isFinal) {
-                    _state.update {
-                        it.copy(lastTranscription = chunk.text, sessionState = SessionState.TRANSMITTING)
+            try {
+                speechToText.transcribe(frames).collect { chunk ->
+                    if (chunk.isFinal) {
+                        _state.update {
+                            it.copy(
+                                lastTranscription = chunk.text,
+                                sessionState = SessionState.TRANSMITTING
+                            )
+                        }
+                        transmit(session, chunk)
+                        _state.update { it.copy(sessionState = SessionState.IDLE) }
+                    } else {
+                        _state.update { it.copy(lastTranscription = chunk.text) }
                     }
-                    transmit(session, chunk)
-                    _state.update { it.copy(sessionState = SessionState.IDLE) }
-                } else {
-                    _state.update { it.copy(lastTranscription = chunk.text) }
+                }
+            } catch (t: Throwable) {
+                _state.update {
+                    it.copy(
+                        sessionState = SessionState.IDLE,
+                        lastResult = TacticalResult.Failure(
+                            message = t.message ?: t.javaClass.simpleName
+                        )
+                    )
                 }
             }
         }
