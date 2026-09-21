@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class PeriodicBeaconEmitter(
     private val localDeviceId: DeviceId,
-    private val callsign: String,
+    private val callsignProvider: () -> String,
     private val transport: RadioTransport,
     private val bleAdvertiser: BleBeaconAdvertiser,
     private val scope: CoroutineScope =
@@ -59,7 +59,7 @@ class PeriodicBeaconEmitter(
     private suspend fun emitBeacon() {
         val beacon = BeaconPacket(
             sender = localDeviceId,
-            callsign = callsign,
+            callsign = callsignProvider(),
             timestamp = System.currentTimeMillis()
         )
 
