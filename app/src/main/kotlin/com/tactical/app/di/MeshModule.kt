@@ -107,12 +107,12 @@ object MeshModule {
     @Singleton
     fun provideBeaconEmitter(
         @LocalDeviceIdValue localDeviceIdValue: String,
-        @LocalCallsign callsign: String,
+        identityStore: DeviceIdentityStore,
         transport: RadioTransport,
         bleAdvertiser: BleBeaconAdvertiser
     ): BeaconEmitter = PeriodicBeaconEmitter(
         localDeviceId = DeviceId(localDeviceIdValue),
-        callsign = callsign,
+        callsignProvider = identityStore::callsign,
         transport = transport,
         bleAdvertiser = bleAdvertiser
     )
@@ -137,7 +137,7 @@ object MeshModule {
         emitter: BeaconEmitter,
         wifiDirectManager: WifiDirectManager,
         @LocalDeviceIdValue localDeviceIdValue: String,
-        @LocalCallsign localCallsign: String
+        identityStore: DeviceIdentityStore
     ): DiscoveryService =
         DefaultDiscoveryService(
             scanner = scanner,
@@ -145,6 +145,6 @@ object MeshModule {
             emitter = emitter,
             wifiDirectManager = wifiDirectManager,
             localDeviceId = localDeviceIdValue,
-            localCallsign = localCallsign
+            localCallsignProvider = identityStore::callsign
         )
 }
