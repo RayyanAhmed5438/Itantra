@@ -2,9 +2,7 @@ package com.tactical.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -117,20 +115,18 @@ fun SquadScreen(
                         .fillMaxWidth()
                         .height(58.dp)
                         .pointerInput(uiState.pttSessionState) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                pttHeld = true
-                                onPttPress()
-
-                                val up = waitForUpOrCancellation()
-                                pttHeld = false
-                                if (up != null) {
-                                    onPttRelease()
-                                } else {
-                                    onPttRelease()
+                            detectTapGestures(
+                                onPress = {
+                                    pttHeld = true
+                                    onPttPress()
+                                    try {
+                                        awaitRelease()
+                                    } finally {
+                                        pttHeld = false
+                                        onPttRelease()
+                                    }
                                 }
-                                down.consume()
-                            }
+                            )
                         },
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
