@@ -1,3 +1,9 @@
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.hilt)
@@ -42,7 +48,67 @@ android {
     }
 }
 
+val moonshineSource = configurations.create("moonshineSource") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val patchedMoonshineAar = layout.buildDirectory.file(
+    "generated/moonshine/moonshine-voice-${libs.versions.moonshineVoice.get()}-no-ort.aar"
+)
+
+val patchMoonshineAar = tasks.register("patchMoonshineAar") {
+    inputs.files(moonshineSource)
+    outputs.file(patchedMoonshineAar)
+
+    doLast {
+        val source = moonshineSource.singleFile
+        val output = patchedMoonshineAar.get().asFile
+        output.parentFile.mkdirs()
+
+        ZipInputStream(
+            BufferedInputStream(source.inputStream())
+        ).use { input ->
+            ZipOutputStream(
+                BufferedOutputStream(output.outputStream())
+            ).use { out ->
+                while (true) {
+                    val entry = input.nextEntry ?: break
+                    val normalized = entry.name.replace('\\', '/')
+                    val isMoonshineBundledOrt =
+                        normalized.startsWith("jni/") &&
+                            normalized.substringAfterLast('/') == "libonnxruntime.so"
+
+                    if (!isMoonshineBundledOrt) {
+                        val copied = ZipEntry(normalized)
+                        if (entry.time >= 0L) {
+                            copied.time = entry.time
+                        }
+                        out.putNextEntry(copied)
+                        if (!entry.isDirectory) {
+                            input.copyTo(out, 64 * 1024)
+                        }
+                        out.closeEntry()
+                    }
+
+                    input.closeEntry()
+                }
+            }
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(patchMoonshineAar)
+}
+
 dependencies {
+    // Moonshine Voice is bundled through a build-time patched AAR so its
+    // private minimal libonnxruntime.so does not collide with the full
+    // Microsoft ORT used by the existing MMS TTS engine.
+    add("moonshineSource", "ai.moonshine:moonshine-voice:${libs.versions.moonshineVoice.get()}")
+    implementation(files(patchedMoonshineAar))
+
     // Contracts this module implements
     implementation(project(":core-domain"))
     implementation(project(":core-platform-api"))
@@ -54,6 +120,12 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // Moonshine's AAR compiles against these runtime dependencies.
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.10.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.work:work-runtime:2.9.1")
 
     // On-device inference backends — `implementation`, never `api`, so
     // dependent modules (engine-speech, feature-ptt, app) never see these
