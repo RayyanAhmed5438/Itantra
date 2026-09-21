@@ -19,7 +19,7 @@ class TacticalApplication : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val meshChannel = NotificationChannel(
                 CHANNEL_MESH,
-                "SENTINEL Mesh Service",
+                "Itantra Mesh Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Monitors tactical mesh network connections and incoming transmissions."
@@ -27,7 +27,7 @@ class TacticalApplication : Application() {
 
             val emergencyChannel = NotificationChannel(
                 CHANNEL_EMERGENCY,
-                "SENTINEL Emergency Alerts",
+                "Itantra Emergency Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "High-priority distress alerts and squelch breaker announcements."
