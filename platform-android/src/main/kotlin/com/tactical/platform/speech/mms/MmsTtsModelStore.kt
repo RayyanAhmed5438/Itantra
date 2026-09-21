@@ -29,8 +29,10 @@ class MmsTtsModelStore @Inject constructor(
         get() = File(context.filesDir, "tts_models")
 
     suspend fun ensureBundledModelsAvailable(): Int = withContext(Dispatchers.IO) {
-        val installed = installedLanguages()
-        if (installed.size == MmsTtsLanguage.ALL.size) return@withContext installed.size
+        val bundledInstalled = BUNDLED_LANGUAGES.count { isInstalled(it) }
+        if (bundledInstalled == BUNDLED_LANGUAGES.size) {
+            return@withContext bundledInstalled
+        }
 
         val tempRoot = File(
             context.cacheDir,
@@ -61,7 +63,11 @@ class MmsTtsModelStore @Inject constructor(
                     }
 
                     val language = MmsTtsLanguage.fromModelCode(parts[0])
-                    if (language == null || parts[1] !in ALLOWED_FILES) {
+                    if (
+                        language == null ||
+                        language !in BUNDLED_LANGUAGES ||
+                        parts[1] !in ALLOWED_FILES
+                    ) {
                         zip.closeEntry()
                         continue
                     }
@@ -84,15 +90,15 @@ class MmsTtsModelStore @Inject constructor(
                 }
             }
 
-            val completeLanguages = MmsTtsLanguage.ALL.filter {
+            val completeLanguages = BUNDLED_LANGUAGES.filter {
                 isComplete(tempRoot.resolve(it.modelCode))
             }
 
-            if (completeLanguages.size != MmsTtsLanguage.ALL.size) {
+            if (completeLanguages.size != BUNDLED_LANGUAGES.size) {
                 throw IOException(
                     "Bundled TTS archive is incomplete: " +
                         completeLanguages.size + "/" +
-                        MmsTtsLanguage.ALL.size + " language models found"
+                        BUNDLED_LANGUAGES.size + " bundled language models found"
                 )
             }
 
@@ -143,6 +149,17 @@ class MmsTtsModelStore @Inject constructor(
         private const val BUNDLED_ZIP_ASSET = "models/quantized_models.zip"
         private const val ZIP_ROOT = "quantized_models"
         private const val BUFFER_SIZE = 64 * 1024
+
+        // Keep ALL languages available for future language support, but only
+        // these models are shipped in the current bundled ZIP.
+        private val BUNDLED_LANGUAGES = MmsTtsLanguage.ALL.filter {
+            it.modelCode in BUNDLED_MODEL_CODES
+        }
+
+        private val BUNDLED_MODEL_CODES = setOf(
+            "eng",
+            "hin"
+        )
 
         private val ALLOWED_FILES = setOf(
             "config.json",
