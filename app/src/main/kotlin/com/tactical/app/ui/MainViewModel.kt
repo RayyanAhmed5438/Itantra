@@ -13,6 +13,7 @@ import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.platform.speech.mms.MmsTtsModelStore
+import com.tactical.platform.speech.SpeechLanguagePreferences
 import com.tactical.ptt.controller.DefaultPttController
 import com.tactical.ptt.controller.PttController
 import com.tactical.ptt.feedback.PatternedHapticFeedback
@@ -69,6 +70,7 @@ data class NetworkMetrics(
 )
 
 data class MainUiState(
+    val selectedLanguageCode: String = "hi",
     val selectedLanguage: String = "हिन्दी",
     val squadPeers: List<PeerNodeUi> = emptyList(),
     val availablePeers: List<PeerNodeUi> = emptyList(),
@@ -92,10 +94,16 @@ class MainViewModel @Inject constructor(
     private val speechToText: SpeechToText,
     private val hapticEngine: HapticEngine,
     private val mmsTtsEngine: MmsTtsEngine,
-    private val mmsTtsModelStore: MmsTtsModelStore
+    private val mmsTtsModelStore: MmsTtsModelStore,
+    private val speechLanguagePreferences: SpeechLanguagePreferences
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MainUiState())
+    private val _uiState = MutableStateFlow(
+        MainUiState(
+            selectedLanguageCode = speechLanguagePreferences.selectedLanguageCode,
+            selectedLanguage = displayLanguageName(speechLanguagePreferences.selectedLanguageCode)
+        )
+    )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     private val estimator = RssiProximityEstimator()
     private var scanJob: Job? = null
@@ -445,6 +453,18 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch { bleConnectionManager.repairAndReconnect(deviceAddress) }
     }
 
+    fun setSelectedLanguage(languageCode: String) {
+        if (languageCode !in setOf("hi", "en")) return
+
+        speechLanguagePreferences.setSelectedLanguageCode(languageCode)
+        _uiState.update {
+            it.copy(
+                selectedLanguageCode = languageCode,
+                selectedLanguage = displayLanguageName(languageCode)
+            )
+        }
+    }
+
     fun pressPtt() {
         viewModelScope.launch {
             runCatching { pttController.press() }
@@ -545,6 +565,13 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    private fun displayLanguageName(languageCode: String): String =
+        when (languageCode) {
+            "hi" -> "हिन्दी"
+            "en" -> "English"
+            else -> languageCode.uppercase(Locale.US)
+        }
 
     private fun formatDistance(distance: Double): String =
         if (distance < 0) "Unknown"
