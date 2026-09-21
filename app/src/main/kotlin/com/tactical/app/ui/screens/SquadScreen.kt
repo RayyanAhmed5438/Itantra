@@ -41,142 +41,268 @@ fun SquadScreen(
     onPttRelease: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    val connectedPeers = uiState.pairedPeers.filter { it.isConnected }
+    val pairedPeers = uiState.pairedPeers.filter { !it.isConnected }
+    val hasConnection = connectedPeers.isNotEmpty()
+    val pttEnabled = hasConnection &&
+        uiState.pttSessionState != SessionState.TRANSMITTING &&
+        uiState.pttSessionState != SessionState.ARMED
+
+    var pttHeld by remember { mutableStateOf(false) }
+
+    val pttLabel = when (uiState.pttSessionState) {
+        SessionState.ARMED -> "STARTING"
+        SessionState.RECORDING -> "RECORDING"
+        SessionState.TRANSMITTING -> "SENDING"
+        else -> if (hasConnection) "PUSH TO TALK" else "NO CONNECTION"
+    }
+
+    val pttHint = when (uiState.pttSessionState) {
+        SessionState.RECORDING -> "Release to stop recording"
+        SessionState.TRANSMITTING -> "Transcribing and sending…"
+        else -> if (hasConnection) {
+            "Hold to record • release to transcribe and send"
+        } else {
+            "Connect to a squad member to enable PTT"
+        }
+    }
+
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(RedTacticalBackground)
             .padding(horizontal = 20.dp, vertical = 12.dp)
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = 18.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("SQUAD", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-                Spacer(Modifier.height(3.dp))
-                Text(uiState.pairedPeers.size.toString() + " PAIRED • BLE MESH", color = RedTacticalTextSecondary, fontSize = 11.sp)
-            }
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "SQUAD",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "\${connectedPeers.size} CONNECTED • \${pairedPeers.size} PAIRED",
+                        color = RedTacticalTextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = Color.White
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        item {
+            Spacer(Modifier.height(4.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-        ) {
-            if (uiState.pairedPeers.isEmpty()) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("NO PAIRED DEVICES", color = Color.White, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(5.dp))
-                            Text("Pair a nearby device from the home screen to add it to the squad.", color = RedTacticalTextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
-                        }
-                    }
-                }
-            } else {
-                items(uiState.pairedPeers, key = { it.deviceAddress }) { peer ->
-                    PeerCard(peer)
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(6.dp))
-                var pttHeld by remember { mutableStateOf(false) }
-
-                val pttLabel = when (uiState.pttSessionState) {
-                    SessionState.ARMED -> "STARTING…"
-                    SessionState.RECORDING -> "RECORDING…"
-                    SessionState.TRANSMITTING -> "TRANSCRIBING & SENDING…"
-                    else -> "PUSH TO TALK"
-                }
-
-                val pttHint = when (uiState.pttSessionState) {
-                    SessionState.RECORDING -> "Release to stop recording"
-                    SessionState.TRANSMITTING -> "Sending transcription to the squad…"
-                    else -> "Hold to record • release to transcribe and send"
-                }
-
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .size(190.dp)
+                        .clip(CircleShape)
                         .background(
-                            if (pttHeld) RedTacticalPrimaryBright else RedTacticalPrimary
+                            when {
+                                !pttEnabled -> RedTacticalSurface
+                                pttHeld -> RedTacticalPrimaryBright
+                                else -> RedTacticalPrimary
+                            }
                         )
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    pttHeld = true
-                                    onPttPress()
-                                    try {
-                                        awaitRelease()
-                                    } finally {
-                                        pttHeld = false
-                                        onPttRelease()
-                                    }
+                        .border(
+                            width = if (pttEnabled) 2.dp else 1.dp,
+                            color = when {
+                                !pttEnabled -> RedTacticalSurfaceBorder
+                                pttHeld -> RedTacticalPrimaryBright
+                                else -> RedTacticalPrimary
+                            },
+                            shape = CircleShape
+                        )
+                        .then(
+                            if (pttEnabled) {
+                                Modifier.pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            pttHeld = true
+                                            onPttPress()
+                                            try {
+                                                awaitRelease()
+                                            } finally {
+                                                pttHeld = false
+                                                onPttRelease()
+                                            }
+                                        }
+                                    )
                                 }
-                            )
-                        }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(Icons.Default.Mic, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(pttLabel, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = if (pttEnabled) Color.White else RedTacticalTextSecondary,
+                            modifier = Modifier.size(38.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            pttLabel,
+                            color = if (pttEnabled) Color.White else RedTacticalTextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
+            }
 
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    pttHint,
-                    color = RedTacticalTextSecondary,
-                    fontSize = 10.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                pttHint,
+                color = RedTacticalTextSecondary,
+                fontSize = 10.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        }
+
+        item {
+            SectionDividerLabel("CONNECTED DEVICES")
+        }
+
+        if (connectedPeers.isEmpty()) {
+            item {
+                EmptySquadSection("No connected devices")
+            }
+        } else {
+            items(
+                connectedPeers,
+                key = { "connected_" + it.deviceAddress }
+            ) { peer ->
+                PeerCard(peer)
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(2.dp))
+            SectionDividerLabel("PAIRED DEVICES")
+        }
+
+        if (pairedPeers.isEmpty()) {
+            item {
+                EmptySquadSection(
+                    if (uiState.pairedPeers.isEmpty()) {
+                        "No paired devices"
+                    } else {
+                        "All paired devices are connected"
+                    }
                 )
+            }
+        } else {
+            items(
+                pairedPeers,
+                key = { "paired_" + it.deviceAddress }
+            ) { peer ->
+                PeerCard(peer)
+            }
+        }
 
-                uiState.pttLastTranscription?.takeIf { it.isNotBlank() }?.let { transcript ->
-                    Spacer(Modifier.height(8.dp))
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                "LAST PTT TRANSCRIPTION",
-                                color = RedTacticalTextSecondary,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.8.sp
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                transcript,
-                                color = Color.White,
-                                fontSize = 13.sp
-                            )
-                        }
+        uiState.pttLastTranscription?.takeIf { it.isNotBlank() }?.let { transcript ->
+            item {
+                Spacer(Modifier.height(2.dp))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = RedTacticalSurface
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            "LAST PTT TRANSCRIPTION",
+                            color = RedTacticalTextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            transcript,
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionDividerLabel(label: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = RedTacticalSurfaceBorder
+        )
+        Text(
+            text = label,
+            color = RedTacticalTextSecondary,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.9.sp,
+            modifier = Modifier.padding(horizontal = 10.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = RedTacticalSurfaceBorder
+        )
+    }
+}
+
+@Composable
+private fun EmptySquadSection(message: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = message,
+            color = RedTacticalTextSecondary,
+            fontSize = 12.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            textAlign = TextAlign.Center
+        )
     }
 }
 
