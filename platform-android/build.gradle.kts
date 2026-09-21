@@ -1,21 +1,3 @@
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
-import org.gradle.api.artifacts.transform.InputArtifact
-import org.gradle.api.artifacts.transform.TransformAction
-import org.gradle.api.artifacts.transform.TransformOutputs
-import org.gradle.api.artifacts.transform.TransformParameters
-import org.gradle.api.attributes.Attribute
-import org.gradle.api.file.FileSystemLocation
-import org.gradle.api.provider.Provider
-import org.gradle.api.artifacts.transform.CacheableTransform
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-
-
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.hilt)
@@ -64,49 +46,10 @@ abstract class StripMoonshineOrtTransform : TransformAction<TransformParameters.
 }
 
 
-
-android {
-    namespace = "com.tactical.platform"
-    compileSdk = libs.versions.compileSdk.get().toInt()
-
-    defaultConfig {
-        minSdk = 28
-        // targetSdk is not set on library modules (AGP ignores it there);
-        // the app module's targetSdk governs runtime behavior.
-
-
-    }
-
-    buildFeatures {
-        // No Compose/View binding needed here — this module is pure
-        // hardware/model glue, no UI.
-        buildConfig = false
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        }
-    }
-
-    packaging {
-        // TFLite/ONNX ship native .so libs for multiple ABIs; avoid
-        // duplicate-file merge failures from transitive deps.
-        jniLibs {
-            useLegacyPackaging = false
-        }
-    }
-}
-
-val moonshinePatchedAttribute =
-    Attribute.of("com.tactical.moonshine.patched", Boolean::class.javaObjectType)
-
 dependencies {
+    // Patched Moonshine AAR supplied by a dedicated imported-AAR module.
+    implementation(project(path = ":moonshine-voice-patched", configuration = "default"))
+
     components {
         withModule("ai.moonshine:moonshine-voice") {
             allVariants {
