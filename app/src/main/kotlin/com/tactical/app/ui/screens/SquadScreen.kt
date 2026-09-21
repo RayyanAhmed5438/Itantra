@@ -116,7 +116,7 @@ fun SquadScreen(
                         .background(
                             if (pttHeld) RedTacticalPrimaryBright else RedTacticalPrimary
                         )
-                        .pointerInput(uiState.pttSessionState) {
+                        .pointerInput(Unit) {
                             detectTapGestures(
                                 onPress = {
                                     pttHeld = true
