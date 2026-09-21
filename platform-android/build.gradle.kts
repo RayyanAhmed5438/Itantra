@@ -3,24 +3,70 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.google.devtools.ksp)
 }
-@CacheableTransform
-abstract class StripMoonshineOrtTransform : TransformAction<TransformParameters.None> {
-    @get:InputArtifact
-    @get:PathSensitive(PathSensitivity.NAME_ONLY)
-    abstract val inputArtifact: Provider<FileSystemLocation>
 
-    override fun transform(outputs: TransformOutputs) {
-        val input = inputArtifact.get().asFile
-        val output = outputs.file(input.nameWithoutExtension + "-patched.aar")
+android {
+    namespace = "com.tactical.platform"
+    compileSdk = libs.versions.compileSdk.get().toInt()
+
+    defaultConfig {
+        minSdk = 28
+        // targetSdk is not set on library modules (AGP ignores it there);
+        // the app module's targetSdk governs runtime behavior.
+
+
+    }
+
+    buildFeatures {
+        // No Compose/View binding needed here — this module is pure
+        // hardware/model glue, no UI.
+        buildConfig = false
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
+    }
+
+    packaging {
+        // TFLite/ONNX ship native .so libs for multiple ABIs; avoid
+        // duplicate-file merge failures from transitive deps.
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+}
+
+val moonshineSource = configurations.create("moonshineSource") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val patchedMoonshineAar = file(
+    "libs/moonshine-voice-${libs.versions.moonshineVoice.get()}-no-ort.aar"
+)
+
+val patchMoonshineAar = tasks.register("patchMoonshineAar") {
+    inputs.files(moonshineSource)
+    outputs.file(patchedMoonshineAar)
+
+    doLast {
+        val source = moonshineSource.singleFile
+        patchedMoonshineAar.parentFile.mkdirs()
 
         ZipInputStream(
-            BufferedInputStream(input.inputStream())
-        ).use { source ->
+            BufferedInputStream(source.inputStream())
+        ).use { input ->
             ZipOutputStream(
-                BufferedOutputStream(output.outputStream())
-            ).use { target ->
+                BufferedOutputStream(patchedMoonshineAar.outputStream())
+            ).use { out ->
                 while (true) {
-                    val entry = source.nextEntry ?: break
+                    val entry = input.nextEntry ?: break
                     val normalized = entry.name.replace('\\', '/')
                     val isMoonshineBundledOrt =
                         normalized.startsWith("jni/") &&
@@ -31,63 +77,26 @@ abstract class StripMoonshineOrtTransform : TransformAction<TransformParameters.
                         if (entry.time >= 0L) {
                             copied.time = entry.time
                         }
-                        target.putNextEntry(copied)
+                        out.putNextEntry(copied)
                         if (!entry.isDirectory) {
-                            source.copyTo(target, 64 * 1024)
+                            input.copyTo(out, 64 * 1024)
                         }
-                        target.closeEntry()
+                        out.closeEntry()
                     }
 
-                    source.closeEntry()
+                    input.closeEntry()
                 }
             }
         }
     }
 }
 
+val patchedMoonshineModule =
+    project(path = ":moonshine-voice-patched", configuration = "default")
 
 dependencies {
-    // Patched Moonshine AAR supplied by a dedicated imported-AAR module.
-    implementation(project(path = ":moonshine-voice-patched", configuration = "default"))
-
-    components {
-        withModule("ai.moonshine:moonshine-voice") {
-            allVariants {
-                attributes {
-                    attribute(moonshinePatchedAttribute, false)
-                }
-            }
-        }
-    }
-
-    attributesSchema {
-        attribute(moonshinePatchedAttribute)
-    }
-
-    artifactTypes {
-        maybeCreate("aar").attributes.attribute(moonshinePatchedAttribute, false)
-    }
-
-    // Patch Moonshine's AAR inside Gradle's dependency graph so its bundled
-    // minimal ORT does not collide with the full Microsoft ORT used by MMS TTS.
-    registerTransform(StripMoonshineOrtTransform::class.java) {
-        from.attribute(
-            org.gradle.api.artifacts.type.ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
-            "aar"
-        )
-        from.attribute(moonshinePatchedAttribute, false)
-        to.attribute(
-            org.gradle.api.artifacts.type.ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
-            "aar"
-        )
-        to.attribute(moonshinePatchedAttribute, true)
-    }
-
-    implementation("ai.moonshine:moonshine-voice:" + libs.versions.moonshineVoice.get()) {
-        attributes {
-            attribute(moonshinePatchedAttribute, true)
-        }
-    }
+    // Patched Moonshine AAR with its bundled ORT removed.
+    implementation(patchedMoonshineModule)
 
     // Contracts this module implements
     implementation(project(":core-domain"))
