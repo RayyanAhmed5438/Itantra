@@ -2,7 +2,7 @@ package com.tactical.platform.speech
 
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.api.speech.TextToSpeech
-import com.tactical.platform.speech.backend.tflite.TfliteSpeechToText
+import com.tactical.platform.speech.MoonshineSpeechToText
 import com.tactical.platform.speech.backend.tflite.TfliteTextToSpeech
 import dagger.Binds
 import dagger.Module
@@ -35,7 +35,7 @@ abstract class SpeechBackendModule {
 
     @Binds
     @Singleton
-    abstract fun bindSpeechToText(impl: TfliteSpeechToText): SpeechToText
+    abstract fun bindSpeechToText(impl: MoonshineSpeechToText): SpeechToText
 
     @Binds
     @Singleton
