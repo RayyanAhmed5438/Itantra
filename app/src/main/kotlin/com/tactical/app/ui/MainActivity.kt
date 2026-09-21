@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.tactical.app.service.TacticalMeshService
@@ -40,6 +43,7 @@ import com.tactical.app.ui.components.AppBottomNavigation
 import com.tactical.app.ui.screens.DevicesScreen
 import com.tactical.app.ui.screens.MessagesScreen
 import com.tactical.app.ui.screens.SquadScreen
+import com.tactical.app.ui.screens.SettingsScreen
 import com.tactical.app.ui.screens.TtsTestScreen
 import com.tactical.app.ui.theme.RedTacticalBackground
 import com.tactical.app.ui.theme.RedTacticalTheme
@@ -112,6 +116,7 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var showTtsLab by remember { mutableStateOf(false) }
+                var showSettings by remember { mutableStateOf(false) }
 
                 LaunchedEffect(showTtsLab) {
                     if (showTtsLab) loadBundledTtsModels()
@@ -165,8 +170,14 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .padding(padding)
                         ) {
-                            when (selectedTab) {
-                                0 -> DevicesScreen(
+                            if (showSettings) {
+                                SettingsScreen(
+                                    selectedLanguageCode = state.selectedLanguageCode,
+                                    onLanguageSelected = viewModel::setSelectedLanguage
+                                )
+                            } else {
+                                when (selectedTab) {
+                                    0 -> DevicesScreen(
                                     uiState = state,
                                     onScan = viewModel::forceDiscovery,
                                     onPair = viewModel::pairPeer
@@ -177,10 +188,11 @@ class MainActivity : ComponentActivity() {
                                     onPttPress = viewModel::pressPtt,
                                     onPttRelease = viewModel::releasePtt
                                 )
-                                2 -> MessagesScreen(
-                                    state,
-                                    viewModel::sendTextMessage
-                                )
+                                    2 -> MessagesScreen(
+                                        state,
+                                        viewModel::sendTextMessage
+                                    )
+                                }
                             }
 
                             wirelessWarning.value?.let { message ->
