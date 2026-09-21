@@ -203,10 +203,12 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         bottomBar = {
-                            AppBottomNavigation(
-                                selectedTab = selectedTab,
-                                onTabSelected = { tab -> selectedTab = tab }
-                            )
+                            if (!showSettings) {
+                                AppBottomNavigation(
+                                    selectedTab = selectedTab,
+                                    onTabSelected = { tab -> selectedTab = tab }
+                                )
+                            }
                         },
                         containerColor = RedTacticalBackground
                     ) { padding ->
