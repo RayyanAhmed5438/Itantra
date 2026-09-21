@@ -16,7 +16,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,19 +55,19 @@ fun SettingsScreen(
     onUsernameSave: (String) -> String?,
     modifier: Modifier = Modifier
 ) {
+    var usernameInput by remember(username) {
+        mutableStateOf(username)
+    }
+    var usernameError by remember {
+        mutableStateOf<String?>(null)
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(RedTacticalBackground)
             .padding(20.dp)
     ) {
-        var usernameInput by androidx.compose.runtime.remember(username) {
-            androidx.compose.runtime.mutableStateOf(username)
-        }
-        var usernameError by androidx.compose.runtime.remember {
-            androidx.compose.runtime.mutableStateOf<String?>(null)
-        }
-
         Text(
             "USERNAME / CALLSIGN",
             color = Color.White,
@@ -100,7 +107,7 @@ fun SettingsScreen(
                     }
                 )
             },
-            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = RedTacticalSurface,
                 unfocusedContainerColor = RedTacticalSurface,
                 focusedTextColor = Color.White,
@@ -114,11 +121,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(6.dp))
 
-        androidx.compose.material3.Button(
+        Button(
             onClick = {
                 usernameError = onUsernameSave(usernameInput)
             },
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            colors = ButtonDefaults.buttonColors(
                 containerColor = RedTacticalPrimary
             )
         ) {
