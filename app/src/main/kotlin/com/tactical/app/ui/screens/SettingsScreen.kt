@@ -89,10 +89,8 @@ fun SettingsScreen(
         OutlinedTextField(
             value = usernameInput,
             onValueChange = {
-                if (it.toByteArray(Charsets.UTF_8).size <= 5) {
-                    usernameInput = it
-                    usernameError = null
-                }
+                usernameInput = it
+                usernameError = null
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
