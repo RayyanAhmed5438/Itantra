@@ -38,13 +38,24 @@ class DeviceIdentityStore @Inject constructor(@ApplicationContext context: Conte
         }
     }
 
-    val callsign: String by lazy {
-        prefs.getString(KEY_CALLSIGN, null) ?: run {
-            // Must fit BleBeaconPayloadCodec's 8-byte callsign limit.
-            val default = "OP-${deviceIdValue.take(4).uppercase()}"
+    val callsign: String
+        get() = prefs.getString(KEY_CALLSIGN, null) ?: run {
+            // Keep the existing BLE-compatible default until the user chooses a name.
+            val default = "OP-" + deviceIdValue.take(2).uppercase()
             prefs.edit().putString(KEY_CALLSIGN, default).apply()
             default
         }
+
+    fun setCallsign(value: String) {
+        val cleaned = value.trim()
+        require(cleaned.isNotBlank()) { "Username must not be blank" }
+
+        val byteCount = cleaned.toByteArray(Charsets.UTF_8).size
+        require(byteCount <= 5) {
+            "Username must be at most 5 UTF-8 bytes for the existing BLE callsign field"
+        }
+
+        prefs.edit().putString(KEY_CALLSIGN, cleaned).apply()
     }
 
     companion object {
