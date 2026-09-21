@@ -108,9 +108,10 @@ fun SquadScreen(
                     else -> "Hold to record • release to transcribe and send"
                 }
 
-                Button(
-                    onClick = {},
+                Surface(
                     enabled = uiState.pttSessionState == SessionState.IDLE || pttHeld,
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (pttHeld) RedTacticalPrimaryBright else RedTacticalPrimary,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(58.dp)
@@ -127,15 +128,17 @@ fun SquadScreen(
                                     }
                                 }
                             )
-                        },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (pttHeld) RedTacticalPrimaryBright else RedTacticalPrimary
-                    )
+                        }
                 ) {
-                    Icon(Icons.Default.Mic, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(pttLabel, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Mic, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(pttLabel, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                    }
                 }
 
                 Spacer(Modifier.height(8.dp))
