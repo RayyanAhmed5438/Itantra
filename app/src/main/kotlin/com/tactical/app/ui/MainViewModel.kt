@@ -527,6 +527,12 @@ class MainViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(username = cleaned)
                 }
+                // Discovery reads the callsign from DeviceIdentityStore when
+                // advertising, so refresh the local presence after a save.
+                viewModelScope.launch {
+                    runCatching { discoveryService.stop() }
+                    runCatching { discoveryService.start() }
+                }
                 null
             },
             onFailure = { it.message ?: "Could not save username." }
