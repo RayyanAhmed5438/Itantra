@@ -202,9 +202,8 @@ def main() -> int:
     recognizer.SetWords(True)
 
     chunk_frames = max(1, int(SAMPLE_RATE * args.chunk_ms / 1000))
-    chunk_bytes = chunk_frames * 2
-
     partial_last = ""
+    final_segments: list[str] = []
     accepted_audio_seconds = 0.0
     stream_start = time.perf_counter()
 
@@ -224,6 +223,7 @@ def main() -> int:
                 result = json.loads(recognizer.Result())
                 text_value = (result.get("text") or "").strip()
                 if text_value:
+                    final_segments.append(text_value)
                     print(f"FINAL:   {text_value}")
             else:
                 partial = json.loads(recognizer.PartialResult()).get("partial", "").strip()
@@ -235,7 +235,11 @@ def main() -> int:
         wav.close()
 
     final_result = json.loads(recognizer.FinalResult())
-    final_text = (final_result.get("text") or "").strip()
+    final_tail = (final_result.get("text") or "").strip()
+    if final_tail:
+        final_segments.append(final_tail)
+
+    final_text = " ".join(final_segments).strip()
     elapsed_ms = (time.perf_counter() - stream_start) * 1000
 
     print()
