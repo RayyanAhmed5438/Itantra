@@ -104,8 +104,7 @@ class VoskHindiSttModelStore @Inject constructor(
 
     private fun isComplete(directory: File): Boolean =
         REQUIRED_FILES.all { relative ->
-            val file = File(directory, relative)
-            file.isFile && file.length() > 0L
+            File(directory, relative).isFile
         }
 
     companion object {
