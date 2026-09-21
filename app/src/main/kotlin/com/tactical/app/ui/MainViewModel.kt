@@ -3,6 +3,9 @@ package com.tactical.app.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tactical.app.di.DeviceIdentityStore
+import com.tactical.app.di.LocalAppDataStore
+import com.tactical.app.di.StoredPairedDevice
+import com.tactical.app.di.StoredReceivedMessage
 import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.identity.LinkType
 import com.tactical.domain.packet.TextPacket
@@ -33,6 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.Date
 import javax.inject.Inject
 
 data class PeerNodeUi(
@@ -95,13 +100,26 @@ class MainViewModel @Inject constructor(
     private val hapticEngine: HapticEngine,
     private val mmsTtsEngine: MmsTtsEngine,
     private val mmsTtsModelStore: MmsTtsModelStore,
-    private val speechLanguagePreferences: SpeechLanguagePreferences
+    private val speechLanguagePreferences: SpeechLanguagePreferences,
+    private val localAppDataStore: LocalAppDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         MainUiState(
             selectedLanguageCode = speechLanguagePreferences.selectedLanguageCode,
-            selectedLanguage = displayLanguageName(speechLanguagePreferences.selectedLanguageCode)
+            selectedLanguage = displayLanguageName(speechLanguagePreferences.selectedLanguageCode),
+            pairedPeers = localAppDataStore.loadPairedDevices()
+                .filter { it.deviceId in bleConnectionManager.pairedDeviceIds() }
+                .map(::storedPeerToUi),
+            squadPeers = localAppDataStore.loadPairedDevices()
+                .filter { it.deviceId in bleConnectionManager.pairedDeviceIds() }
+                .map(::storedPeerToUi),
+            receivedMessages = localAppDataStore.loadReceivedMessages()
+                .asReversed()
+                .map(::storedMessageToUi),
+            messages = localAppDataStore.loadReceivedMessages()
+                .asReversed()
+                .map(::storedMessageToUi)
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -209,9 +227,24 @@ class MainViewModel @Inject constructor(
                         val id = device.id.value
                         val previous = existing[id]
                         val hasRssi = device.rssi != 0
+                        val callsign = device.callsign.ifBlank {
+                            previous?.callsign ?: id
+                        }
+                        if (id in bleConnectionManager.pairedDeviceIds()) {
+                            localAppDataStore.savePairedDevice(
+                                StoredPairedDevice(
+                                    deviceId = id,
+                                    callsign = callsign,
+                                    lastSeenEpochMs = device.lastSeen.toEpochMilli(),
+                                    rssi = device.rssi,
+                                    linkText = device.link.name
+                                )
+                            )
+                        }
                         PeerNodeUi(
                             deviceAddress = id,
-                            callsign = device.callsign.ifBlank { previous?.callsign ?: id },
+                            callsign = localAppDataStore.callsignForPeer(id)
+                                ?: callsign,
                             isConnected = previous?.isConnected ?: false,
                             distanceText = if (hasRssi) {
                                 formatDistance(estimator.estimate(device.rssi))
@@ -290,16 +323,29 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             meshService.receive().collect { packet ->
                 if (packet is TextPacket) {
+                    val senderName =
+                        localAppDataStore.callsignForPeer(packet.sender.value)
+                            ?: packet.sender.value.take(12)
+                    val isVoiceMessage = packet.languageCode != "und"
+
                     val message = ChatMessageUi(
-                        sender = packet.sender.value.take(12),
+                        sender = senderName,
                         text = packet.text,
-                        timestampText = "Just now",
+                        timestampText = formatTimestamp(packet.timestamp),
                         statusText = "Received",
-                        // PTT currently carries the STT language code ("en");
-                        // regular typed messages use "und". Reuse the existing
-                        // isVoice flag rather than adding another message field.
-                        isVoice = packet.languageCode != "und"
+                        isVoice = isVoiceMessage
                     )
+
+                    localAppDataStore.saveReceivedMessage(
+                        StoredReceivedMessage(
+                            senderId = packet.sender.value,
+                            senderName = senderName,
+                            text = packet.text,
+                            timestampEpochMs = packet.timestamp,
+                            isVoice = isVoiceMessage
+                        )
+                    )
+
                     _uiState.update {
                         it.copy(
                             messages = listOf(message) + it.messages,
@@ -465,6 +511,23 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun setUsername(username: String): String? {
+        val cleaned = username.trim()
+        if (cleaned.isBlank()) return "Username cannot be blank."
+
+        return runCatching {
+            identityStore.setCallsign(cleaned)
+        }.fold(
+            onSuccess = {
+                _uiState.update { state ->
+                    state.copy()
+                }
+                null
+            },
+            onFailure = { it.message ?: "Could not save username." }
+        )
+    }
+
     fun pressPtt() {
         viewModelScope.launch {
             runCatching { pttController.press() }
@@ -572,6 +635,35 @@ class MainViewModel @Inject constructor(
             "en" -> "English"
             else -> languageCode.uppercase(Locale.US)
         }
+
+    private fun storedPeerToUi(peer: StoredPairedDevice): PeerNodeUi =
+        PeerNodeUi(
+            deviceAddress = peer.deviceId,
+            callsign = peer.callsign,
+            isConnected = false,
+            distanceText = if (peer.rssi != 0) {
+                formatDistance(estimator.estimate(peer.rssi))
+            } else {
+                "Unknown"
+            },
+            signalBars = if (peer.rssi != 0) signalBars(peer.rssi) else 0,
+            linkText = peer.linkText,
+            bleState = BleLinkState.PAIRED
+        )
+
+    private fun storedMessageToUi(message: StoredReceivedMessage): ChatMessageUi =
+        ChatMessageUi(
+            sender = message.senderName,
+            text = message.text,
+            timestampText = formatTimestamp(message.timestampEpochMs),
+            statusText = "Received",
+            isVoice = message.isVoice
+        )
+
+    private fun formatTimestamp(epochMs: Long): String {
+        if (epochMs <= 0L) return "Unknown"
+        return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epochMs))
+    }
 
     private fun formatDistance(distance: Double): String =
         if (distance < 0) "Unknown"
