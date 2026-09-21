@@ -3,6 +3,7 @@ package com.tactical.platform.speech
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.IOException
@@ -19,7 +20,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class MoonshineSttModelStore @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     private val rootDirectory: File
         get() = File(context.filesDir, "moonshine/stt-tiny-en")
