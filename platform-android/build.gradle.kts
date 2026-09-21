@@ -69,6 +69,7 @@ dependencies {
     // types directly. SpeechBackendModule is the only seam.
     implementation(libs.tensorflow.lite)
     implementation(libs.onnxruntime.android)
+    implementation(libs.vosk.android)
 
 //    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
