@@ -105,6 +105,10 @@ class MainViewModel @Inject constructor(
     private val localAppDataStore: LocalAppDataStore
 ) : ViewModel() {
 
+    // Must be initialized before _uiState because storedPeerToUi() uses it
+    // while the initial state is being constructed.
+    private val estimator = RssiProximityEstimator()
+
     private val _uiState = MutableStateFlow(
         MainUiState(
             username = identityStore.callsign,
@@ -125,7 +129,6 @@ class MainViewModel @Inject constructor(
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
-    private val estimator = RssiProximityEstimator()
     private var scanJob: Job? = null
     private var scanLoopJob: Job? = null
     private var healthJob: Job? = null
