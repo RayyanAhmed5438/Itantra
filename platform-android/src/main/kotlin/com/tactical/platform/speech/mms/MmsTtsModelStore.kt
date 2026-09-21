@@ -150,16 +150,16 @@ class MmsTtsModelStore @Inject constructor(
         private const val ZIP_ROOT = "quantized_models"
         private const val BUFFER_SIZE = 64 * 1024
 
+        private val BUNDLED_MODEL_CODES = setOf(
+            "eng",
+            "hin"
+        )
+
         // Keep ALL languages available for future language support, but only
         // these models are shipped in the current bundled ZIP.
         private val BUNDLED_LANGUAGES = MmsTtsLanguage.ALL.filter {
             it.modelCode in BUNDLED_MODEL_CODES
         }
-
-        private val BUNDLED_MODEL_CODES = setOf(
-            "eng",
-            "hin"
-        )
 
         private val ALLOWED_FILES = setOf(
             "config.json",
