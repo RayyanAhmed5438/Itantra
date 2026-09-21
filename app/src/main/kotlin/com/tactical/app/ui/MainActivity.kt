@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
         if (grants.values.all { it }) {
             ensureWirelessEnabled()
         } else {
-            wirelessWarning.value = "Bluetooth / Wi-Fi permissions are required."
+            wirelessWarning.value = "Bluetooth / Wi-Fi / microphone permissions are required."
         }
     }
 
@@ -172,8 +172,10 @@ class MainActivity : ComponentActivity() {
                                     onPair = viewModel::pairPeer
                                 )
                                 1 -> SquadScreen(
-                                    state,
-                                    onRefresh = viewModel::forceDiscovery
+                                    uiState = state,
+                                    onRefresh = viewModel::forceDiscovery,
+                                    onPttPress = viewModel::pressPtt,
+                                    onPttRelease = viewModel::releasePtt
                                 )
                                 2 -> MessagesScreen(
                                     state,
@@ -232,6 +234,8 @@ class MainActivity : ComponentActivity() {
 
     private fun requestStartupPermissions() {
         val permissions = buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 add(Manifest.permission.BLUETOOTH_SCAN)
                 add(Manifest.permission.BLUETOOTH_CONNECT)
