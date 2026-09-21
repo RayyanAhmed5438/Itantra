@@ -55,6 +55,7 @@ class MoonshineSpeechToText @Inject constructor(
         val listener = Consumer<TranscriptEvent> { event ->
             when (event) {
                 is TranscriptEvent.LineTextChanged -> {
+                    android.util.Log.d(TAG, "STT partial: " + event.line.text.orEmpty())
                     trySend(
                         TranscriptionChunk(
                             text = event.line.text.orEmpty(),
@@ -65,6 +66,7 @@ class MoonshineSpeechToText @Inject constructor(
                 }
 
                 is TranscriptEvent.LineCompleted -> {
+                    android.util.Log.d(TAG, "STT FINAL: " + event.line.text.orEmpty())
                     trySend(
                         TranscriptionChunk(
                             text = event.line.text.orEmpty(),
@@ -75,6 +77,7 @@ class MoonshineSpeechToText @Inject constructor(
                 }
 
                 is TranscriptEvent.Error -> {
+                    android.util.Log.e(TAG, "STT error", event.cause)
                     close(event.cause)
                 }
             }
@@ -83,8 +86,10 @@ class MoonshineSpeechToText @Inject constructor(
         transcriber.addListener(listener)
 
         try {
+            android.util.Log.d(TAG, "STT stream starting")
             transcriber.startStream(streamHandle)
 
+            var frameCount = 0
             audio.collect { frame ->
                 val samples = pcm16ToFloat(frame.data)
                 if (samples.isNotEmpty()) {
@@ -93,11 +98,18 @@ class MoonshineSpeechToText @Inject constructor(
                         samples,
                         SAMPLE_RATE_HZ
                     )
+                    frameCount++
+                    if (frameCount == 1) {
+                        android.util.Log.d(TAG, "STT received first audio frame: samples=" + samples.size)
+                    }
                 }
             }
+
+            android.util.Log.d(TAG, "STT audio ended after " + frameCount + " frames")
         } catch (t: Throwable) {
             close(t)
         } finally {
+            android.util.Log.d(TAG, "Stopping STT stream")
             runCatching {
                 transcriber.stopStream(streamHandle)
             }.onFailure { stopError ->
@@ -155,6 +167,7 @@ class MoonshineSpeechToText @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "MoonshineSpeechToText"
         private const val LANGUAGE_CODE = "en"
         private const val SAMPLE_RATE_HZ = 16_000
         private const val PCM16_BYTES_PER_SAMPLE = 2
