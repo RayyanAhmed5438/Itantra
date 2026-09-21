@@ -1,6 +1,8 @@
 package com.tactical.app.di
 
 import android.content.Context
+import com.tactical.platform.api.audio.AudioRecorder
+import com.tactical.platform.api.haptics.HapticEngine
 import com.tactical.platform.api.ble.BleBeaconAdvertiser
 import com.tactical.platform.api.ble.BleConnectionManager
 import com.tactical.platform.api.ble.BleBeaconScanner
@@ -9,6 +11,8 @@ import com.tactical.platform.ble.AndroidBleAdvertiser
 import com.tactical.platform.ble.AndroidBleConnectionManager
 import com.tactical.platform.ble.AndroidBleScanner
 import com.tactical.platform.wifi.AndroidWifiDirectManager
+import com.tactical.platform.audio.AndroidAudioRecordRecorder
+import com.tactical.platform.haptics.AndroidHapticEngine
 import android.net.wifi.p2p.WifiP2pManager
 import dagger.Module
 import dagger.Provides
@@ -20,6 +24,18 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object PlatformModule {
+
+    @Provides
+    @Singleton
+    fun provideAudioRecorder(): AudioRecorder =
+        AndroidAudioRecordRecorder()
+
+    @Provides
+    @Singleton
+    fun provideHapticEngine(
+        @ApplicationContext context: Context
+    ): HapticEngine =
+        AndroidHapticEngine(context)
 
     @Provides
     @Singleton
