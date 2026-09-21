@@ -12,6 +12,7 @@ import com.tactical.platform.api.haptics.HapticEngine
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
+import com.tactical.platform.speech.mms.MmsTtsModelStore
 import com.tactical.ptt.controller.DefaultPttController
 import com.tactical.ptt.controller.PttController
 import com.tactical.ptt.feedback.PatternedHapticFeedback
@@ -90,7 +91,8 @@ class MainViewModel @Inject constructor(
     private val audioRecorder: AudioRecorder,
     private val speechToText: SpeechToText,
     private val hapticEngine: HapticEngine,
-    private val mmsTtsEngine: MmsTtsEngine
+    private val mmsTtsEngine: MmsTtsEngine,
+    private val mmsTtsModelStore: MmsTtsModelStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -119,7 +121,13 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             runCatching {
+                mmsTtsModelStore.ensureBundledModelsAvailable()
                 mmsTtsEngine.synthesizeAndPlay(language, packet.text)
+            }.onFailure { error ->
+                android.util.Log.w(
+                    "MainViewModel",
+                    "Automatic TTS playback failed: " + (error.message ?: error.javaClass.simpleName)
+                )
             }
         }
     }
