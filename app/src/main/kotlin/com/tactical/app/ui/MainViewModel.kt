@@ -16,7 +16,6 @@ import com.tactical.ptt.feedback.PatternedHapticFeedback
 import com.tactical.ptt.relay.PttMeshDispatcher
 import com.tactical.ptt.relay.PttPacketBuilder
 import com.tactical.ptt.session.SessionState
-import com.tactical.domain.result.TacticalResult
 import com.tactical.engine.discovery.proximity.RssiProximityEstimator
 import com.tactical.engine.discovery.service.DefaultDiscoveryService
 import com.tactical.engine.discovery.service.DiscoveryService
