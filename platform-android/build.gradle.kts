@@ -42,12 +42,9 @@ android {
     }
 }
 
-val patchedMoonshineModule =
-    project(path = ":moonshine-voice-patched", configuration = "default")
-
 dependencies {
     // Patched Moonshine AAR with its bundled ORT removed.
-    implementation(patchedMoonshineModule)
+    implementation(project(":moonshine-voice-patched"))
 
     // Contracts this module implements
     implementation(project(":core-domain"))
