@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +44,8 @@ private val OUTGOING_LANGUAGES = listOf(
 fun SettingsScreen(
     selectedLanguageCode: String,
     onLanguageSelected: (String) -> Unit,
+    username: String,
+    onUsernameSave: (String) -> String?,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -51,6 +54,79 @@ fun SettingsScreen(
             .background(RedTacticalBackground)
             .padding(20.dp)
     ) {
+        var usernameInput by androidx.compose.runtime.remember(username) {
+            androidx.compose.runtime.mutableStateOf(username)
+        }
+        var usernameError by androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateOf<String?>(null)
+        }
+
+        Text(
+            "USERNAME / CALLSIGN",
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.sp
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            "This name is shown to other squad members.",
+            color = RedTacticalTextSecondary,
+            fontSize = 12.sp
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = usernameInput,
+            onValueChange = {
+                if (it.toByteArray(Charsets.UTF_8).size <= 5) {
+                    usernameInput = it
+                    usernameError = null
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Username") },
+            supportingText = {
+                Text(
+                    usernameError ?: "Maximum 5 UTF-8 bytes for the existing BLE callsign field.",
+                    color = if (usernameError != null) {
+                        RedTacticalPrimary
+                    } else {
+                        RedTacticalTextSecondary
+                    }
+                )
+            },
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = RedTacticalSurface,
+                unfocusedContainerColor = RedTacticalSurface,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedLabelColor = RedTacticalPrimary,
+                unfocusedLabelColor = RedTacticalTextSecondary,
+                focusedBorderColor = RedTacticalPrimary,
+                unfocusedBorderColor = RedTacticalSurfaceBorder
+            )
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        androidx.compose.material3.Button(
+            onClick = {
+                usernameError = onUsernameSave(usernameInput)
+            },
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = RedTacticalPrimary
+            )
+        ) {
+            Text("SAVE USERNAME", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(24.dp))
+
         Text(
             "VOICE LANGUAGE",
             color = Color.White,
