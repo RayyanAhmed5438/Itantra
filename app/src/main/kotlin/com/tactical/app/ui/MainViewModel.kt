@@ -106,7 +106,7 @@ class MainViewModel @Inject constructor(
         meshDispatcher = PttMeshDispatcher(meshService),
         hapticFeedback = PatternedHapticFeedback(hapticEngine),
         scope = viewModelScope,
-        releaseGraceMs = 1500L
+        releaseGraceMs = 5000L
     )
 
     private var lastHandledPttSessionId: String? = null
