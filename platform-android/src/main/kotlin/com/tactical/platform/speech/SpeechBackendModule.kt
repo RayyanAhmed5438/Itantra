@@ -2,7 +2,6 @@ package com.tactical.platform.speech
 
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.api.speech.TextToSpeech
-import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.platform.speech.backend.tflite.TfliteTextToSpeech
 import dagger.Binds
 import dagger.Module
