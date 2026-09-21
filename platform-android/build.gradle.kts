@@ -42,55 +42,6 @@ android {
     }
 }
 
-val moonshineSource = configurations.create("moonshineSource") {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
-
-val patchedMoonshineAar = file(
-    "libs/moonshine-voice-${libs.versions.moonshineVoice.get()}-no-ort.aar"
-)
-
-val patchMoonshineAar = tasks.register("patchMoonshineAar") {
-    inputs.files(moonshineSource)
-    outputs.file(patchedMoonshineAar)
-
-    doLast {
-        val source = moonshineSource.singleFile
-        patchedMoonshineAar.parentFile.mkdirs()
-
-        ZipInputStream(
-            BufferedInputStream(source.inputStream())
-        ).use { input ->
-            ZipOutputStream(
-                BufferedOutputStream(patchedMoonshineAar.outputStream())
-            ).use { out ->
-                while (true) {
-                    val entry = input.nextEntry ?: break
-                    val normalized = entry.name.replace('\\', '/')
-                    val isMoonshineBundledOrt =
-                        normalized.startsWith("jni/") &&
-                            normalized.substringAfterLast('/') == "libonnxruntime.so"
-
-                    if (!isMoonshineBundledOrt) {
-                        val copied = ZipEntry(normalized)
-                        if (entry.time >= 0L) {
-                            copied.time = entry.time
-                        }
-                        out.putNextEntry(copied)
-                        if (!entry.isDirectory) {
-                            input.copyTo(out, 64 * 1024)
-                        }
-                        out.closeEntry()
-                    }
-
-                    input.closeEntry()
-                }
-            }
-        }
-    }
-}
-
 val patchedMoonshineModule =
     project(path = ":moonshine-voice-patched", configuration = "default")
 
