@@ -15,7 +15,7 @@ class DefaultDiscoveryService(
     private val emitter: BeaconEmitter,
     private val wifiDirectManager: WifiDirectManager,
     private val localDeviceId: String,
-    private val localCallsign: String,
+    private val localCallsignProvider: () -> String,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 ) : DiscoveryService {
 
@@ -34,7 +34,7 @@ class DefaultDiscoveryService(
         // Register the same app-specific identity over Wi-Fi Direct.
         // Failure here is non-fatal: BLE can still discover the peer.
         runCatching {
-            wifiDirectManager.advertisePresence(localDeviceId, localCallsign)
+            wifiDirectManager.advertisePresence(localDeviceId, localCallsignProvider())
         }
     }
 
