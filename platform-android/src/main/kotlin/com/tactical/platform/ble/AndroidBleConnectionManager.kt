@@ -75,10 +75,9 @@ class AndroidBleConnectionManager(
                     if (appId != null) {
                         rememberPairedPeer(appId, device.address)
                         setState(device.address, BleLinkState.PAIRED)
-                        // Only the deterministic initiator establishes the
-                        // outbound GATT client session. The other phone stays passive
-                        // and uses the same GATT link in the opposite direction via
-                        // server notifications.
+                        // Each paired phone maintains its own outbound GATT client
+                        // session. This keeps normal send/receive traffic symmetric
+                        // and avoids depending on server-side notifications.
                         reconnectScope.launch {
                             delay(500L)
                             runCatching { reconnectPaired(appId) }
@@ -554,29 +553,17 @@ class AndroidBleConnectionManager(
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
 
-        // Use exactly one outbound GATT initiator per paired link.
-        // The other phone remains passive and uses server notifications to send
-        // packets back over the same physical GATT connection.
+        // Each paired phone keeps its own outbound GATT client session.
+        // An inbound session may also exist because the peer connected first;
+        // it does not replace the outbound path used for normal traffic.
         if (gattClients.containsKey(resolvedAddress)) {
             setState(resolvedAddress, BleLinkState.CONNECTED)
             return TacticalResult.Success(Unit)
         }
 
-        if (!shouldInitiate(deviceAddress)) {
-            if (registry.inboundDevice(resolvedAddress) != null) {
-                setState(resolvedAddress, BleLinkState.CONNECTED)
-return TacticalResult.Success(Unit)
-            }
-
-            // Passive peers do not create a second outbound GATT session.
-            // Wait for the deterministic initiator to connect to our server.
-            setState(resolvedAddress, BleLinkState.PAIRED)
-            android.util.Log.d(TAG, "BLE passive; waiting for initiator " + deviceAddress)
-            return TacticalResult.Failure("Waiting for peer to connect")
-        }
-val device = deviceForAddress(resolvedAddress)
+        val device = deviceForAddress(resolvedAddress)
             ?: return TacticalResult.Failure("Bluetooth device not found")
-return connect(deviceAddress)
+        return connect(deviceAddress)
     }
 
     override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
@@ -631,11 +618,6 @@ return connect(deviceAddress)
         scanFailures = 0
         emptyCycles = 0
     }
-
-    private fun shouldInitiate(peerId: String): Boolean =
-        localDeviceId.isNotBlank() &&
-            peerId.isNotBlank() &&
-            localDeviceId.lowercase() < peerId.lowercase()
 
     private fun rememberPeer(appId: String, address: String) {
         val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
