@@ -107,6 +107,16 @@ val moonshinePatchedAttribute =
     Attribute.of("com.tactical.moonshine.patched", Boolean::class.javaObjectType)
 
 dependencies {
+    components {
+        withModule("ai.moonshine:moonshine-voice") {
+            allVariants {
+                attributes {
+                    attribute(moonshinePatchedAttribute, false)
+                }
+            }
+        }
+    }
+
     attributesSchema {
         attribute(moonshinePatchedAttribute)
     }
