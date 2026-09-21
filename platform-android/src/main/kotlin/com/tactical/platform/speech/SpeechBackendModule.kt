@@ -2,7 +2,7 @@ package com.tactical.platform.speech
 
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.api.speech.TextToSpeech
-import com.tactical.platform.speech.MoonshineSpeechToText
+import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.platform.speech.backend.tflite.TfliteTextToSpeech
 import dagger.Binds
 import dagger.Module
@@ -13,9 +13,10 @@ import javax.inject.Singleton
 /**
  * THE ONE FILE YOU EDIT TO SWAP INFERENCE BACKENDS.
  *
- * Binds STT and TTS to their active platform backends. STT uses the
- * offline Moonshine Tiny Streaming English backend; TTS remains on the
- * existing TFLite implementation used by this module's speech wiring.
+ * Binds STT and TTS to their active platform backends. STT is routed by the
+ * saved outgoing language: Hindi uses the offline Vosk small Hindi model,
+ * English uses Moonshine Tiny Streaming. TTS remains on the existing
+ * TFLite implementation used by this module's speech wiring.
  * Feature modules only see the backend-neutral interfaces from
  * core-platform-api.
  *
@@ -33,7 +34,7 @@ abstract class SpeechBackendModule {
 
     @Binds
     @Singleton
-    abstract fun bindSpeechToText(impl: MoonshineSpeechToText): SpeechToText
+    abstract fun bindSpeechToText(impl: RoutingSpeechToText): SpeechToText
 
     @Binds
     @Singleton
