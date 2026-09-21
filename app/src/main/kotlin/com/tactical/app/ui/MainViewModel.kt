@@ -10,6 +10,8 @@ import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.audio.AudioRecorder
 import com.tactical.platform.api.haptics.HapticEngine
 import com.tactical.platform.api.speech.SpeechToText
+import com.tactical.platform.speech.mms.MmsTtsEngine
+import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.ptt.controller.DefaultPttController
 import com.tactical.ptt.controller.PttController
 import com.tactical.ptt.feedback.PatternedHapticFeedback
@@ -87,7 +89,8 @@ class MainViewModel @Inject constructor(
     private val bleConnectionManager: BleConnectionManager,
     private val audioRecorder: AudioRecorder,
     private val speechToText: SpeechToText,
-    private val hapticEngine: HapticEngine
+    private val hapticEngine: HapticEngine,
+    private val mmsTtsEngine: MmsTtsEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -110,6 +113,16 @@ class MainViewModel @Inject constructor(
     )
 
     private var lastHandledPttSessionId: String? = null
+
+    private fun speakIncomingMessage(packet: TextPacket) {
+        val language = MmsTtsLanguage.fromIsoCode(packet.languageCode) ?: return
+
+        viewModelScope.launch {
+            runCatching {
+                mmsTtsEngine.synthesizeAndPlay(language, packet.text)
+            }
+        }
+    }
 
 
     init {
@@ -265,7 +278,11 @@ class MainViewModel @Inject constructor(
                         sender = packet.sender.value.take(12),
                         text = packet.text,
                         timestampText = "Just now",
-                        statusText = "Received"
+                        statusText = "Received",
+                        // PTT currently carries the STT language code ("en");
+                        // regular typed messages use "und". Reuse the existing
+                        // isVoice flag rather than adding another message field.
+                        isVoice = packet.languageCode != "und"
                     )
                     _uiState.update {
                         it.copy(
@@ -273,6 +290,7 @@ class MainViewModel @Inject constructor(
                             receivedMessages = listOf(message) + it.receivedMessages
                         )
                     }
+                    speakIncomingMessage(packet)
                 }
             }
         }
