@@ -3,39 +3,42 @@ import java.io.BufferedOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import org.gradle.api.DefaultTask
-import org.gradle.api.file.ConfigurableFileCollection
-import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.OutputFile
-import org.gradle.api.tasks.TaskAction
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.file.FileSystemLocation
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.CacheableTransform
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+
+
 
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.hilt)
     alias(libs.plugins.google.devtools.ksp)
 }
+@CacheableTransform
+abstract class StripMoonshineOrtTransform : TransformAction<TransformParameters.None> {
+    @get:InputArtifact
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val inputArtifact: Provider<FileSystemLocation>
 
-abstract class PatchMoonshineAarTask : DefaultTask() {
-    @get:InputFiles
-    abstract val sourceFiles: ConfigurableFileCollection
-
-    @get:OutputFile
-    abstract val outputFile: org.gradle.api.file.RegularFileProperty
-
-    @TaskAction
-    fun patch() {
-        val source = sourceFiles.singleFile
-        val target = outputFile.get().asFile
-        target.parentFile.mkdirs()
+    override fun transform(outputs: TransformOutputs) {
+        val input = inputArtifact.get().asFile
+        val output = outputs.file(input.nameWithoutExtension + "-patched.aar")
 
         ZipInputStream(
-            BufferedInputStream(source.inputStream())
-        ).use { input ->
+            BufferedInputStream(input.inputStream())
+        ).use { source ->
             ZipOutputStream(
-                BufferedOutputStream(target.outputStream())
-            ).use { out ->
+                BufferedOutputStream(output.outputStream())
+            ).use { target ->
                 while (true) {
-                    val entry = input.nextEntry ?: break
+                    val entry = source.nextEntry ?: break
                     val normalized = entry.name.replace('\\', '/')
                     val isMoonshineBundledOrt =
                         normalized.startsWith("jni/") &&
@@ -46,19 +49,21 @@ abstract class PatchMoonshineAarTask : DefaultTask() {
                         if (entry.time >= 0L) {
                             copied.time = entry.time
                         }
-                        out.putNextEntry(copied)
+                        target.putNextEntry(copied)
                         if (!entry.isDirectory) {
-                            input.copyTo(out, 64 * 1024)
+                            source.copyTo(target, 64 * 1024)
                         }
-                        out.closeEntry()
+                        target.closeEntry()
                     }
 
-                    input.closeEntry()
+                    source.closeEntry()
                 }
             }
         }
     }
 }
+
+
 
 android {
     namespace = "com.tactical.platform"
@@ -98,27 +103,38 @@ android {
     }
 }
 
-val moonshineSource = configurations.create("moonshineSource") {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-    isTransitive = false
-}
-
-val patchedMoonshineAar = file(
-    "libs/moonshine-voice-${libs.versions.moonshineVoice.get()}-no-ort.aar"
-)
-
-val patchMoonshineAar = tasks.register<PatchMoonshineAarTask>("patchMoonshineAar") {
-    sourceFiles.from(moonshineSource)
-    outputFile.set(patchedMoonshineAar)
-}
-
 dependencies {
-    // Moonshine Voice is bundled through a build-time patched AAR so its
-    // private minimal libonnxruntime.so does not collide with the full
-    // Microsoft ORT used by the existing MMS TTS engine.
-    add("moonshineSource", "ai.moonshine:moonshine-voice:${libs.versions.moonshineVoice.get()}")
-    implementation(files(patchedMoonshineAar).builtBy(patchMoonshineAar))
+    val moonshinePatchedAttribute =
+        Attribute.of("com.tactical.moonshine.patched", Boolean::class.javaObjectType)
+
+    attributesSchema {
+        attribute(moonshinePatchedAttribute)
+    }
+
+    artifactTypes {
+        getByName("aar").attributes.attribute(moonshinePatchedAttribute, false)
+    }
+
+    // Patch Moonshine's AAR inside Gradle's dependency graph so its bundled
+    // minimal ORT does not collide with the full Microsoft ORT used by MMS TTS.
+    registerTransform(StripMoonshineOrtTransform::class.java) {
+        from.attribute(
+            org.gradle.api.artifacts.type.ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+            "aar"
+        )
+        from.attribute(moonshinePatchedAttribute, false)
+        to.attribute(
+            org.gradle.api.artifacts.type.ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+            "aar"
+        )
+        to.attribute(moonshinePatchedAttribute, true)
+    }
+
+    implementation("ai.moonshine:moonshine-voice:" + libs.versions.moonshineVoice.get()) {
+        attributes {
+            attribute(moonshinePatchedAttribute, true)
+        }
+    }
 
     // Contracts this module implements
     implementation(project(":core-domain"))
