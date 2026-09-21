@@ -53,8 +53,8 @@ val moonshineSource = configurations.create("moonshineSource") {
     isCanBeResolved = true
 }
 
-val patchedMoonshineAar = layout.buildDirectory.file(
-    "generated/moonshine/moonshine-voice-${libs.versions.moonshineVoice.get()}-no-ort.aar"
+val patchedMoonshineAar = file(
+    "libs/moonshine-voice-${libs.versions.moonshineVoice.get()}-no-ort.aar"
 )
 
 val patchMoonshineAar = tasks.register("patchMoonshineAar") {
@@ -63,14 +63,13 @@ val patchMoonshineAar = tasks.register("patchMoonshineAar") {
 
     doLast {
         val source = moonshineSource.singleFile
-        val output = patchedMoonshineAar.get().asFile
-        output.parentFile.mkdirs()
+        patchedMoonshineAar.parentFile.mkdirs()
 
         ZipInputStream(
             BufferedInputStream(source.inputStream())
         ).use { input ->
             ZipOutputStream(
-                BufferedOutputStream(output.outputStream())
+                BufferedOutputStream(patchedMoonshineAar.outputStream())
             ).use { out ->
                 while (true) {
                     val entry = input.nextEntry ?: break
