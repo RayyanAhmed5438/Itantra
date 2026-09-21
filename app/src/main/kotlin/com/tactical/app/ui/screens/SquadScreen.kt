@@ -92,7 +92,7 @@ fun SquadScreen(
                     )
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        "\${connectedPeers.size} CONNECTED • \${pairedPeers.size} PAIRED",
+                        "${connectedPeers.size} CONNECTED • ${pairedPeers.size} PAIRED",
                         color = RedTacticalTextSecondary,
                         fontSize = 11.sp
                     )
