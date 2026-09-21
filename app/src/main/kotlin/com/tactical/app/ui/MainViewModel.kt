@@ -7,6 +7,16 @@ import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.identity.LinkType
 import com.tactical.domain.packet.TextPacket
 import com.tactical.domain.result.TacticalResult
+import com.tactical.platform.api.audio.AudioRecorder
+import com.tactical.platform.api.haptics.HapticEngine
+import com.tactical.platform.api.speech.SpeechToText
+import com.tactical.ptt.controller.DefaultPttController
+import com.tactical.ptt.controller.PttController
+import com.tactical.ptt.feedback.PatternedHapticFeedback
+import com.tactical.ptt.relay.PttMeshDispatcher
+import com.tactical.ptt.relay.PttPacketBuilder
+import com.tactical.ptt.session.SessionState
+import com.tactical.domain.result.TacticalResult
 import com.tactical.engine.discovery.proximity.RssiProximityEstimator
 import com.tactical.engine.discovery.service.DefaultDiscoveryService
 import com.tactical.engine.discovery.service.DiscoveryService
@@ -65,7 +75,9 @@ data class MainUiState(
     val sentMessages: List<ChatMessageUi> = emptyList(),
     val receivedMessages: List<ChatMessageUi> = emptyList(),
     val networkMetrics: NetworkMetrics = NetworkMetrics(),
-    val isScanning: Boolean = false
+    val isScanning: Boolean = false,
+    val pttSessionState: SessionState = SessionState.IDLE,
+    val pttLastTranscription: String? = null
 )
 
 @HiltViewModel
@@ -73,7 +85,10 @@ class MainViewModel @Inject constructor(
     private val discoveryService: DiscoveryService,
     private val meshService: MeshService,
     private val identityStore: DeviceIdentityStore,
-    private val bleConnectionManager: BleConnectionManager
+    private val bleConnectionManager: BleConnectionManager,
+    private val audioRecorder: AudioRecorder,
+    private val speechToText: SpeechToText,
+    private val hapticEngine: HapticEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -84,8 +99,63 @@ class MainViewModel @Inject constructor(
     private var healthJob: Job? = null
     private val observedPeerIds = mutableSetOf<String>()
     private val reconnectJobs = mutableMapOf<String, Job>()
+    private val pttController: PttController = DefaultPttController(
+        deviceId = DeviceId(identityStore.deviceIdValue),
+        audioRecorder = audioRecorder,
+        speechToText = speechToText,
+        packetBuilder = PttPacketBuilder(),
+        meshDispatcher = PttMeshDispatcher(meshService),
+        hapticFeedback = PatternedHapticFeedback(hapticEngine),
+        scope = viewModelScope,
+        releaseGraceMs = 1500L
+    )
+
+    private var lastHandledPttSessionId: String? = null
+
 
     init {
+        viewModelScope.launch {
+            pttController.state().collect { ptt ->
+                _uiState.update {
+                    it.copy(
+                        pttSessionState = ptt.sessionState,
+                        pttLastTranscription = ptt.lastTranscription
+                    )
+                }
+
+                val sessionId = ptt.sessionId
+                val text = ptt.lastTranscription?.trim().orEmpty()
+                val result = ptt.lastResult
+
+                if (
+                    ptt.sessionState == SessionState.IDLE &&
+                    !sessionId.isNullOrBlank() &&
+                    sessionId != lastHandledPttSessionId &&
+                    text.isNotBlank() &&
+                    result != null
+                ) {
+                    lastHandledPttSessionId = sessionId
+                    val status = when (result) {
+                        is TacticalResult.Success -> "Sent"
+                        is TacticalResult.Failure -> "Queued"
+                    }
+                    val message = ChatMessageUi(
+                        sender = "YOU",
+                        text = text,
+                        timestampText = "Just now",
+                        statusText = status,
+                        isVoice = true
+                    )
+                    _uiState.update {
+                        it.copy(
+                            messages = listOf(message) + it.messages,
+                            sentMessages = listOf(message) + it.sentMessages
+                        )
+                    }
+                }
+            }
+        }
+
         viewModelScope.launch {
             startDiscovery()
         }
@@ -348,6 +418,18 @@ class MainViewModel @Inject constructor(
 
     fun repairPeer(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.repairAndReconnect(deviceAddress) }
+    }
+
+    fun pressPtt() {
+        viewModelScope.launch {
+            runCatching { pttController.press() }
+        }
+    }
+
+    fun releasePtt() {
+        viewModelScope.launch {
+            runCatching { pttController.release() }
+        }
     }
 
     fun sendTextMessage(text: String) {
