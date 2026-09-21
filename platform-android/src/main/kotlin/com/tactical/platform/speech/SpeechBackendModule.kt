@@ -13,13 +13,11 @@ import javax.inject.Singleton
 /**
  * THE ONE FILE YOU EDIT TO SWAP INFERENCE BACKENDS.
  *
- * Binds SpeechToText/TextToSpeech to exactly one backend package —
- * currently TFLite. To switch to ONNX Runtime Mobile, change the two
- * @Binds return types below to com.tactical.platform.speech.backend.onnx.
- * OnnxSpeechToText / OnnxTextToSpeech and nothing else needs to change —
- * engine-speech and every feature module only ever see the
- * SpeechToText/TextToSpeech interfaces from core-platform-api, never a
- * concrete backend type.
+ * Binds STT and TTS to their active platform backends. STT uses the
+ * offline Moonshine Tiny Streaming English backend; TTS remains on the
+ * existing TFLite implementation used by this module's speech wiring.
+ * Feature modules only see the backend-neutral interfaces from
+ * core-platform-api.
  *
  * Deliberately does NOT bind ModelProvider or ModelDownloadManager here —
  * those are backend-independent (both backends read the same extracted
