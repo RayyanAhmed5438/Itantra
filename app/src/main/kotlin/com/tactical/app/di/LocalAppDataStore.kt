@@ -158,7 +158,7 @@ class LocalAppDataStore @Inject constructor(
     }
 
     @Synchronized
-    fun saveReceivedMessage(message: StoredReceivedMessage) {
+    fun saveReceivedMessage(message: StoredReceivedMessage): Boolean {
         val messages = loadReceivedMessages()
             .toMutableList()
 
@@ -202,6 +202,8 @@ class LocalAppDataStore @Inject constructor(
         if (!alreadyStored) {
             _receivedMessagesChanged.value += 1
         }
+
+        return !alreadyStored
     }
 
     @Synchronized
