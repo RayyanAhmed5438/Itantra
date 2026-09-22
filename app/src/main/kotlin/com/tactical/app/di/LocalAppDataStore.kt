@@ -205,6 +205,59 @@ class LocalAppDataStore @Inject constructor(
     }
 
     @Synchronized
+    fun deleteReceivedMessages(messageKeys: Set<String>) {
+        if (messageKeys.isEmpty()) return
+
+        val remaining = loadReceivedMessages().filterNot { message ->
+            messageStorageKey(
+                senderId = message.senderId,
+                timestampEpochMs = message.timestampEpochMs,
+                text = message.text,
+                isAlert = message.isAlert,
+                isVoice = message.isVoice
+            ) in messageKeys
+        }
+
+        val array = JSONArray()
+        remaining.forEach { item ->
+            array.put(
+                JSONObject().apply {
+                    put("senderId", item.senderId)
+                    put("senderName", item.senderName)
+                    put("text", item.text)
+                    put("timestampEpochMs", item.timestampEpochMs)
+                    put("isVoice", item.isVoice)
+                    put("isAlert", item.isAlert)
+                    item.severity?.let { put("severity", it) }
+                    item.languageCode?.let { put("languageCode", it) }
+                    item.locationLatitude?.let { put("locationLatitude", it) }
+                    item.locationLongitude?.let { put("locationLongitude", it) }
+                    item.locationAccuracyMeters?.let { put("locationAccuracyMeters", it) }
+                }
+            )
+        }
+
+        preferences.edit()
+            .putString(KEY_RECEIVED_MESSAGES, array.toString())
+            .apply()
+
+        _receivedMessagesChanged.value += 1
+    }
+
+    fun messageStorageKey(
+        senderId: String,
+        timestampEpochMs: Long,
+        text: String,
+        isAlert: Boolean,
+        isVoice: Boolean
+    ): String =
+        senderId + "|" +
+            timestampEpochMs + "|" +
+            text + "|" +
+            isAlert + "|" +
+            isVoice
+
+    @Synchronized
     fun unreadMessageCount(): Int {
         val lastRead = if (preferences.contains(KEY_MESSAGES_LAST_READ)) {
             preferences.getLong(KEY_MESSAGES_LAST_READ, 0L)
