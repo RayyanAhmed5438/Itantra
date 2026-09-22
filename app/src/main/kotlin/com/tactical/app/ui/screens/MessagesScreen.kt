@@ -6,7 +6,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -18,10 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
 import com.tactical.app.ui.ChatMessageUi
 import com.tactical.app.ui.MainUiState
 import com.tactical.app.ui.components.EmergencyAlertDialog
@@ -36,39 +36,38 @@ fun MessagesScreen(
     modifier: Modifier = Modifier
 ) {
     var input by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableIntStateOf(0) }
     var selectedEmergency by remember { mutableStateOf<ChatMessageUi?>(null) }
     var todayOnly by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
-    // When the Messages screen is visible, newly persisted messages are
-    // immediately considered seen rather than leaving a stale unread badge
-    // on the bottom navigation.
+    // The Messages destination is only composed while it is visible, so
+    // entering this screen (and receiving a new message while it stays open)
+    // marks the current conversation as seen.
     LaunchedEffect(
-        selectedTab,
         uiState.receivedMessages.size,
         uiState.receivedMessages.lastOrNull()?.timestampEpochMs
     ) {
-        if (selectedTab == 0) {
-            onMessagesOpened()
-        }
+        onMessagesOpened()
     }
 
-    val currentMessages = if (selectedTab == 0) {
+    // One conversation stream: sent + received, newest first.
+    val conversationMessages = remember(
+        uiState.sentMessages,
         uiState.receivedMessages
-    } else {
-        uiState.sentMessages
+    ) {
+        (uiState.sentMessages + uiState.receivedMessages)
+            .sortedByDescending { it.timestampEpochMs }
     }
 
     val filteredMessages = if (todayOnly) {
-        currentMessages.filter { isToday(it.timestampEpochMs) }
+        conversationMessages.filter { isToday(it.timestampEpochMs) }
     } else {
-        currentMessages
+        conversationMessages
     }
 
-    val selectedMessages = currentMessages.filter {
+    val selectedMessages = conversationMessages.filter {
         messageStorageKey(it) in selectedKeys
     }.toSet()
 
@@ -142,9 +141,7 @@ fun MessagesScreen(
                     )
                 }
             } else {
-                TextButton(
-                    onClick = { enterSelection() }
-                ) {
+                TextButton(onClick = { enterSelection() }) {
                     Text(
                         "SELECT",
                         color = RedTacticalPrimaryBright,
@@ -154,32 +151,7 @@ fun MessagesScreen(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
-
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = RedTacticalBackground,
-            contentColor = RedTacticalPrimaryBright
-        ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = {
-                    selectedTab = 0
-                    selectedKeys = emptySet()
-                },
-                text = { Text("RECEIVED") }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = {
-                    selectedTab = 1
-                    selectedKeys = emptySet()
-                },
-                text = { Text("SENT") }
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -195,7 +167,7 @@ fun MessagesScreen(
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -203,14 +175,15 @@ fun MessagesScreen(
             if (filteredMessages.isEmpty()) {
                 item {
                     Text(
-                        when {
-                            todayOnly && selectedTab == 0 -> "No received messages today"
-                            todayOnly -> "No sent messages today"
-                            selectedTab == 0 -> "No received messages"
-                            else -> "No sent messages"
+                        if (todayOnly) {
+                            "No messages today"
+                        } else {
+                            "No messages"
                         },
                         color = RedTacticalTextSecondary,
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -223,7 +196,7 @@ fun MessagesScreen(
             ) { _, message ->
                 MessageRow(
                     message = message,
-                    isSent = selectedTab == 1,
+                    isSent = message.sender == "YOU",
                     isSelectionMode = selectionMode,
                     isSelected = messageStorageKey(message) in selectedKeys,
                     onClick = {
@@ -299,6 +272,13 @@ fun MessagesScreen(
     }
 
     if (showDeleteConfirmation) {
+        val selectedSent = selectedMessages
+            .filter { it in uiState.sentMessages }
+            .toSet()
+        val selectedReceived = selectedMessages
+            .filterNot { it in uiState.sentMessages }
+            .toSet()
+
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = {
@@ -316,7 +296,12 @@ fun MessagesScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onDeleteMessages(selectedMessages, selectedTab == 1)
+                        if (selectedSent.isNotEmpty()) {
+                            onDeleteMessages(selectedSent, true)
+                        }
+                        if (selectedReceived.isNotEmpty()) {
+                            onDeleteMessages(selectedReceived, false)
+                        }
                         exitSelection()
                     }
                 ) {
@@ -373,47 +358,39 @@ private fun MessageRow(
         else -> RedTacticalStatusGreen
     }
 
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                Color(0xFF3A1414)
-            } else {
-                RedTacticalSurface
-            }
-        ),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = if (isSelected || message.isAlert) 1.5.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    if (message.isAlert) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) {
+                    Color(0xFF3A1414)
+                } else {
+                    RedTacticalSurface
+                }
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = if (isSelected) 1.5.dp else 1.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
         ) {
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(if (message.isAlert) 14.dp else 9.dp)
+                modifier = Modifier.padding(14.dp)
             ) {
                 Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (message.isAlert) "🚨 " + message.sender else message.sender,
-                        color = if (message.isAlert) {
-                            RedTacticalPrimaryBright
-                        } else {
-                            Color.White
-                        },
+                        "🚨 " + message.sender,
+                        color = RedTacticalPrimaryBright,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )
@@ -424,65 +401,172 @@ private fun MessageRow(
                     )
                 }
 
-                Spacer(Modifier.height(if (message.isAlert) 6.dp else 3.dp))
+                Spacer(Modifier.height(6.dp))
 
                 Text(
                     message.text,
                     color = Color.White,
-                    fontSize = if (message.isAlert) 14.sp else 12.sp,
-                    maxLines = if (message.isAlert) 4 else 3
+                    fontSize = 14.sp,
+                    maxLines = 6
                 )
 
-                Spacer(Modifier.height(if (message.isAlert) 5.dp else 2.dp))
+                Spacer(Modifier.height(5.dp))
 
                 Text(
-                    text = when {
-                        message.isAlert -> "EMERGENCY • TAP FOR DETAILS"
-                        message.isVoice -> message.statusText
-                        else -> message.statusText
-                    },
-                    color = borderColor,
-                    fontSize = if (message.isAlert) 10.sp else 9.sp,
-                    fontWeight = if (message.isAlert) FontWeight.Bold else FontWeight.Normal
+                    "EMERGENCY • TAP FOR DETAILS",
+                    color = RedTacticalPrimaryBright,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
                 )
-            }
 
-            if (isSelectionMode) {
-                Box(
-                    modifier = Modifier
-                        .padding(end = 10.dp)
-                        .size(22.dp)
-                        .border(
-                            width = 2.dp,
-                            color = if (isSelected) {
-                                RedTacticalPrimaryBright
-                            } else {
-                                RedTacticalSurfaceBorder
-                            },
-                            shape = CircleShape
-                        )
-                        .then(
-                            if (isSelected) {
-                                Modifier.background(
-                                    RedTacticalPrimaryBright,
-                                    CircleShape
-                                )
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
+                if (isSelectionMode) {
+                    Spacer(Modifier.height(8.dp))
+                    SelectionIndicator(
+                        isSelected = isSelected,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isSent) {
+            Arrangement.Start
+        } else {
+            Arrangement.End
+        }
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) {
+                    Color(0xFF3A1414)
+                } else {
+                    RedTacticalSurface
+                }
+            ),
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomStart = if (isSent) 4.dp else 16.dp,
+                bottomEnd = if (isSent) 16.dp else 4.dp
+            ),
+            modifier = Modifier
+                .widthIn(max = 310.dp)
+                .fillMaxWidth(fraction = 0.82f)
+                .border(
+                    width = if (isSelected) 1.5.dp else 1.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = if (isSent) 4.dp else 16.dp,
+                        bottomEnd = if (isSent) 16.dp else 4.dp
+                    )
+                )
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
+        ) {
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 12.dp,
+                    vertical = 9.dp
+                )
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    if (isSelected) {
+                    if (!isSent) {
                         Text(
-                            "✓",
+                            message.sender,
                             color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(Modifier.width(8.dp))
+                    }
+
+                    Text(
+                        message.timestampText,
+                        color = RedTacticalTextSecondary,
+                        fontSize = 10.sp
+                    )
+                }
+
+                Spacer(Modifier.height(3.dp))
+
+                Text(
+                    message.text,
+                    color = Color.White,
+                    fontSize = 13.sp
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        message.statusText,
+                        color = borderColor,
+                        fontSize = 9.sp
+                    )
+
+                    if (isSelectionMode) {
+                        Spacer(Modifier.width(8.dp))
+                        SelectionIndicator(isSelected = isSelected)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SelectionIndicator(
+    isSelected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(20.dp)
+            .border(
+                width = 2.dp,
+                color = if (isSelected) {
+                    RedTacticalPrimaryBright
+                } else {
+                    RedTacticalSurfaceBorder
+                },
+                shape = RoundedCornerShape(50)
+            )
+            .then(
+                if (isSelected) {
+                    Modifier.background(
+                        RedTacticalPrimaryBright,
+                        RoundedCornerShape(50)
+                    )
+                } else {
+                    Modifier
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            Text(
+                "✓",
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
     }
 }
