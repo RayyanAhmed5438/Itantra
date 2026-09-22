@@ -31,6 +31,21 @@ class MmsTtsEngine @Inject constructor(
     private var tokenizer: MmsVitsTokenizer? = null
     private var sampleRate: Int = DEFAULT_SAMPLE_RATE
 
+    /**
+     * Warms the requested TTS language without generating audio.
+     *
+     * Running this in the background moves model extraction and ONNX session
+     * initialization away from the critical message-to-playback path.
+     * Only one language session is kept resident.
+     */
+    suspend fun preload(language: MmsTtsLanguage) =
+        withContext(Dispatchers.Default) {
+            mutex.withLock {
+                val directory = modelStore.ensureBundledModelAvailable(language)
+                ensureLoaded(language, directory)
+            }
+        }
+
     suspend fun synthesize(
         language: MmsTtsLanguage,
         text: String
