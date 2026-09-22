@@ -122,37 +122,6 @@ class MmsTtsModelStore @Inject constructor(
         }
     }
 
-    /**
-     * Compatibility helper for the TTS Model Lab or diagnostics.
-     * Normal message playback does NOT call this; it extracts only the
-     * language actually requested.
-     */
-    suspend fun ensureBundledModelsAvailable(): Int = withContext(Dispatchers.IO) {
-        BUNDLED_LANGUAGES.count { language ->
-            runCatching {
-                ensureBundledModelAvailable(language)
-                true
-            }.getOrDefault(false)
-        }
-    }
-
-    fun bundledLanguages(): List<MmsTtsLanguage> = BUNDLED_LANGUAGES
-
-    fun installedLanguages(): List<MmsTtsLanguage> =
-        BUNDLED_LANGUAGES.filter { isInstalled(it) }
-
-    fun isInstalled(language: MmsTtsLanguage): Boolean =
-        isComplete(rootDirectory.resolve(language.modelCode))
-
-    fun modelDirectory(language: MmsTtsLanguage): File {
-        val directory = rootDirectory.resolve(language.modelCode)
-        require(isComplete(directory)) {
-            "TTS model for " + language.displayName + " is not installed under " +
-                directory.absolutePath
-        }
-        return directory
-    }
-
     private fun isComplete(directory: File): Boolean {
         if (!directory.isDirectory) return false
         return REQUIRED_FILES.all { name ->
