@@ -53,10 +53,10 @@ class TacticalApplication : Application() {
     }
 
     /**
-     * Older speech-model extractors used cacheDir for temporary ZIP extraction.
-     * A process kill during extraction can leave those temporary directories
-     * behind permanently. They contain no live model state and are safe to
-     * remove on application startup.
+     * Speech model installers use app-private data for staging so large model
+     * extraction does not inflate Android's disposable cache bucket. A process
+     * kill during extraction can leave a partial staging directory behind, so
+     * remove those directories on the next startup.
      */
     private fun cleanupSpeechExtractionCache() {
         val cache = cacheDir
@@ -66,6 +66,16 @@ class TacticalApplication : Application() {
                     it.name.startsWith("tts_model_") ||
                     it.name.startsWith("moonshine_stt_") ||
                     it.name.startsWith("vosk_hi_bundle_")
+            }
+            ?.forEach { file ->
+                runCatching { file.deleteRecursively() }
+            }
+
+        filesDir.listFiles()
+            ?.filter {
+                it.name.startsWith(".tts_model_staging_") ||
+                    it.name.startsWith(".moonshine_stt_staging_") ||
+                    it.name.startsWith(".vosk_hi_bundle_staging_")
             }
             ?.forEach { file ->
                 runCatching { file.deleteRecursively() }
