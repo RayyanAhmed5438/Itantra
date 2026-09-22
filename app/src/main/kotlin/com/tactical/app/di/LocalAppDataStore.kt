@@ -20,7 +20,13 @@ data class StoredReceivedMessage(
     val senderName: String,
     val text: String,
     val timestampEpochMs: Long,
-    val isVoice: Boolean
+    val isVoice: Boolean,
+    val isAlert: Boolean = false,
+    val severity: String? = null,
+    val languageCode: String? = null,
+    val locationLatitude: Double? = null,
+    val locationLongitude: Double? = null,
+    val locationAccuracyMeters: Float? = null
 )
 
 /**
@@ -132,7 +138,13 @@ class LocalAppDataStore @Inject constructor(
                             senderName = item.getString("senderName"),
                             text = item.getString("text"),
                             timestampEpochMs = item.optLong("timestampEpochMs", 0L),
-                            isVoice = item.optBoolean("isVoice", false)
+                            isVoice = item.optBoolean("isVoice", false),
+                            isAlert = item.optBoolean("isAlert", false),
+                            severity = item.optString("severity").takeIf { it.isNotBlank() },
+                            languageCode = item.optString("languageCode").takeIf { it.isNotBlank() },
+                            locationLatitude = if (item.has("locationLatitude") && !item.isNull("locationLatitude")) item.optDouble("locationLatitude") else null,
+                            locationLongitude = if (item.has("locationLongitude") && !item.isNull("locationLongitude")) item.optDouble("locationLongitude") else null,
+                            locationAccuracyMeters = if (item.has("locationAccuracyMeters") && !item.isNull("locationAccuracyMeters")) item.optDouble("locationAccuracyMeters").toFloat() else null
                         )
                     )
                 }
