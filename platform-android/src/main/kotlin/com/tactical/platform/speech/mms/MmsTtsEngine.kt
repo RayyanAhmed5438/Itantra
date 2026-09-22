@@ -36,7 +36,7 @@ class MmsTtsEngine @Inject constructor(
         text: String
     ): Pair<AudioFrame, MmsTtsTestResult> = withContext(Dispatchers.Default) {
         mutex.withLock {
-            val directory = modelStore.modelDirectory(language)
+            val directory = modelStore.ensureBundledModelAvailable(language)
             ensureLoaded(language, directory)
 
             val currentTokenizer = checkNotNull(tokenizer)
