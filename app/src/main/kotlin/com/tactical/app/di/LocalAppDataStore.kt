@@ -3,6 +3,7 @@ package com.tactical.app.di
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -197,6 +198,10 @@ class LocalAppDataStore @Inject constructor(
         preferences.edit()
             .putString(KEY_RECEIVED_MESSAGES, array.toString())
             .apply()
+
+        if (!alreadyStored) {
+            _receivedMessagesChanged.value += 1
+        }
     }
 
     @Synchronized
