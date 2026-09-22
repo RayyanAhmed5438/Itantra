@@ -181,22 +181,6 @@ class MainViewModel @Inject constructor(
     private val emergencyBroadcaster =
         com.tactical.emergency.broadcast.RadiusEmergencyBroadcaster(meshService)
 
-    private fun speakIncomingMessage(packet: TextPacket) {
-        val language = MmsTtsLanguage.fromIsoCode(packet.languageCode) ?: return
-
-        viewModelScope.launch {
-            runCatching {
-                mmsTtsEngine.synthesizeAndPlay(language, packet.text)
-            }.onFailure { error ->
-                android.util.Log.w(
-                    "MainViewModel",
-                    "Automatic TTS playback failed: " + (error.message ?: error.javaClass.simpleName)
-                )
-            }
-        }
-    }
-
-
     init {
         // Keep the unread badge synchronized with messages persisted by either
         // the Activity/ViewModel or the foreground mesh service. This avoids
@@ -380,48 +364,9 @@ class MainViewModel @Inject constructor(
                 // Normal ViewModel cancellation.
             }
         }
-        viewModelScope.launch {
-            meshService.receive().collect { packet ->
-                if (packet is EmergencyPacket) {
-                    val senderName =
-                        localAppDataStore.callsignForPeer(packet.sender.value)
-                            ?: packet.sender.value.take(12)
+    }
 
-                    localAppDataStore.saveReceivedMessage(
-                        StoredReceivedMessage(
-                            senderId = packet.sender.value,
-                            senderName = senderName,
-                            text = packet.description,
-                            timestampEpochMs = packet.timestamp,
-                            isVoice = false,
-                            isAlert = true,
-                            severity = packet.severity.name,
-                            languageCode = packet.languageCode,
-                            locationLatitude = packet.location?.latitude,
-                            locationLongitude = packet.location?.longitude,
-                            locationAccuracyMeters = packet.location?.accuracyMeters
-                        )
-                    )
-                } else if (packet is TextPacket) {
-                    val senderName =
-                        localAppDataStore.callsignForPeer(packet.sender.value)
-                            ?: packet.sender.value.take(12)
-                    val isVoiceMessage = packet.languageCode != "und"
-
-                    localAppDataStore.saveReceivedMessage(
-                        StoredReceivedMessage(
-                            senderId = packet.sender.value,
-                            senderName = senderName,
-                            text = packet.text,
-                            timestampEpochMs = packet.timestamp,
-                            isVoice = isVoiceMessage
-                        )
-                    )
-
-                    speakIncomingMessage(packet)
-                }
-            }
-        }
+    }
     }
 
     /**
