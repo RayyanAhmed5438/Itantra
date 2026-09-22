@@ -38,7 +38,6 @@ fun MessagesScreen(
 ) {
     var input by remember { mutableStateOf("") }
     var selectedEmergency by remember { mutableStateOf<ChatMessageUi?>(null) }
-    var todayOnly by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -75,12 +74,6 @@ fun MessagesScreen(
         if (conversationMessages.isNotEmpty()) {
             listState.animateScrollToItem(conversationMessages.lastIndex)
         }
-    }
-
-    val filteredMessages = if (todayOnly) {
-        conversationMessages.filter { isToday(it.timestampEpochMs) }
-    } else {
-        conversationMessages
     }
 
     val selectedMessages = conversationMessages.filter {
@@ -169,19 +162,6 @@ fun MessagesScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            FilterChip(
-                selected = todayOnly,
-                onClick = { todayOnly = !todayOnly },
-                label = { Text(if (todayOnly) "TODAY ONLY" else "TODAY") }
-            )
-        }
-
-        Spacer(Modifier.height(8.dp))
-
         LazyColumn(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -192,11 +172,7 @@ fun MessagesScreen(
             if (filteredMessages.isEmpty()) {
                 item {
                     Text(
-                        if (todayOnly) {
-                            "No messages today"
-                        } else {
-                            "No messages"
-                        },
+                        "No messages",
                         color = RedTacticalTextSecondary,
                         fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
@@ -206,7 +182,7 @@ fun MessagesScreen(
             }
 
             itemsIndexed(
-                items = filteredMessages,
+                items = conversationMessages,
                 key = { index, message ->
                     messageStorageKey(message) + "_" + index
                 }
@@ -350,14 +326,6 @@ private fun messageStorageKey(message: ChatMessageUi): String =
         message.text + "|" +
         message.isAlert + "|" +
         message.isVoice
-
-private fun isToday(epochMs: Long): Boolean {
-    if (epochMs <= 0L) return false
-    val messageDate = java.util.Calendar.getInstance().apply { timeInMillis = epochMs }
-    val today = java.util.Calendar.getInstance()
-    return messageDate.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
-        messageDate.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
-}
 
 @Composable
 private fun MessageRow(
