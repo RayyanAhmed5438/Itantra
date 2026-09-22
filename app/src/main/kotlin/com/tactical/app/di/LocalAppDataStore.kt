@@ -28,7 +28,11 @@ data class StoredReceivedMessage(
     val languageCode: String? = null,
     val locationLatitude: Double? = null,
     val locationLongitude: Double? = null,
-    val locationAccuracyMeters: Float? = null
+    val locationAccuracyMeters: Float? = null,
+    // Local device time when this message was actually received.
+    // This is deliberately separate from timestampEpochMs, which comes
+    // from the sender and can be skewed relative to this device's clock.
+    val receivedAtEpochMs: Long = 0L
 )
 
 /**
@@ -149,7 +153,8 @@ class LocalAppDataStore @Inject constructor(
                             languageCode = item.optString("languageCode").takeIf { it.isNotBlank() },
                             locationLatitude = if (item.has("locationLatitude") && !item.isNull("locationLatitude")) item.optDouble("locationLatitude") else null,
                             locationLongitude = if (item.has("locationLongitude") && !item.isNull("locationLongitude")) item.optDouble("locationLongitude") else null,
-                            locationAccuracyMeters = if (item.has("locationAccuracyMeters") && !item.isNull("locationAccuracyMeters")) item.optDouble("locationAccuracyMeters").toFloat() else null
+                            locationAccuracyMeters = if (item.has("locationAccuracyMeters") && !item.isNull("locationAccuracyMeters")) item.optDouble("locationAccuracyMeters").toFloat() else null,
+                            receivedAtEpochMs = item.optLong("receivedAtEpochMs", 0L)
                         )
                     )
                 }
@@ -173,7 +178,18 @@ class LocalAppDataStore @Inject constructor(
         }
 
         if (!alreadyStored) {
-            messages.add(message)
+            // Do not use the sender's timestamp for unread tracking. Store a
+            // local receive time so clock skew between phones cannot keep a
+            // message permanently "unread".
+            messages.add(
+                message.copy(
+                    receivedAtEpochMs = if (message.receivedAtEpochMs > 0L) {
+                        message.receivedAtEpochMs
+                    } else {
+                        System.currentTimeMillis()
+                    }
+                )
+            )
         }
 
         val array = JSONArray()
@@ -186,6 +202,7 @@ class LocalAppDataStore @Inject constructor(
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("isVoice", item.isVoice)
                     put("isAlert", item.isAlert)
+                    put("receivedAtEpochMs", item.receivedAtEpochMs)
                     item.severity?.let { put("severity", it) }
                     item.languageCode?.let { put("languageCode", it) }
                     item.locationLatitude?.let { put("locationLatitude", it) }
@@ -230,6 +247,7 @@ class LocalAppDataStore @Inject constructor(
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("isVoice", item.isVoice)
                     put("isAlert", item.isAlert)
+                    put("receivedAtEpochMs", item.receivedAtEpochMs)
                     item.severity?.let { put("severity", it) }
                     item.languageCode?.let { put("languageCode", it) }
                     item.locationLatitude?.let { put("locationLatitude", it) }
@@ -268,7 +286,11 @@ class LocalAppDataStore @Inject constructor(
             preferences.edit().putLong(KEY_MESSAGES_LAST_READ, now).apply()
             now
         }
-        return loadReceivedMessages().count { it.timestampEpochMs > lastRead }
+        // Compare local receive time, not the sender's packet timestamp.
+        // Sender clocks may be ahead/behind this device.
+        return loadReceivedMessages().count {
+            it.receivedAtEpochMs > lastRead
+        }
     }
 
     @Synchronized
