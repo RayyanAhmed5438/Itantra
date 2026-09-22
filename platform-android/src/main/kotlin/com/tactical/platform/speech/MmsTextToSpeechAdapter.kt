@@ -28,7 +28,7 @@ class MmsTextToSpeechAdapter @Inject constructor(
                 "Emergency TTS language '" + langTag.isoCode + "' is not bundled"
             )
 
-        modelStore.ensureBundledModelsAvailable()
+        modelStore.ensureBundledModelAvailable(language)
         return engine.synthesize(language, text).first
     }
 }
