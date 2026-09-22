@@ -153,6 +153,7 @@ class LocalAppDataStore @Inject constructor(
     }
 
     @Synchronized
+    @Synchronized
     fun saveReceivedMessage(message: StoredReceivedMessage) {
         val messages = loadReceivedMessages()
             .toMutableList()
@@ -167,6 +168,12 @@ class LocalAppDataStore @Inject constructor(
                     put("text", item.text)
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("isVoice", item.isVoice)
+                    put("isAlert", item.isAlert)
+                    item.severity?.let { put("severity", it) }
+                    item.languageCode?.let { put("languageCode", it) }
+                    item.locationLatitude?.let { put("locationLatitude", it) }
+                    item.locationLongitude?.let { put("locationLongitude", it) }
+                    item.locationAccuracyMeters?.let { put("locationAccuracyMeters", it) }
                 }
             )
         }
