@@ -2,6 +2,7 @@ package com.tactical.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import com.tactical.app.ui.ChatMessageUi
 import com.tactical.app.ui.MainUiState
+import com.tactical.app.ui.components.EmergencyAlertDialog
 import com.tactical.app.ui.theme.*
 
 @Composable
@@ -29,6 +31,7 @@ fun MessagesScreen(
 ) {
     var input by remember { mutableStateOf("") }
     var selected by remember { mutableIntStateOf(0) }
+    var selectedEmergency by remember { mutableStateOf<ChatMessageUi?>(null) }
 
     val currentMessages = if (selected == 0) {
         uiState.receivedMessages
@@ -88,8 +91,22 @@ fun MessagesScreen(
                     )
                 }
             }
-            items(currentMessages) { message ->
-                MessageRow(message, selected == 1)
+
+            items(
+                items = currentMessages,
+                key = { message ->
+                    message.timestampText + "_" + message.sender + "_" + message.text.hashCode()
+                }
+            ) { message ->
+                MessageRow(
+                    message = message,
+                    isSent = selected == 1,
+                    onClick = {
+                        if (message.isAlert && message.emergencyData != null) {
+                            selectedEmergency = message
+                        }
+                    }
+                )
             }
         }
 
@@ -132,32 +149,53 @@ fun MessagesScreen(
                 Icon(
                     Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
-                    tint = if (input.isNotBlank()) RedTacticalPrimaryBright else RedTacticalTextSecondary
+                    tint = if (input.isNotBlank()) {
+                        RedTacticalPrimaryBright
+                    } else {
+                        RedTacticalTextSecondary
+                    }
                 )
             }
         }
+    }
+
+    selectedEmergency?.emergencyData?.let { alert ->
+        EmergencyAlertDialog(
+            alertData = alert,
+            onAcknowledge = { selectedEmergency = null }
+        )
     }
 }
 
 @Composable
 private fun MessageRow(
     message: ChatMessageUi,
-    isSent: Boolean
+    isSent: Boolean,
+    onClick: () -> Unit
 ) {
-    val borderColor = if (message.isVoice) {
-        RedTacticalPrimary
-    } else {
-        RedTacticalStatusGreen
+    val borderColor = when {
+        message.isAlert -> RedTacticalPrimaryBright
+        message.isVoice -> RedTacticalVoiceOrange
+        else -> RedTacticalStatusGreen
     }
-
-    val borderWidth = 1.dp
 
     Card(
         colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
+            .border(
+                width = if (message.isAlert) 1.5.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .then(
+                if (message.isAlert) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            )
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(
@@ -165,8 +203,12 @@ private fun MessageRow(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    message.sender,
-                    color = Color.White,
+                    if (message.isAlert) "🚨 " + message.sender else message.sender,
+                    color = if (message.isAlert) {
+                        RedTacticalPrimaryBright
+                    } else {
+                        Color.White
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp
                 )
@@ -182,19 +224,21 @@ private fun MessageRow(
             Text(
                 message.text,
                 color = Color.White,
-                fontSize = 14.sp
+                fontSize = 14.sp,
+                maxLines = if (message.isAlert) 2 else Int.MAX_VALUE
             )
 
             Spacer(Modifier.height(5.dp))
 
             Text(
-                message.statusText,
-                color = if (message.isVoice) {
-                    RedTacticalPrimary
-                } else {
-                    RedTacticalStatusGreen
+                text = when {
+                    message.isAlert -> "EMERGENCY • TAP FOR DETAILS"
+                    message.isVoice -> message.statusText
+                    else -> message.statusText
                 },
-                fontSize = 10.sp
+                color = borderColor,
+                fontSize = 10.sp,
+                fontWeight = if (message.isAlert) FontWeight.Bold else FontWeight.Normal
             )
         }
     }
