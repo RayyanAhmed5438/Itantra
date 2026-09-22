@@ -366,9 +366,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    }
-    }
-
     /**
      * Keeps discovery alive independently from any established connection.
      * The 10-second timer schedules fresh discovery cycles; it never calls
