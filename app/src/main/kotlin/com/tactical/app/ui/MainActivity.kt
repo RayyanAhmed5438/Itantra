@@ -236,7 +236,9 @@ class MainActivity : ComponentActivity() {
                                     uiState = state,
                                     onRefresh = viewModel::forceDiscovery,
                                     onPttPress = viewModel::pressPtt,
-                                    onPttRelease = viewModel::releasePtt
+                                    onPttRelease = viewModel::releasePtt,
+                                    onEmergencyPress = viewModel::startEmergencyHold,
+                                    onEmergencyRelease = viewModel::releaseEmergencyHold
                                 )
                                     2 -> MessagesScreen(
                                         state,
