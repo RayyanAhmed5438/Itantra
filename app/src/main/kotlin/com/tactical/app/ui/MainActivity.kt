@@ -37,7 +37,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.tactical.app.service.TacticalMeshService
 import com.tactical.app.ui.components.AppBottomNavigation
 import com.tactical.app.ui.components.EmergencyRecordingDialog
@@ -118,7 +117,7 @@ class MainActivity : ComponentActivity() {
 
                 if (showTtsLab) {
                     TtsTestScreen(
-                        installedLanguages = ttsLanguages.value,
+                        availableLanguages = ttsLanguages.value,
                         isLoadingModels = ttsLoading.value,
                         modelMessage = ttsMessage.value,
                         onSpeak = { language, text ->
