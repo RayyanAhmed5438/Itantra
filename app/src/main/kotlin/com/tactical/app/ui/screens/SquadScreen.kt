@@ -141,27 +141,42 @@ fun SquadScreen(
                         .then(
                             if (pttEnabled) {
                                 Modifier.pointerInput(Unit) {
+                                    var cancelled = false
+                                    var totalDragX = 0f
+                                    var totalDragY = 0f
+
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
+                                            cancelled = false
+                                            totalDragX = 0f
+                                            totalDragY = 0f
                                             pttHeld = true
                                             onPttPress()
                                         },
-                                        onDrag = { change, _ ->
+                                        onDrag = { change, dragAmount ->
+                                            totalDragX += dragAmount.x
+                                            totalDragY += dragAmount.y
+
                                             if (
-                                                change.position.x - change.previousPosition.x > 0f
+                                                !cancelled &&
+                                                totalDragX > 80.dp.toPx() &&
+                                                totalDragX > kotlin.math.abs(totalDragY) * 1.2f
                                             ) {
-                                                // The cancellation threshold is measured from the
-                                                // press position by the detector's accumulated drag.
+                                                cancelled = true
+                                                pttHeld = false
+                                                onPttCancel()
                                             }
+
+                                            change.consume()
                                         },
                                         onDragEnd = {
-                                            if (pttHeld) {
+                                            if (!cancelled && pttHeld) {
                                                 pttHeld = false
                                                 onPttRelease()
                                             }
                                         },
                                         onDragCancel = {
-                                            if (pttHeld) {
+                                            if (!cancelled && pttHeld) {
                                                 pttHeld = false
                                                 onPttCancel()
                                             }
