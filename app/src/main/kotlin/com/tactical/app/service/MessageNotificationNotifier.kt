@@ -77,6 +77,15 @@ class MessageNotificationNotifier @Inject constructor(
         activeNotificationIds.forEach { id ->
             runCatching { manager.cancel(id) }
         }
+
+        // Also clear message notifications created by an earlier app process.
+        // getActiveNotifications() returns this app's own active notifications.
+        runCatching {
+            manager.activeNotifications
+                .filter { it.id in MESSAGE_NOTIFICATION_ID_RANGE }
+                .forEach { manager.cancel(it.id) }
+        }
+
         activeNotificationIds.clear()
     }
 
