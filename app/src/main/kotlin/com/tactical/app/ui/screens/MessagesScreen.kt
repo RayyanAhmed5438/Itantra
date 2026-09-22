@@ -434,9 +434,9 @@ private fun MessageRow(
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) {
-            Arrangement.Start
-        } else {
             Arrangement.End
+        } else {
+            Arrangement.Start
         }
     ) {
         Card(
