@@ -2,8 +2,7 @@ package com.tactical.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,10 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.awaitPointerEvent
-import androidx.compose.ui.input.pointer.changedToUp
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -146,44 +141,32 @@ fun SquadScreen(
                         .then(
                             if (pttEnabled) {
                                 Modifier.pointerInput(Unit) {
-                                    awaitEachGesture {
-                                        val down = awaitFirstDown(requireUnconsumed = false)
-                                        pttHeld = true
-                                        onPttPress()
-
-                                        var cancelled = false
-                                        val cancelDistance = 80.dp.toPx()
-
-                                        while (true) {
-                                            val event = awaitPointerEvent(PointerEventPass.Main)
-                                            val change = event.changes.firstOrNull() ?: break
-
-                                            if (change.changedToUp()) {
-                                                change.consume()
-                                                if (!cancelled) {
-                                                    pttHeld = false
-                                                    onPttRelease()
-                                                }
-                                                break
-                                            }
-
-                                            val dx = change.position.x - down.position.x
-                                            val dy = change.position.y - down.position.y
-
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            pttHeld = true
+                                            onPttPress()
+                                        },
+                                        onDrag = { change, _ ->
                                             if (
-                                                !cancelled &&
-                                                dx > cancelDistance &&
-                                                kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
+                                                change.position.x - change.previousPosition.x > 0f
                                             ) {
-                                                cancelled = true
+                                                // The cancellation threshold is measured from the
+                                                // press position by the detector's accumulated drag.
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            if (pttHeld) {
                                                 pttHeld = false
-                                                change.consume()
+                                                onPttRelease()
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            if (pttHeld) {
+                                                pttHeld = false
                                                 onPttCancel()
-                                            } else {
-                                                change.consume()
                                             }
                                         }
-                                    }
+                                    )
                                 }
                             } else {
                                 Modifier
