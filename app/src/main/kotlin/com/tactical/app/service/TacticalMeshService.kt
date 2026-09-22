@@ -47,6 +47,9 @@ class TacticalMeshService : Service() {
     lateinit var emergencyAlertNotifier: EmergencyAlertNotifier
 
     @Inject
+    lateinit var messageNotificationNotifier: MessageNotificationNotifier
+
+    @Inject
     lateinit var localAppDataStore: LocalAppDataStore
 
     private val serviceScope =
@@ -54,6 +57,7 @@ class TacticalMeshService : Service() {
 
     private val binder = MeshBinder()
     private var emergencyJob: kotlinx.coroutines.Job? = null
+    private var messageJob: kotlinx.coroutines.Job? = null
 
     inner class MeshBinder : Binder() {
         fun getService(): TacticalMeshService = this@TacticalMeshService
@@ -105,6 +109,37 @@ class TacticalMeshService : Service() {
                             "TacticalMeshService",
                             "Emergency alert playback failed",
                             error
+                        )
+                    }
+                }
+            }
+        }
+
+        // Normal/voice messages are also handled here so notifications
+        // continue to work when the Activity/ViewModel is not alive.
+        if (messageJob?.isActive != true) {
+            messageJob = serviceScope.launch {
+                meshService.receive().collect { packet ->
+                    if (packet is com.tactical.domain.packet.TextPacket) {
+                        val senderName =
+                            localAppDataStore.callsignForPeer(packet.sender.value)
+                                ?: packet.sender.value.take(8)
+                        val isVoiceMessage = packet.languageCode != "und"
+
+                        localAppDataStore.saveReceivedMessage(
+                            com.tactical.app.di.StoredReceivedMessage(
+                                senderId = packet.sender.value,
+                                senderName = senderName,
+                                text = packet.text,
+                                timestampEpochMs = packet.timestamp,
+                                isVoice = isVoiceMessage
+                            )
+                        )
+
+                        messageNotificationNotifier.show(
+                            senderName = senderName,
+                            message = packet.text,
+                            isVoice = isVoiceMessage
                         )
                     }
                 }
@@ -166,6 +201,8 @@ class TacticalMeshService : Service() {
     override fun onDestroy() {
         emergencyJob?.cancel()
         emergencyJob = null
+        messageJob?.cancel()
+        messageJob = null
 
         serviceScope.launch {
             discoveryService.stop()
