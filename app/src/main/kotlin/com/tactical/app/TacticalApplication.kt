@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import java.io.File
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -12,7 +13,28 @@ class TacticalApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        cleanupSpeechExtractionCache()
         createNotificationChannels()
+    }
+
+    /**
+     * Older speech-model extractors used cacheDir for temporary ZIP extraction.
+     * A process kill during extraction can leave those temporary directories
+     * behind permanently. They contain no live model state and are safe to
+     * remove on application startup.
+     */
+    private fun cleanupSpeechExtractionCache() {
+        val cache = cacheDir
+        cache.listFiles()
+            ?.filter {
+                it.name.startsWith("tts_bundle_") ||
+                    it.name.startsWith("tts_model_") ||
+                    it.name.startsWith("moonshine_stt_") ||
+                    it.name.startsWith("vosk_hi_bundle_")
+            }
+            ?.forEach { file ->
+                runCatching { file.deleteRecursively() }
+            }
     }
 
     private fun createNotificationChannels() {
