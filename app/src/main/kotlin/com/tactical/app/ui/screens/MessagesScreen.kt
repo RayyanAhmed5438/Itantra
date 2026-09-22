@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -52,13 +53,24 @@ fun MessagesScreen(
         onMessagesOpened()
     }
 
-    // One conversation stream: sent + received, newest first.
+    // One conversation stream: sent + received, oldest first.
+    // Deduplicate defensively in case the same packet appears in both lists.
     val conversationMessages = remember(
         uiState.sentMessages,
         uiState.receivedMessages
     ) {
         (uiState.sentMessages + uiState.receivedMessages)
-            .sortedByDescending { it.timestampEpochMs }
+            .distinctBy(::messageStorageKey)
+            .sortedBy { it.timestampEpochMs }
+    }
+
+    val listState = rememberLazyListState()
+
+    // Keep the newest message visible as the conversation grows.
+    LaunchedEffect(conversationMessages.size) {
+        if (conversationMessages.isNotEmpty()) {
+            listState.animateScrollToItem(conversationMessages.lastIndex)
+        }
     }
 
     val filteredMessages = if (todayOnly) {
@@ -167,6 +179,7 @@ fun MessagesScreen(
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .weight(1f)
