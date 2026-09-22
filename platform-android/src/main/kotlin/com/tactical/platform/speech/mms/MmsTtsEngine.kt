@@ -139,10 +139,12 @@ class MmsTtsEngine @Inject constructor(
         closeLoadedSession()
 
         val modelFile = File(directory, "model.int8.onnx")
-        val modelBytes = modelFile.readBytes()
 
+        // Load directly from disk instead of first copying the entire ONNX
+        // model into a Kotlin ByteArray. This lowers peak RAM during model
+        // initialization on devices with limited memory.
         session = environment.createSession(
-            modelBytes,
+            modelFile.absolutePath,
             OrtSession.SessionOptions()
         )
         tokenizer = MmsVitsTokenizer(directory)
