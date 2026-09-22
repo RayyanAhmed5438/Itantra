@@ -210,7 +210,7 @@ class LocalAppDataStore @Inject constructor(
 
         val remaining = loadReceivedMessages().filterNot { message ->
             messageStorageKey(
-                senderId = message.senderId,
+                senderName = message.senderName,
                 timestampEpochMs = message.timestampEpochMs,
                 text = message.text,
                 isAlert = message.isAlert,
@@ -245,13 +245,13 @@ class LocalAppDataStore @Inject constructor(
     }
 
     fun messageStorageKey(
-        senderId: String,
+        senderName: String,
         timestampEpochMs: Long,
         text: String,
         isAlert: Boolean,
         isVoice: Boolean
     ): String =
-        senderId + "|" +
+        senderName + "|" +
             timestampEpochMs + "|" +
             text + "|" +
             isAlert + "|" +
