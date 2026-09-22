@@ -35,6 +35,23 @@ data class StoredReceivedMessage(
     val receivedAtEpochMs: Long = 0L
 )
 
+data class StoredSentMessage(
+    val senderName: String,
+    val text: String,
+    val timestampEpochMs: Long,
+    val statusText: String,
+    val isVoice: Boolean = false,
+    val isAlert: Boolean = false,
+    val severity: String? = null,
+    val languageCode: String? = null,
+    val locationLatitude: Double? = null,
+    val locationLongitude: Double? = null,
+    val locationAccuracyMeters: Float? = null,
+    // Local time used to keep conversation order independent of other
+    // devices' clocks.
+    val conversationOrderEpochMs: Long = timestampEpochMs
+)
+
 /**
  * Small local persistence layer for app-level squad data.
  *
@@ -53,6 +70,173 @@ class LocalAppDataStore @Inject constructor(
 
     private val _receivedMessagesChanged = MutableStateFlow(0)
     val receivedMessagesChanged = _receivedMessagesChanged.asStateFlow()
+
+    @Synchronized
+    fun loadSentMessages(): List<StoredSentMessage> {
+        val json = preferences.getString(KEY_SENT_MESSAGES, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(json)
+            buildList(array.length()) {
+                for (index in 0 until array.length()) {
+                    val item = array.getJSONObject(index)
+                    add(
+                        StoredSentMessage(
+                            senderName = item.optString("senderName", "YOU"),
+                            text = item.getString("text"),
+                            timestampEpochMs = item.optLong("timestampEpochMs", 0L),
+                            statusText = item.optString("statusText", "Sent"),
+                            isVoice = item.optBoolean("isVoice", false),
+                            isAlert = item.optBoolean("isAlert", false),
+                            severity = item.optString("severity").takeIf { it.isNotBlank() },
+                            languageCode = item.optString("languageCode").takeIf { it.isNotBlank() },
+                            locationLatitude = if (item.has("locationLatitude") && !item.isNull("locationLatitude")) item.optDouble("locationLatitude") else null,
+                            locationLongitude = if (item.has("locationLongitude") && !item.isNull("locationLongitude")) item.optDouble("locationLongitude") else null,
+                            locationAccuracyMeters = if (item.has("locationAccuracyMeters") && !item.isNull("locationAccuracyMeters")) item.optDouble("locationAccuracyMeters").toFloat() else null,
+                            conversationOrderEpochMs = item.optLong(
+                                "conversationOrderEpochMs",
+                                item.optLong("timestampEpochMs", 0L)
+                            )
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    @Synchronized
+    fun saveSentMessage(message: StoredSentMessage) {
+        val messages = loadSentMessages()
+            .filterNot { existing ->
+                messageStorageKey(
+                    senderName = existing.senderName,
+                    timestampEpochMs = existing.timestampEpochMs,
+                    text = existing.text,
+                    isAlert = existing.isAlert,
+                    isVoice = existing.isVoice
+                ) == messageStorageKey(
+                    senderName = message.senderName,
+                    timestampEpochMs = message.timestampEpochMs,
+                    text = message.text,
+                    isAlert = message.isAlert,
+                    isVoice = message.isVoice
+                )
+            }
+            .toMutableList()
+
+        messages.add(message)
+
+        val array = JSONArray()
+        messages.forEach { item ->
+            array.put(
+                JSONObject().apply {
+                    put("senderName", item.senderName)
+                    put("text", item.text)
+                    put("timestampEpochMs", item.timestampEpochMs)
+                    put("statusText", item.statusText)
+                    put("isVoice", item.isVoice)
+                    put("isAlert", item.isAlert)
+                    put("conversationOrderEpochMs", item.conversationOrderEpochMs)
+                    item.severity?.let { put("severity", it) }
+                    item.languageCode?.let { put("languageCode", it) }
+                    item.locationLatitude?.let { put("locationLatitude", it) }
+                    item.locationLongitude?.let { put("locationLongitude", it) }
+                    item.locationAccuracyMeters?.let { put("locationAccuracyMeters", it) }
+                }
+            )
+        }
+
+        preferences.edit()
+            .putString(KEY_SENT_MESSAGES, array.toString())
+            .apply()
+    }
+
+    @Synchronized
+    fun updateSentMessageStatus(messageKey: String, statusText: String) {
+        val messages = loadSentMessages().toMutableList()
+        var changed = false
+
+        val updated = messages.map { item ->
+            val key = messageStorageKey(
+                senderName = item.senderName,
+                timestampEpochMs = item.timestampEpochMs,
+                text = item.text,
+                isAlert = item.isAlert,
+                isVoice = item.isVoice
+            )
+
+            if (key == messageKey) {
+                changed = true
+                item.copy(statusText = statusText)
+            } else {
+                item
+            }
+        }
+
+        if (!changed) return
+
+        val array = JSONArray()
+        updated.forEach { item ->
+            array.put(
+                JSONObject().apply {
+                    put("senderName", item.senderName)
+                    put("text", item.text)
+                    put("timestampEpochMs", item.timestampEpochMs)
+                    put("statusText", item.statusText)
+                    put("isVoice", item.isVoice)
+                    put("isAlert", item.isAlert)
+                    put("conversationOrderEpochMs", item.conversationOrderEpochMs)
+                    item.severity?.let { put("severity", it) }
+                    item.languageCode?.let { put("languageCode", it) }
+                    item.locationLatitude?.let { put("locationLatitude", it) }
+                    item.locationLongitude?.let { put("locationLongitude", it) }
+                    item.locationAccuracyMeters?.let { put("locationAccuracyMeters", it) }
+                }
+            )
+        }
+
+        preferences.edit()
+            .putString(KEY_SENT_MESSAGES, array.toString())
+            .apply()
+    }
+
+    @Synchronized
+    fun deleteSentMessages(messageKeys: Set<String>) {
+        if (messageKeys.isEmpty()) return
+
+        val remaining = loadSentMessages().filterNot { message ->
+            messageStorageKey(
+                senderName = message.senderName,
+                timestampEpochMs = message.timestampEpochMs,
+                text = message.text,
+                isAlert = message.isAlert,
+                isVoice = message.isVoice
+            ) in messageKeys
+        }
+
+        val array = JSONArray()
+        remaining.forEach { item ->
+            array.put(
+                JSONObject().apply {
+                    put("senderName", item.senderName)
+                    put("text", item.text)
+                    put("timestampEpochMs", item.timestampEpochMs)
+                    put("statusText", item.statusText)
+                    put("isVoice", item.isVoice)
+                    put("isAlert", item.isAlert)
+                    put("conversationOrderEpochMs", item.conversationOrderEpochMs)
+                    item.severity?.let { put("severity", it) }
+                    item.languageCode?.let { put("languageCode", it) }
+                    item.locationLatitude?.let { put("locationLatitude", it) }
+                    item.locationLongitude?.let { put("locationLongitude", it) }
+                    item.locationAccuracyMeters?.let { put("locationAccuracyMeters", it) }
+                }
+            )
+        }
+
+        preferences.edit()
+            .putString(KEY_SENT_MESSAGES, array.toString())
+            .apply()
+    }
 
     @Synchronized
     fun loadPairedDevices(): List<StoredPairedDevice> {
@@ -304,6 +488,7 @@ class LocalAppDataStore @Inject constructor(
         private const val PREFS_NAME = "tactical_local_app_data"
         private const val KEY_PAIRED_DEVICES = "paired_devices"
         private const val KEY_RECEIVED_MESSAGES = "received_messages"
+        private const val KEY_SENT_MESSAGES = "sent_messages"
         private const val KEY_MESSAGES_LAST_READ = "messages_last_read_epoch_ms"
     }
 }
