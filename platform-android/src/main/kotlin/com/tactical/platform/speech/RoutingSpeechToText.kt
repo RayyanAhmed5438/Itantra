@@ -5,6 +5,8 @@ import com.tactical.domain.speech.TranscriptionChunk
 import com.tactical.platform.api.speech.SpeechToText
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Singleton
 
 /**
@@ -20,15 +22,33 @@ class RoutingSpeechToText @Inject constructor(
     private val languagePreferences: SpeechLanguagePreferences
 ) : SpeechToText {
 
+    private val switchMutex = Mutex()
+    private var activeLanguage: String? = null
+
     override fun transcribe(
         audio: Flow<AudioFrame>
-    ): Flow<TranscriptionChunk> =
-        when (languagePreferences.selectedLanguageCode) {
+    ): Flow<TranscriptionChunk> {
+        val selectedLanguage = languagePreferences.selectedLanguageCode
+
+        return kotlinx.coroutines.flow.flow {
+            switchMutex.withLock {
+                if (activeLanguage != selectedLanguage) {
+                    when (activeLanguage) {
+                        "hi" -> voskHindiSpeechToText.close()
+                        "en" -> moonshineSpeechToText.close()
+                    }
+                    activeLanguage = selectedLanguage
+                }
+            }
+
+            emitAll(
+                when (selectedLanguage) {
             "hi" -> voskHindiSpeechToText.transcribe(audio)
             "en" -> moonshineSpeechToText.transcribe(audio)
-            else -> error(
-                "No STT backend configured for language " +
-                    languagePreferences.selectedLanguageCode
+                else -> error(
+                    "No STT backend configured for language " +
+                        selectedLanguage
+                )
             )
         }
 }
