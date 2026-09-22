@@ -32,7 +32,8 @@ class AndroidAlarmBypass(private val context: Context) : AlarmBypass {
 
     private val activeBypassCount = AtomicInteger(0)
     @Volatile private var savedInterruptionFilter: Int? = null
-    @Volatile private var savedStreamVolume: Int? = null
+    @Volatile private var savedMusicVolume: Int? = null
+    @Volatile private var savedAlarmVolume: Int? = null
 
     override suspend fun bypassDndAndMaxVolume() {
         if (activeBypassCount.getAndIncrement() == 0) {
@@ -40,11 +41,14 @@ class AndroidAlarmBypass(private val context: Context) : AlarmBypass {
                 savedInterruptionFilter = notificationManager.currentInterruptionFilter
                 notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
             }
-            savedStreamVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            savedMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            savedAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
         }
 
-        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0)
+        val maxMusic = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val maxAlarm = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
     }
 
     override suspend fun resetVolume() {
@@ -57,7 +61,13 @@ class AndroidAlarmBypass(private val context: Context) : AlarmBypass {
         }
         savedInterruptionFilter = null
 
-        savedStreamVolume?.let { volume -> audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0) }
-        savedStreamVolume = null
+        savedMusicVolume?.let { volume ->
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
+        }
+        savedAlarmVolume?.let { volume ->
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, volume, 0)
+        }
+        savedMusicVolume = null
+        savedAlarmVolume = null
     }
 }
