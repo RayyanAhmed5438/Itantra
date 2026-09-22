@@ -103,7 +103,11 @@ class MainActivity : ComponentActivity() {
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        if (grants.values.all { it }) {
+        val criticalDenied = grants.any { (permission, granted) ->
+            permission != Manifest.permission.POST_NOTIFICATIONS && !granted
+        }
+
+        if (!criticalDenied) {
             ensureWirelessEnabled()
         } else {
             wirelessWarning.value = "Bluetooth / Wi-Fi / microphone permissions are required."
@@ -207,6 +211,7 @@ class MainActivity : ComponentActivity() {
                             if (!showSettings) {
                                 AppBottomNavigation(
                                     selectedTab = selectedTab,
+                                    unreadMessageCount = state.unreadMessageCount,
                                     onTabSelected = { tab -> selectedTab = tab }
                                 )
                             }
@@ -237,12 +242,14 @@ class MainActivity : ComponentActivity() {
                                     onRefresh = viewModel::forceDiscovery,
                                     onPttPress = viewModel::pressPtt,
                                     onPttRelease = viewModel::releasePtt,
+                                    onPttCancel = viewModel::cancelPtt,
                                     onEmergencyPress = viewModel::startEmergencyHold,
                                     onEmergencyRelease = viewModel::releaseEmergencyHold
                                 )
                                     2 -> MessagesScreen(
                                         state,
-                                        viewModel::sendTextMessage
+                                        viewModel::sendTextMessage,
+                                        viewModel::markMessagesRead
                                     )
                                 }
                             }
@@ -319,6 +326,7 @@ class MainActivity : ComponentActivity() {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                add(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
