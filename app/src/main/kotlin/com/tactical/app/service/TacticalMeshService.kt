@@ -86,7 +86,7 @@ class TacticalMeshService : Service() {
                     // alert received while the Activity is closed is available
                     // when Messages is opened later. LocalAppDataStore
                     // deduplicates the service/UI observers if both are active.
-                    localAppDataStore.saveReceivedMessage(
+                    val isNewEmergency = localAppDataStore.saveReceivedMessage(
                         com.tactical.app.di.StoredReceivedMessage(
                             senderId = packet.sender.value,
                             senderName = senderName,
@@ -101,6 +101,8 @@ class TacticalMeshService : Service() {
                             locationAccuracyMeters = packet.location?.accuracyMeters
                         )
                     )
+
+                    if (!isNewEmergency) return@collect
 
                     emergencyAlertNotifier.show(
                         packet = packet,
@@ -131,7 +133,7 @@ class TacticalMeshService : Service() {
                                 ?: packet.sender.value.take(8)
                         val isVoiceMessage = packet.languageCode != "und"
 
-                        localAppDataStore.saveReceivedMessage(
+                        val isNewMessage = localAppDataStore.saveReceivedMessage(
                             com.tactical.app.di.StoredReceivedMessage(
                                 senderId = packet.sender.value,
                                 senderName = senderName,
@@ -141,13 +143,15 @@ class TacticalMeshService : Service() {
                             )
                         )
 
-                        messageNotificationNotifier.show(
-                            senderName = senderName,
-                            message = packet.text,
-                            isVoice = isVoiceMessage
-                        )
+                        if (isNewMessage) {
+                            messageNotificationNotifier.show(
+                                senderName = senderName,
+                                message = packet.text,
+                                isVoice = isVoiceMessage
+                            )
+                        }
 
-                        if (isVoiceMessage) {
+                        if (isNewMessage && isVoiceMessage) {
                             serviceScope.launch {
                                 val language = MmsTtsLanguage.fromIsoCode(packet.languageCode)
                                 if (language != null) {
