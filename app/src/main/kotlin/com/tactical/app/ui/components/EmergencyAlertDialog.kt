@@ -79,7 +79,7 @@ fun EmergencyAlertDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "FROM: \${alertData.sender}",
+                        text = "FROM: " + alertData.sender,
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -97,8 +97,8 @@ fun EmergencyAlertDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InfoPill("SEVERITY: \${alertData.severity}")
-                    InfoPill("LANG: \${alertData.languageCode.uppercase()}")
+                    InfoPill("SEVERITY: " + alertData.severity)
+                    InfoPill("LANG: " + alertData.languageCode.uppercase())
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -181,7 +181,7 @@ fun EmergencyAlertDialog(
                                 alertData.locationAccuracyMeters?.let { accuracy ->
                                     Spacer(Modifier.height(3.dp))
                                     Text(
-                                        text = "Accuracy: \${accuracy.toInt()} m",
+                                        text = "Accuracy: " + accuracy.toInt() + " m",
                                         color = RedTacticalTextSecondary,
                                         fontSize = 10.sp
                                     )
