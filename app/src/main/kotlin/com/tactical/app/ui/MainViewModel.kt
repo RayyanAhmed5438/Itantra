@@ -8,8 +8,11 @@ import com.tactical.app.di.StoredPairedDevice
 import com.tactical.app.di.StoredReceivedMessage
 import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.identity.LinkType
+import com.tactical.domain.packet.EmergencyPacket
 import com.tactical.domain.packet.TextPacket
+import com.tactical.domain.packet.Severity
 import com.tactical.domain.result.TacticalResult
+import com.tactical.domain.audio.AudioConfig
 import com.tactical.platform.api.audio.AudioRecorder
 import com.tactical.platform.api.haptics.HapticEngine
 import com.tactical.platform.api.speech.SpeechToText
@@ -35,6 +38,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -56,16 +60,23 @@ data class ChatMessageUi(
     val timestampText: String,
     val statusText: String,
     val isAlert: Boolean = false,
-    val isVoice: Boolean = false
+    val isVoice: Boolean = false,
+    val emergencyData: EmergencyAlertData? = null
 )
 
 data class EmergencyAlertData(
-    val sender: String = "COMMANDER",
-    val timestampText: String = "10:32 AM",
-    val hindiText: String = "कृपया तुरंत सुरक्षित स्थान पर जाएं!",
-    val englishText: String = "Please move to a safe location immediately.",
-    val durationSeconds: Int = 4
-)
+    val sender: String,
+    val timestampText: String,
+    val severity: String,
+    val message: String,
+    val languageCode: String,
+    val locationLatitude: Double? = null,
+    val locationLongitude: Double? = null,
+    val locationAccuracyMeters: Float? = null
+) {
+    val hasLocation: Boolean
+        get() = locationLatitude != null && locationLongitude != null
+}
 
 data class NetworkMetrics(
     val rttMs: Int = 0,
@@ -87,7 +98,12 @@ data class MainUiState(
     val networkMetrics: NetworkMetrics = NetworkMetrics(),
     val isScanning: Boolean = false,
     val pttSessionState: SessionState = SessionState.IDLE,
-    val pttLastTranscription: String? = null
+    val pttLastTranscription: String? = null,
+    val emergencyComposerVisible: Boolean = false,
+    val emergencyRecording: Boolean = false,
+    val emergencySending: Boolean = false,
+    val emergencyTranscription: String = "",
+    val emergencyError: String? = null
 )
 
 @HiltViewModel
@@ -147,6 +163,17 @@ class MainViewModel @Inject constructor(
 
     private var lastHandledPttSessionId: String? = null
 
+    private val emergencyTrigger =
+        com.tactical.emergency.trigger.HoldPanicTrigger(viewModelScope)
+
+    private var emergencyRecordingJob: Job? = null
+
+    private val emergencyMessageBuilder =
+        com.tactical.emergency.message.EmergencyMessageBuilder()
+
+    private val emergencyBroadcaster =
+        com.tactical.emergency.broadcast.RadiusEmergencyBroadcaster(meshService)
+
     private fun speakIncomingMessage(packet: TextPacket) {
         val language = MmsTtsLanguage.fromIsoCode(packet.languageCode) ?: return
 
@@ -165,6 +192,14 @@ class MainViewModel @Inject constructor(
 
 
     init {
+        viewModelScope.launch {
+            emergencyTrigger.state().collect { triggerState ->
+                if (triggerState == com.tactical.emergency.trigger.PanicTriggerState.TRIGGERED) {
+                    startEmergencyRecording()
+                }
+            }
+        }
+
         viewModelScope.launch {
             pttController.state().collect { ptt ->
                 _uiState.update {
@@ -327,7 +362,43 @@ class MainViewModel @Inject constructor(
         }
         viewModelScope.launch {
             meshService.receive().collect { packet ->
-                if (packet is TextPacket) {
+                if (packet is EmergencyPacket) {
+                    val senderName =
+                        localAppDataStore.callsignForPeer(packet.sender.value)
+                            ?: packet.sender.value.take(12)
+                    val details = emergencyAlertData(packet, senderName)
+                    val message = ChatMessageUi(
+                        sender = senderName,
+                        text = packet.description,
+                        timestampText = formatTimestamp(packet.timestamp),
+                        statusText = "Emergency",
+                        isAlert = true,
+                        emergencyData = details
+                    )
+
+                    localAppDataStore.saveReceivedMessage(
+                        StoredReceivedMessage(
+                            senderId = packet.sender.value,
+                            senderName = senderName,
+                            text = packet.description,
+                            timestampEpochMs = packet.timestamp,
+                            isVoice = false,
+                            isAlert = true,
+                            severity = packet.severity.name,
+                            languageCode = packet.languageCode,
+                            locationLatitude = packet.location?.latitude,
+                            locationLongitude = packet.location?.longitude,
+                            locationAccuracyMeters = packet.location?.accuracyMeters
+                        )
+                    )
+
+                    _uiState.update {
+                        it.copy(
+                            messages = listOf(message) + it.messages,
+                            receivedMessages = listOf(message) + it.receivedMessages
+                        )
+                    }
+                } else if (packet is TextPacket) {
                     val senderName =
                         localAppDataStore.callsignForPeer(packet.sender.value)
                             ?: packet.sender.value.take(12)
@@ -539,6 +610,150 @@ class MainViewModel @Inject constructor(
         )
     }
 
+
+
+    fun startEmergencyHold() {
+        if (_uiState.value.pttSessionState != SessionState.IDLE ||
+            _uiState.value.emergencyComposerVisible
+        ) return
+        emergencyTrigger.startHold()
+    }
+
+    fun releaseEmergencyHold() {
+        emergencyTrigger.releaseHold()
+    }
+
+    private fun startEmergencyRecording() {
+        if (_uiState.value.emergencyComposerVisible) return
+
+        _uiState.update {
+            it.copy(
+                emergencyComposerVisible = true,
+                emergencyRecording = true,
+                emergencySending = false,
+                emergencyTranscription = "",
+                emergencyError = null
+            )
+        }
+
+        emergencyRecordingJob?.cancel()
+        emergencyRecordingJob = viewModelScope.launch {
+            try {
+                val frames = audioRecorder.start(AudioConfig())
+                speechToText.transcribe(frames).collect { chunk ->
+                    if (chunk.text.isNotBlank()) {
+                        _uiState.update {
+                            it.copy(emergencyTranscription = chunk.text)
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        emergencyRecording = false,
+                        emergencyError = t.message ?: t.javaClass.simpleName
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelEmergency() {
+        audioRecorder.stop()
+        emergencyRecordingJob?.cancel()
+        emergencyRecordingJob = null
+        emergencyTrigger.reset()
+        _uiState.update {
+            it.copy(
+                emergencyComposerVisible = false,
+                emergencyRecording = false,
+                emergencySending = false,
+                emergencyTranscription = "",
+                emergencyError = null
+            )
+        }
+    }
+
+    fun sendEmergency() {
+        if (_uiState.value.emergencySending) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(emergencySending = true, emergencyError = null)
+            }
+
+            audioRecorder.stop()
+            withTimeoutOrNull(4000L) {
+                emergencyRecordingJob?.join()
+            }
+
+            val text = _uiState.value.emergencyTranscription.trim()
+            if (text.isBlank()) {
+                _uiState.update {
+                    it.copy(
+                        emergencySending = false,
+                        emergencyRecording = false,
+                        emergencyError = "No message was transcribed."
+                    )
+                }
+                return@launch
+            }
+
+            val packet = emergencyMessageBuilder.build(
+                sender = DeviceId(identityStore.deviceIdValue),
+                severity = Severity.CRITICAL,
+                description = text,
+                location = null,
+                languageCode = _uiState.value.selectedLanguageCode
+            )
+
+            val result = emergencyBroadcaster.broadcastSos(packet)
+            val status = when (result) {
+                is TacticalResult.Success -> "Sent"
+                is TacticalResult.Failure -> "Queued"
+            }
+            val details = emergencyAlertData(packet, "YOU")
+            val message = ChatMessageUi(
+                sender = "YOU",
+                text = packet.description,
+                timestampText = formatTimestamp(packet.timestamp),
+                statusText = status,
+                isAlert = true,
+                emergencyData = details
+            )
+
+            _uiState.update {
+                it.copy(
+                    messages = listOf(message) + it.messages,
+                    sentMessages = listOf(message) + it.sentMessages,
+                    emergencyComposerVisible = false,
+                    emergencyRecording = false,
+                    emergencySending = false,
+                    emergencyTranscription = "",
+                    emergencyError = null
+                )
+            }
+
+            emergencyRecordingJob = null
+            emergencyTrigger.reset()
+        }
+    }
+
+    private fun emergencyAlertData(
+        packet: EmergencyPacket,
+        senderName: String
+    ): EmergencyAlertData =
+        EmergencyAlertData(
+            sender = senderName,
+            timestampText = formatTimestamp(packet.timestamp),
+            severity = packet.severity.name,
+            message = packet.description,
+            languageCode = packet.languageCode,
+            locationLatitude = packet.location?.latitude,
+            locationLongitude = packet.location?.longitude,
+            locationAccuracyMeters = packet.location?.accuracyMeters
+        )
+
     fun pressPtt() {
         viewModelScope.launch {
             runCatching { pttController.press() }
@@ -662,14 +877,32 @@ class MainViewModel @Inject constructor(
             bleState = BleLinkState.PAIRED
         )
 
-    private fun storedMessageToUi(message: StoredReceivedMessage): ChatMessageUi =
-        ChatMessageUi(
+    private fun storedMessageToUi(message: StoredReceivedMessage): ChatMessageUi {
+        val emergencyData = if (message.isAlert) {
+            EmergencyAlertData(
+                sender = message.senderName,
+                timestampText = formatTimestamp(message.timestampEpochMs),
+                severity = message.severity ?: Severity.CRITICAL.name,
+                message = message.text,
+                languageCode = message.languageCode ?: "und",
+                locationLatitude = message.locationLatitude,
+                locationLongitude = message.locationLongitude,
+                locationAccuracyMeters = message.locationAccuracyMeters
+            )
+        } else {
+            null
+        }
+
+        return ChatMessageUi(
             sender = message.senderName,
             text = message.text,
             timestampText = formatTimestamp(message.timestampEpochMs),
-            statusText = "Received",
-            isVoice = message.isVoice
+            statusText = if (message.isAlert) "Emergency" else "Received",
+            isVoice = message.isVoice,
+            isAlert = message.isAlert,
+            emergencyData = emergencyData
         )
+    }
 
     private fun formatTimestamp(epochMs: Long): String {
         if (epochMs <= 0L) return "Unknown"
