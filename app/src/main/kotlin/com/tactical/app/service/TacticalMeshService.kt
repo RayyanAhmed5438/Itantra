@@ -72,6 +72,26 @@ class TacticalMeshService : Service() {
                         localAppDataStore.callsignForPeer(packet.sender.value)
                             ?: packet.sender.value.take(8)
 
+                    // Persist emergencies in the foreground service so an
+                    // alert received while the Activity is closed is available
+                    // when Messages is opened later. LocalAppDataStore
+                    // deduplicates the service/UI observers if both are active.
+                    localAppDataStore.saveReceivedMessage(
+                        com.tactical.app.di.StoredReceivedMessage(
+                            senderId = packet.sender.value,
+                            senderName = senderName,
+                            text = packet.description,
+                            timestampEpochMs = packet.timestamp,
+                            isVoice = false,
+                            isAlert = true,
+                            severity = packet.severity.name,
+                            languageCode = packet.languageCode,
+                            locationLatitude = packet.location?.latitude,
+                            locationLongitude = packet.location?.longitude,
+                            locationAccuracyMeters = packet.location?.accuracyMeters
+                        )
+                    )
+
                     emergencyAlertNotifier.show(
                         packet = packet,
                         senderName = senderName
