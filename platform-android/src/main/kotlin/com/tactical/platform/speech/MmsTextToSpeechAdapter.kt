@@ -25,7 +25,14 @@ class MmsTextToSpeechAdapter @Inject constructor(
     ): AudioFrame {
         val language = MmsTtsLanguage.fromIsoCode(langTag.isoCode)
             ?: throw IllegalArgumentException(
-                "Emergency TTS language '\${langTag.isoCode}' is not bundled"
+                "Emergency TTS language '${'' is not bundled"
+            )
+
+        modelStore.ensureBundledModelsAvailable()
+        return engine.synthesize(language, text).first
+    }
+}
+}{langTag.isoCode}' is not bundled"
             )
 
         modelStore.ensureBundledModelsAvailable()
