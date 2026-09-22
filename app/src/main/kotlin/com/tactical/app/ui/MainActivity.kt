@@ -228,8 +228,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-        }
-
         requestStartupPermissions()
     }
 
