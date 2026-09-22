@@ -47,6 +47,19 @@ fun MessagesScreen(
         onMessagesOpened()
     }
 
+    // When the Messages screen is already visible, any newly persisted
+    // message is immediately considered seen rather than leaving a stale
+    // unread badge on the bottom navigation.
+    LaunchedEffect(
+        selectedTab,
+        uiState.receivedMessages.size,
+        uiState.receivedMessages.lastOrNull()?.timestampEpochMs
+    ) {
+        if (selectedTab == 0) {
+            onMessagesOpened()
+        }
+    }
+
     val currentMessages = if (selectedTab == 0) {
         uiState.receivedMessages
     } else {
