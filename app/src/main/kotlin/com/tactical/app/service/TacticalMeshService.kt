@@ -9,6 +9,9 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.tactical.app.TacticalApplication
 import com.tactical.app.ui.MainActivity
+import com.tactical.app.di.LocalAppDataStore
+import com.tactical.emergency.receiver.EmergencyReceiver
+import com.tactical.emergency.squelch.SquelchBreaker
 import com.tactical.engine.discovery.service.DiscoveryService
 import com.tactical.engine.mesh.service.MeshService
 import dagger.hilt.android.AndroidEntryPoint
@@ -16,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -28,10 +32,23 @@ class TacticalMeshService : Service() {
     @Inject
     lateinit var discoveryService: DiscoveryService
 
+    @Inject
+    lateinit var emergencyReceiver: EmergencyReceiver
+
+    @Inject
+    lateinit var emergencySquelchBreaker: SquelchBreaker
+
+    @Inject
+    lateinit var emergencyAlertNotifier: EmergencyAlertNotifier
+
+    @Inject
+    lateinit var localAppDataStore: LocalAppDataStore
+
     private val serviceScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val binder = MeshBinder()
+    private var emergencyJob: kotlinx.coroutines.Job? = null
 
     inner class MeshBinder : Binder() {
         fun getService(): TacticalMeshService = this@TacticalMeshService
@@ -44,6 +61,31 @@ class TacticalMeshService : Service() {
 
         // Injecting MeshService causes the mesh engine to be created.
         // DiscoveryService requires an explicit start().
+        if (emergencyJob?.isActive != true) {
+            emergencyJob = serviceScope.launch {
+                emergencyReceiver.incoming().collect { packet ->
+                    val senderName =
+                        localAppDataStore.callsignForPeer(packet.sender.value)
+                            ?: packet.sender.value.take(8)
+
+                    emergencyAlertNotifier.show(
+                        packet = packet,
+                        senderName = senderName
+                    )
+
+                    runCatching {
+                        emergencySquelchBreaker.breakSquelch(packet)
+                    }.onFailure { error ->
+                        android.util.Log.e(
+                            "TacticalMeshService",
+                            "Emergency alert playback failed",
+                            error
+                        )
+                    }
+                }
+            }
+        }
+
         serviceScope.launch {
             try {
                 discoveryService.start()
@@ -65,6 +107,9 @@ class TacticalMeshService : Service() {
     }
 
     override fun onDestroy() {
+        emergencyJob?.cancel()
+        emergencyJob = null
+
         serviceScope.launch {
             discoveryService.stop()
         }
