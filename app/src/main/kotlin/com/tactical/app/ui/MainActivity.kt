@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,11 +43,8 @@ import com.tactical.app.ui.screens.DevicesScreen
 import com.tactical.app.ui.screens.MessagesScreen
 import com.tactical.app.ui.screens.SquadScreen
 import com.tactical.app.ui.screens.SettingsScreen
-import com.tactical.app.ui.screens.TtsTestScreen
 import com.tactical.app.ui.theme.RedTacticalBackground
 import com.tactical.app.ui.theme.RedTacticalTheme
-import com.tactical.platform.speech.mms.MmsTtsEngine
-import com.tactical.platform.speech.mms.MmsTtsModelStore
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -57,28 +53,9 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
-    @Inject
-    lateinit var ttsModelStore: MmsTtsModelStore
-
-    @Inject
-    lateinit var mmsTtsEngine: MmsTtsEngine
-
     private var startupCheckPending = false
     private var meshServiceStarted = false
     private val wirelessWarning = mutableStateOf<String?>(null)
-    private val ttsLoading = mutableStateOf(false)
-    private val ttsMessage = mutableStateOf<String?>(null)
-    private val ttsLanguages = mutableStateOf<List<com.tactical.platform.speech.mms.MmsTtsLanguage>>(emptyList())
-
-    private fun loadBundledTtsModels() {
-        // Do not extract or instantiate every TTS model when opening the lab.
-        // Each language is extracted and loaded only when it is actually spoken.
-        ttsLoading.value = false
-        ttsLanguages.value = ttsModelStore.bundledLanguages()
-        ttsMessage.value =
-            "TTS models load on demand; only the language being spoken is kept in memory."
-    }
-
     private val wirelessStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
@@ -108,25 +85,9 @@ class MainActivity : ComponentActivity() {
             RedTacticalTheme {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
-                var showTtsLab by remember { mutableStateOf(false) }
                 var showSettings by remember { mutableStateOf(false) }
 
-                LaunchedEffect(showTtsLab) {
-                    if (showTtsLab) loadBundledTtsModels()
-                }
-
-                if (showTtsLab) {
-                    TtsTestScreen(
-                        availableLanguages = ttsLanguages.value,
-                        isLoadingModels = ttsLoading.value,
-                        modelMessage = ttsMessage.value,
-                        onSpeak = { language, text ->
-                            mmsTtsEngine.synthesizeAndPlay(language, text)
-                        },
-                        onDismiss = { showTtsLab = false }
-                    )
-                } else {
-                    Scaffold(
+                Scaffold(
                         topBar = {
                             TopAppBar(
                                 navigationIcon = {
@@ -172,13 +133,6 @@ class MainActivity : ComponentActivity() {
                                 },
                                 actions = {
                                     if (!showSettings) {
-                                        IconButton(onClick = { showTtsLab = true }) {
-                                            Icon(
-                                                Icons.Default.RecordVoiceOver,
-                                                contentDescription = "TTS Model Lab",
-                                                tint = Color.White
-                                            )
-                                        }
                                         IconButton(onClick = { showSettings = true }) {
                                             Icon(
                                                 Icons.Default.Settings,
