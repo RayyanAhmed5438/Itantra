@@ -44,6 +44,7 @@ class TacticalApplication : Application() {
 
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(meshChannel)
+            manager.createNotificationChannel(messageChannel)
             manager.createNotificationChannel(emergencyChannel)
         }
     }
