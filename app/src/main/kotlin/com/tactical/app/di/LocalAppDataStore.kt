@@ -195,9 +195,23 @@ class LocalAppDataStore @Inject constructor(
             .apply()
     }
 
+    @Synchronized
+    fun unreadMessageCount(): Int {
+        val lastRead = preferences.getLong(KEY_MESSAGES_LAST_READ, Long.MIN_VALUE)
+        return loadReceivedMessages().count { it.timestampEpochMs > lastRead }
+    }
+
+    @Synchronized
+    fun markMessagesRead() {
+        preferences.edit()
+            .putLong(KEY_MESSAGES_LAST_READ, System.currentTimeMillis())
+            .apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "tactical_local_app_data"
         private const val KEY_PAIRED_DEVICES = "paired_devices"
         private const val KEY_RECEIVED_MESSAGES = "received_messages"
+        private const val KEY_MESSAGES_LAST_READ = "messages_last_read_epoch_ms"
     }
 }
