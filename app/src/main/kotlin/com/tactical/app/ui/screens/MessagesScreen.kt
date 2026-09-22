@@ -54,14 +54,18 @@ fun MessagesScreen(
     }
 
     // One conversation stream: sent + received, oldest first.
-    // Deduplicate defensively in case the same packet appears in both lists.
+    // Sort by each message's local conversation time so different device
+    // clocks cannot reorder messages. Deduplicate defensively as well.
     val conversationMessages = remember(
         uiState.sentMessages,
         uiState.receivedMessages
     ) {
         (uiState.sentMessages + uiState.receivedMessages)
             .distinctBy(::messageStorageKey)
-            .sortedBy { it.timestampEpochMs }
+            .sortedBy {
+                it.conversationOrderEpochMs.takeIf { time -> time > 0L }
+                    ?: it.timestampEpochMs
+            }
     }
 
     val listState = rememberLazyListState()
