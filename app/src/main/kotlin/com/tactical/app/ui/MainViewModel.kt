@@ -642,11 +642,34 @@ class MainViewModel @Inject constructor(
         emergencyRecordingJob?.cancel()
         emergencyRecordingJob = viewModelScope.launch {
             try {
+                var finalizedText = ""
+                var latestPartial = ""
+
                 val frames = audioRecorder.start(AudioConfig())
                 speechToText.transcribe(frames).collect { chunk ->
-                    if (chunk.text.isNotBlank()) {
+                    if (chunk.isFinal) {
+                        val finalText = chunk.text.trim()
+                        if (finalText.isNotBlank()) {
+                            // Vosk/Moonshine can finalize a sentence at a
+                            // pause. Keep those segments instead of replacing
+                            // the previously transcribed emergency text.
+                            finalizedText = appendEmergencyTranscript(
+                                finalizedText,
+                                finalText
+                            )
+                        }
+                        latestPartial = ""
+                    } else {
+                        latestPartial = chunk.text.trim()
+                    }
+
+                    val liveText = appendEmergencyTranscript(
+                        finalizedText,
+                        latestPartial
+                    )
+                    if (liveText.isNotBlank()) {
                         _uiState.update {
-                            it.copy(emergencyTranscription = chunk.text)
+                            it.copy(emergencyTranscription = liveText)
                         }
                     }
                 }
@@ -659,6 +682,13 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun appendEmergencyTranscript(existing: String, next: String): String {
+        if (next.isBlank()) return existing
+        if (existing.isBlank()) return next.trim()
+        if (existing == next.trim()) return existing
+        return existing.trim() + " " + next.trim()
     }
 
     fun cancelEmergency() {
