@@ -806,7 +806,7 @@ class MainViewModel @Inject constructor(
 
     private fun messageStorageKey(message: ChatMessageUi): String =
         localAppDataStore.messageStorageKey(
-            senderId = message.sender,
+            senderName = message.sender,
             timestampEpochMs = message.timestampEpochMs,
             text = message.text,
             isAlert = message.isAlert,
