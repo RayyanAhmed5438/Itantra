@@ -156,7 +156,20 @@ class LocalAppDataStore @Inject constructor(
     fun saveReceivedMessage(message: StoredReceivedMessage) {
         val messages = loadReceivedMessages()
             .toMutableList()
-            .apply { add(message) }
+
+        // The foreground service and MainViewModel can both observe the same
+        // emergency packet. Treat an identical packet as one message so
+        // background reception does not create duplicate chat entries.
+        val alreadyStored = messages.any { existing ->
+            existing.senderId == message.senderId &&
+                existing.timestampEpochMs == message.timestampEpochMs &&
+                existing.text == message.text &&
+                existing.isAlert == message.isAlert
+        }
+
+        if (!alreadyStored) {
+            messages.add(message)
+        }
 
         val array = JSONArray()
         messages.forEach { item ->
