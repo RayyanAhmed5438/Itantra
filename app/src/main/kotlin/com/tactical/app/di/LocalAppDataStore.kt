@@ -153,7 +153,6 @@ class LocalAppDataStore @Inject constructor(
     }
 
     @Synchronized
-    @Synchronized
     fun saveReceivedMessage(message: StoredReceivedMessage) {
         val messages = loadReceivedMessages()
             .toMutableList()
