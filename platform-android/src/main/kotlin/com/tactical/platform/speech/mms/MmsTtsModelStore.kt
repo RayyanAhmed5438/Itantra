@@ -40,8 +40,8 @@ class MmsTtsModelStore @Inject constructor(
         }
 
         val tempRoot = File(
-            context.cacheDir,
-            "tts_model_" + language.modelCode + "_" + System.currentTimeMillis()
+            context.filesDir,
+            ".tts_model_staging_" + language.modelCode + "_" + System.currentTimeMillis()
         )
         tempRoot.mkdirs()
 
