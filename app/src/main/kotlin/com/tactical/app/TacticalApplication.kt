@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Provider
 
 @HiltAndroidApp
 class TacticalApplication : Application() {
@@ -22,7 +23,7 @@ class TacticalApplication : Application() {
     lateinit var speechLanguagePreferences: SpeechLanguagePreferences
 
     @Inject
-    lateinit var ttsEngine: MmsTtsEngine
+    lateinit var ttsEngineProvider: Provider<MmsTtsEngine>
 
     private val ttsPreloadScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -41,7 +42,7 @@ class TacticalApplication : Application() {
 
         ttsPreloadScope.launch {
             runCatching {
-                ttsEngine.preload(language)
+                ttsEngineProvider.get().preload(language)
             }.onFailure { error ->
                 android.util.Log.w(
                     "TacticalApplication",
