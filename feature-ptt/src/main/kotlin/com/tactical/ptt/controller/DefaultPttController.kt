@@ -127,6 +127,22 @@ class DefaultPttController(
         }
     }
 
+    override suspend fun cancel() {
+        hapticFeedback.onRelease()
+        audioRecorder.stop()
+        sessionJob?.cancel()
+        sessionJob = null
+        currentSession = null
+        _state.update {
+            it.copy(
+                sessionState = SessionState.IDLE,
+                sessionId = null,
+                lastTranscription = null,
+                lastResult = null
+            )
+        }
+    }
+
     override suspend fun release() {
         hapticFeedback.onRelease()
         audioRecorder.stop()
