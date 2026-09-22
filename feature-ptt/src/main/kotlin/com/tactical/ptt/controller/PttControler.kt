@@ -16,5 +16,6 @@ interface PttController {
      *  detection rather than a manual button press. */
     suspend fun press(isVox: Boolean = false)
     suspend fun release()
+    suspend fun cancel()
     fun state(): StateFlow<PttState>
 }
