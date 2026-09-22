@@ -31,6 +31,7 @@ class TacticalApplication : Application() {
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Notifications for incoming text and voice messages."
+                setShowBadge(true)
             }
 
             val emergencyChannel = NotificationChannel(
