@@ -5,7 +5,6 @@ import com.tactical.domain.speech.LanguageTag
 import com.tactical.platform.api.speech.TextToSpeech
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
-import com.tactical.platform.speech.mms.MmsTtsModelStore
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,7 +14,6 @@ import javax.inject.Singleton
  */
 @Singleton
 class MmsTextToSpeechAdapter @Inject constructor(
-    private val modelStore: MmsTtsModelStore,
     private val engine: MmsTtsEngine
 ) : TextToSpeech {
 
@@ -28,7 +26,6 @@ class MmsTextToSpeechAdapter @Inject constructor(
                 "Emergency TTS language '" + langTag.isoCode + "' is not bundled"
             )
 
-        modelStore.ensureBundledModelAvailable(language)
         return engine.synthesize(language, text).first
     }
 }
