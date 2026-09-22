@@ -786,6 +786,33 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun deleteMessages(messages: Set<ChatMessageUi>, isSent: Boolean) {
+        if (messages.isEmpty()) return
+
+        val keys = messages.mapTo(mutableSetOf()) { messageStorageKey(it) }
+
+        if (isSent) {
+            _uiState.update { state ->
+                state.copy(
+                    messages = state.messages.filterNot { messageStorageKey(it) in keys },
+                    sentMessages = state.sentMessages.filterNot { messageStorageKey(it) in keys }
+                )
+            }
+        } else {
+            localAppDataStore.deleteReceivedMessages(keys)
+            refreshReceivedMessages()
+        }
+    }
+
+    private fun messageStorageKey(message: ChatMessageUi): String =
+        localAppDataStore.messageStorageKey(
+            senderId = message.sender,
+            timestampEpochMs = message.timestampEpochMs,
+            text = message.text,
+            isAlert = message.isAlert,
+            isVoice = message.isVoice
+        )
+
     fun refreshReceivedMessages() {
         val received = localAppDataStore.loadReceivedMessages()
             .asReversed()
