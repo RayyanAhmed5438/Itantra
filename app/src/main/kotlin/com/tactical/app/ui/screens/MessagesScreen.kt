@@ -43,13 +43,9 @@ fun MessagesScreen(
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        onMessagesOpened()
-    }
-
-    // When the Messages screen is already visible, any newly persisted
-    // message is immediately considered seen rather than leaving a stale
-    // unread badge on the bottom navigation.
+    // When the Messages screen is visible, newly persisted messages are
+    // immediately considered seen rather than leaving a stale unread badge
+    // on the bottom navigation.
     LaunchedEffect(
         selectedTab,
         uiState.receivedMessages.size,
