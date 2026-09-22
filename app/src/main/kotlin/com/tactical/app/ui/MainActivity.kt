@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -93,9 +92,8 @@ class MainActivity : ComponentActivity() {
 
     private val wirelessStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                BluetoothAdapter.ACTION_STATE_CHANGED,
-                WifiManager.WIFI_STATE_CHANGED_ACTION -> ensureWirelessEnabled()
+            if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                ensureWirelessEnabled()
             }
         }
     }
@@ -110,7 +108,7 @@ class MainActivity : ComponentActivity() {
         if (!criticalDenied) {
             ensureWirelessEnabled()
         } else {
-            wirelessWarning.value = "Bluetooth / Wi-Fi / microphone permissions are required."
+            wirelessWarning.value = "Bluetooth / microphone permissions are required."
         }
     }
 
@@ -294,10 +292,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        val filter = IntentFilter().apply {
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-        }
+        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(
                 wirelessStateReceiver,
@@ -326,7 +321,6 @@ class MainActivity : ComponentActivity() {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(Manifest.permission.NEARBY_WIFI_DEVICES)
                 add(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -352,14 +346,10 @@ class MainActivity : ComponentActivity() {
 
         val bluetoothOn =
             getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
-        val wifiOn =
-            (getSystemService(WIFI_SERVICE) as? WifiManager)?.isWifiEnabled == true
-
-        wirelessWarning.value = when {
-            bluetoothOn && wifiOn -> null
-            !bluetoothOn && !wifiOn -> "Bluetooth or Wi-Fi is off. Turn them on."
-            !bluetoothOn -> "Bluetooth is off. Turn it on."
-            else -> "Wi-Fi is off. Turn it on."
+        wirelessWarning.value = if (bluetoothOn) {
+            null
+        } else {
+            "Bluetooth is off. Turn it on."
         }
 
         if (bluetoothOn) {
