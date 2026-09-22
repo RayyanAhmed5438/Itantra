@@ -122,6 +122,23 @@ class MmsTtsModelStore @Inject constructor(
         }
     }
 
+    /**
+     * Removes model directories left behind by older builds that bundled
+     * additional languages. The current APK intentionally bundles only the
+     * languages in BUNDLED_LANGUAGES, so stale directories are no longer
+     * usable and only consume persistent storage.
+     */
+    fun cleanupUnbundledModels() {
+        rootDirectory.listFiles()
+            ?.filter { file ->
+                file.isDirectory &&
+                    BUNDLED_LANGUAGES.none { it.modelCode == file.name }
+            }
+            ?.forEach { file ->
+                runCatching { file.deleteRecursively() }
+            }
+    }
+
     private fun isComplete(directory: File): Boolean {
         if (!directory.isDirectory) return false
         return REQUIRED_FILES.all { name ->
