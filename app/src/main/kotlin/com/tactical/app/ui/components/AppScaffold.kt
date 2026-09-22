@@ -41,11 +41,29 @@ fun AppHeader(deviceCount: Int, modifier: Modifier = Modifier, onSettingsClick: 
 }
 
 @Composable
-fun AppBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun AppBottomNavigation(selectedTab: Int, unreadMessageCount: Int = 0, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
     NavigationBar(modifier = modifier, containerColor = RedTacticalSurface, tonalElevation = 8.dp) {
         NavigationBarItem(selected = selectedTab == 0, onClick = { onTabSelected(0) }, icon = { Icon(Icons.Default.Devices, "Devices") }, label = { Text("DEVICES") }, colors = navigationColors())
         NavigationBarItem(selected = selectedTab == 1, onClick = { onTabSelected(1) }, icon = { Icon(Icons.Default.People, "Squad") }, label = { Text("SQUAD") }, colors = navigationColors())
-        NavigationBarItem(selected = selectedTab == 2, onClick = { onTabSelected(2) }, icon = { Icon(Icons.Default.Email, "Messages") }, label = { Text("MESSAGES") }, colors = navigationColors())
+        NavigationBarItem(
+            selected = selectedTab == 2,
+            onClick = { onTabSelected(2) },
+            icon = {
+                BadgedBox(
+                    badge = {
+                        if (unreadMessageCount > 0) {
+                            Badge {
+                                Text(unreadMessageCount.coerceAtMost(99).toString())
+                            }
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Email, "Messages")
+                }
+            },
+            label = { Text("MESSAGES") },
+            colors = navigationColors()
+        )
     }
 }
 
