@@ -58,8 +58,8 @@ class EmergencyAlertNotifier @Inject constructor(
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setAutoCancel(false)
+            .setOngoing(false)
+            .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
 
