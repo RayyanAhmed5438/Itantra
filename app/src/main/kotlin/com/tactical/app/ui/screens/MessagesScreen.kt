@@ -169,7 +169,7 @@ fun MessagesScreen(
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            if (filteredMessages.isEmpty()) {
+            if (conversationMessages.isEmpty()) {
                 item {
                     Text(
                         "No messages",
