@@ -41,6 +41,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.tactical.app.service.TacticalMeshService
 import com.tactical.app.ui.components.AppBottomNavigation
+import com.tactical.app.ui.components.EmergencyRecordingDialog
 import com.tactical.app.ui.screens.DevicesScreen
 import com.tactical.app.ui.screens.MessagesScreen
 import com.tactical.app.ui.screens.SquadScreen
@@ -260,6 +261,17 @@ class MainActivity : ComponentActivity() {
                                         )
                                     )
                                 }
+                            }
+
+                            if (state.emergencyComposerVisible) {
+                                EmergencyRecordingDialog(
+                                    transcription = state.emergencyTranscription,
+                                    isRecording = state.emergencyRecording,
+                                    isSending = state.emergencySending,
+                                    error = state.emergencyError,
+                                    onSend = viewModel::sendEmergency,
+                                    onCancel = viewModel::cancelEmergency
+                                )
                             }
                         }
                     }
