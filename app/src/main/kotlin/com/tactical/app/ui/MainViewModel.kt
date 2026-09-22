@@ -65,7 +65,10 @@ data class ChatMessageUi(
     val isAlert: Boolean = false,
     val isVoice: Boolean = false,
     val emergencyData: EmergencyAlertData? = null,
-    val timestampEpochMs: Long = 0L
+    val timestampEpochMs: Long = 0L,
+    // Local time used only for ordering messages in the conversation.
+    // Unlike timestampEpochMs, this never comes from another device.
+    val conversationOrderEpochMs: Long = 0L
 )
 
 data class EmergencyAlertData(
@@ -234,7 +237,8 @@ class MainViewModel @Inject constructor(
                         timestampText = "Just now",
                         statusText = status,
                         isVoice = true,
-                        timestampEpochMs = System.currentTimeMillis()
+                        timestampEpochMs = System.currentTimeMillis(),
+                        conversationOrderEpochMs = System.currentTimeMillis()
                     )
                     _uiState.update {
                         it.copy(
@@ -690,7 +694,8 @@ class MainViewModel @Inject constructor(
                 statusText = status,
                 isAlert = true,
                 emergencyData = details,
-                timestampEpochMs = packet.timestamp
+                timestampEpochMs = packet.timestamp,
+                conversationOrderEpochMs = System.currentTimeMillis()
             )
 
             _uiState.update {
@@ -797,12 +802,14 @@ class MainViewModel @Inject constructor(
         val value = text.trim()
         if (value.isBlank()) return
 
+        val localSendTime = System.currentTimeMillis()
         val pending = ChatMessageUi(
             sender = "YOU",
             text = value,
             timestampText = "Just now",
             statusText = "Sending…",
-            timestampEpochMs = System.currentTimeMillis()
+            timestampEpochMs = localSendTime,
+            conversationOrderEpochMs = localSendTime
         )
         _uiState.update {
             it.copy(
@@ -952,7 +959,8 @@ class MainViewModel @Inject constructor(
             isVoice = message.isVoice,
             isAlert = message.isAlert,
             emergencyData = emergencyData,
-            timestampEpochMs = message.timestampEpochMs
+            timestampEpochMs = message.timestampEpochMs,
+            conversationOrderEpochMs = message.receivedAtEpochMs
         )
     }
 
