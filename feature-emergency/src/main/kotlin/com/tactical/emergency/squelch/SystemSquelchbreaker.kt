@@ -56,17 +56,36 @@ class SystemSquelchBreaker(
 
             audioPlayer.stopPlayback()
             alarmBypass.bypassDndAndMaxVolume()
-            strobeJob = scope.launch { flashlightController.strobe(intervalMs = 500) }
-            audioPlayer.playAlert(AlertTone.EMERGENCY_INCOMING)
 
-            val langTag = LanguageTag(isoCode = packet.languageCode, backendId = packet.languageCode)
-            val frame = textToSpeech.synthesize(packet.description, langTag)
-            audioPlayer.play(frame)
+            var completed = false
+            try {
+                strobeJob = scope.launch {
+                    flashlightController.strobe(intervalMs = 500)
+                }
 
-            active = true
-            resetJob = scope.launch {
-                delay(autoResetMs)
-                dismiss()
+                audioPlayer.playAlert(AlertTone.EMERGENCY_INCOMING)
+
+                val langTag = LanguageTag(
+                    isoCode = packet.languageCode,
+                    backendId = packet.languageCode
+                )
+                val frame = textToSpeech.synthesize(packet.description, langTag)
+                audioPlayer.play(frame)
+
+                active = true
+                resetJob = scope.launch {
+                    delay(autoResetMs)
+                    dismiss()
+                }
+                completed = true
+            } finally {
+                if (!completed) {
+                    strobeJob?.cancel()
+                    strobeJob = null
+                    runCatching { flashlightController.off() }
+                    runCatching { alarmBypass.resetVolume() }
+                    active = false
+                }
             }
         }
     }
