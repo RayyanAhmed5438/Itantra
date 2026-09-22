@@ -52,15 +52,15 @@ import com.tactical.platform.speech.mms.MmsTtsTestResult
 
 @Composable
 fun TtsTestScreen(
-    installedLanguages: List<MmsTtsLanguage>,
+    availableLanguages: List<MmsTtsLanguage>,
     isLoadingModels: Boolean,
     modelMessage: String?,
     onSpeak: suspend (MmsTtsLanguage, String) -> MmsTtsTestResult,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedLanguage by remember(installedLanguages) {
-        mutableStateOf(installedLanguages.firstOrNull() ?: MmsTtsLanguage.ALL.first())
+    var selectedLanguage by remember(availableLanguages) {
+        mutableStateOf(availableLanguages.firstOrNull() ?: MmsTtsLanguage.ALL.first())
     }
     var text by remember(selectedLanguage) {
         mutableStateOf(defaultPhrase(selectedLanguage.modelCode))
@@ -70,7 +70,7 @@ fun TtsTestScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    val selectedInstalled = installedLanguages.any { it.modelCode == selectedLanguage.modelCode }
+    val selectedAvailable = availableLanguages.any { it.modelCode == selectedLanguage.modelCode }
 
     Column(
         modifier = modifier
@@ -129,8 +129,8 @@ fun TtsTestScreen(
                             fontSize = 13.sp
                         )
                         Text(
-                            installedLanguages.size.toString() + "/" +
-                                MmsTtsLanguage.ALL.size + " languages ready",
+                            availableLanguages.size.toString() + "/" +
+                                MmsTtsLanguage.ALL.size + " bundled languages available",
                             color = RedTacticalTextSecondary,
                             fontSize = 11.sp
                         )
@@ -182,7 +182,7 @@ fun TtsTestScreen(
                         text = {
                             Text(
                                 language.displayName +
-                                    if (installedLanguages.any { it.modelCode == language.modelCode }) {
+                                    if (availableLanguages.any { it.modelCode == language.modelCode }) {
                                         "  ✓"
                                     } else {
                                         "  —"
@@ -232,7 +232,7 @@ fun TtsTestScreen(
                 error = null
                 result = null
             },
-            enabled = selectedInstalled && text.isNotBlank() && !running,
+            enabled = selectedAvailable && text.isNotBlank() && !running,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = RedTacticalPrimary
@@ -255,7 +255,7 @@ fun TtsTestScreen(
             }
         }
 
-        if (!selectedInstalled && !isLoadingModels) {
+        if (!selectedAvailable && !isLoadingModels) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "No bundled model is available for this language.",
