@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -28,6 +29,9 @@ class TacticalMeshService : Service() {
 
     @Inject
     lateinit var meshService: MeshService
+
+    @Inject
+    lateinit var bleConnectionManager: com.tactical.platform.api.ble.BleConnectionManager
 
     @Inject
     lateinit var discoveryService: DiscoveryService
@@ -82,6 +86,17 @@ class TacticalMeshService : Service() {
                             error
                         )
                     }
+                }
+            }
+        }
+
+        // Re-establish paired GATT client sessions from the foreground
+        // service after process/activity recreation.
+        serviceScope.launch {
+            delay(1000L)
+            bleConnectionManager.pairedDeviceIds().forEach { peerId ->
+                runCatching {
+                    bleConnectionManager.reconnectPaired(peerId)
                 }
             }
         }
