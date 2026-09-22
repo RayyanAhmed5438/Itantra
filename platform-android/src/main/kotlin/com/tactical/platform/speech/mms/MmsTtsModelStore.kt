@@ -153,6 +153,14 @@ class MmsTtsModelStore @Inject constructor(
         return directory
     }
 
+    private fun isComplete(directory: File): Boolean {
+        if (!directory.isDirectory) return false
+        return REQUIRED_FILES.all { name ->
+            val file = File(directory, name)
+            file.isFile && file.length() > 0L
+        }
+    }
+
     companion object {
         private const val BUNDLED_ZIP_ASSET = "models/quantized_models.zip"
         private const val ZIP_ROOT = "quantized_models"
