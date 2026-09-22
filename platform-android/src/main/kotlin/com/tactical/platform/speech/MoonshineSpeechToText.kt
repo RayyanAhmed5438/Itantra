@@ -130,6 +130,19 @@ class MoonshineSpeechToText @Inject constructor(
         awaitClose { }
     }.flowOn(Dispatchers.Default)
 
+    fun close() {
+        loadMutex.tryLock().let { locked ->
+            if (locked) {
+                try {
+                    runCatching { cachedTranscriber?.close() }
+                    cachedTranscriber = null
+                } finally {
+                    loadMutex.unlock()
+                }
+            }
+        }
+    }
+
     private suspend fun loadTranscriber(): Transcriber =
         loadMutex.withLock {
             cachedTranscriber ?: run {
