@@ -112,6 +112,34 @@ fun SquadScreen(
         }
 
         item {
+            uiState.pttLastTranscription?.takeIf { it.isNotBlank() }?.let { transcript ->
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = RedTacticalSurface
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            "LAST PTT TRANSCRIPTION",
+                            color = RedTacticalTextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            transcript,
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+
             Spacer(Modifier.height(4.dp))
 
             Box(
@@ -349,34 +377,6 @@ fun SquadScreen(
             }
         }
 
-        uiState.pttLastTranscription?.takeIf { it.isNotBlank() }?.let { transcript ->
-            item {
-                Spacer(Modifier.height(2.dp))
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = RedTacticalSurface
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(
-                            "LAST PTT TRANSCRIPTION",
-                            color = RedTacticalTextSecondary,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            transcript,
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
