@@ -35,6 +35,9 @@ import com.tactical.platform.api.ble.BleLinkState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -798,15 +801,33 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
 
-            var connectedCount = 0
-            pairedIds.forEach { peerId ->
-                val connectionResult = bleConnectionManager.reconnectPaired(peerId)
-                if (connectionResult is TacticalResult.Success) {
-                    connectedCount++
+            // Send immediately when a GATT session is already ready.
+            // Do not block the UI behind the BLE manager's 20-second reconnect
+            // timeout just because a paired peer is temporarily disconnected.
+            // The connection manager already performs background retries.
+            val hasConnectedPeer = pairedIds.any { peerId ->
+                bleConnectionManager.state(peerId).first() == BleLinkState.CONNECTED
+            }
+
+            val connectionReady = if (hasConnectedPeer) {
+                true
+            } else {
+                // Give one short, parallel reconnect window rather than
+                // reconnecting paired peers serially.
+                coroutineScope {
+                    pairedIds.map { peerId ->
+                        async {
+                            runCatching {
+                                kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                                    bleConnectionManager.reconnectPaired(peerId)
+                                }
+                            }.getOrNull() is TacticalResult.Success
+                        }
+                    }.awaitAll().any { it }
                 }
             }
 
-            if (connectedCount == 0) {
+            if (!connectionReady) {
                 _uiState.update { state ->
                     state.copy(
                         messages = state.messages.mapIndexed { index, msg ->
