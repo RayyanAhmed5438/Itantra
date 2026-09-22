@@ -118,7 +118,7 @@ fun MessagesScreen(
                             else -> "No sent messages"
                         },
                         color = RedTacticalTextSecondary,
-                        fontSize = if (message.isAlert) 13.sp else 11.sp
+                        fontSize = 13.sp
                     )
                 }
             }
@@ -203,8 +203,6 @@ fun MessagesScreen(
         )
     }
 }
-
-@Composable
 
 private fun isToday(epochMs: Long): Boolean {
     if (epochMs <= 0L) return false
