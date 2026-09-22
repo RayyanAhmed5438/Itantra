@@ -2,6 +2,7 @@ package com.tactical.app.di
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -44,6 +45,9 @@ class LocalAppDataStore @Inject constructor(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
+
+    private val _receivedMessagesChanged = MutableStateFlow(0)
+    val receivedMessagesChanged = _receivedMessagesChanged.asStateFlow()
 
     @Synchronized
     fun loadPairedDevices(): List<StoredPairedDevice> {
