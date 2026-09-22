@@ -16,6 +16,7 @@ val RedTacticalTextPrimary = Color(0xFFFFFFFF)
 val RedTacticalTextSecondary = Color(0xFFA0A5B5)
 val RedTacticalStatusGreen = Color(0xFF4CAF50)
 val RedTacticalStatusYellow = Color(0xFFFFC107)
+val RedTacticalVoiceOrange = Color(0xFFFF9800)
 
 private val DarkColorScheme = darkColorScheme(
     primary = RedTacticalPrimary,
