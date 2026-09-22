@@ -20,6 +20,7 @@ import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.platform.speech.mms.MmsTtsModelStore
 import com.tactical.platform.speech.SpeechLanguagePreferences
+import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.ptt.controller.DefaultPttController
 import com.tactical.ptt.controller.PttController
 import com.tactical.ptt.feedback.PatternedHapticFeedback
@@ -123,6 +124,7 @@ class MainViewModel @Inject constructor(
     private val mmsTtsEngine: MmsTtsEngine,
     private val mmsTtsModelStore: MmsTtsModelStore,
     private val speechLanguagePreferences: SpeechLanguagePreferences,
+    private val routingSpeechToText: RoutingSpeechToText,
     private val localAppDataStore: LocalAppDataStore
 ) : ViewModel() {
 
@@ -568,6 +570,8 @@ class MainViewModel @Inject constructor(
         if (languageCode !in setOf("hi", "en")) return
 
         speechLanguagePreferences.setSelectedLanguageCode(languageCode)
+        routingSpeechToText.onSelectedLanguageChanged(languageCode)
+
         _uiState.update {
             it.copy(
                 selectedLanguageCode = languageCode,
