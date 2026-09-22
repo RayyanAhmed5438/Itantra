@@ -317,6 +317,7 @@ class MainActivity : ComponentActivity() {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                add(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
