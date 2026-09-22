@@ -92,12 +92,18 @@ fun MessagesScreen(
                 }
             }
 
-            items(
+            itemsIndexed(
                 items = currentMessages,
-                key = { message ->
-                    message.timestampText + "_" + message.sender + "_" + message.text.hashCode()
+                key = { index, message ->
+                    // Content-based keys can collide when two messages have
+                    // the same timestamp, sender, and text. Include the
+                    // item's position as a final uniqueness guard.
+                    message.timestampText + "_" +
+                        message.sender + "_" +
+                        message.text.hashCode() + "_" +
+                        index
                 }
-            ) { message ->
+            ) { _, message ->
                 MessageRow(
                     message = message,
                     isSent = selected == 1,
