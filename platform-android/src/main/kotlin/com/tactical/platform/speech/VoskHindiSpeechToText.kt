@@ -84,6 +84,19 @@ class VoskHindiSpeechToText @Inject constructor(
         }
     }.flowOn(Dispatchers.Default)
 
+    fun close() {
+        modelMutex.tryLock().let { locked ->
+            if (locked) {
+                try {
+                    runCatching { cachedModel?.close() }
+                    cachedModel = null
+                } finally {
+                    modelMutex.unlock()
+                }
+            }
+        }
+    }
+
     private suspend fun loadModel(): Model =
         modelMutex.withLock {
             cachedModel ?: run {
