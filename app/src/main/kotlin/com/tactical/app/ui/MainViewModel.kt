@@ -123,7 +123,8 @@ class MainViewModel @Inject constructor(
     private val mmsTtsEngine: MmsTtsEngine,
     private val speechLanguagePreferences: SpeechLanguagePreferences,
     private val routingSpeechToText: RoutingSpeechToText,
-    private val localAppDataStore: LocalAppDataStore
+    private val localAppDataStore: LocalAppDataStore,
+    private val messageNotificationNotifier: com.tactical.app.service.MessageNotificationNotifier
 ) : ViewModel() {
 
     // Must be initialized before _uiState because storedPeerToUi() uses it
@@ -203,9 +204,10 @@ class MainViewModel @Inject constructor(
         // Activity's collector is ready.
         viewModelScope.launch {
             localAppDataStore.receivedMessagesChanged.collect {
-                _uiState.update { state ->
-                    state.copy(unreadMessageCount = localAppDataStore.unreadMessageCount())
-                }
+                // The foreground service persists incoming messages even when
+                // the Messages screen is already visible. Reload the list and
+                // unread count immediately so navigation is not required.
+                refreshReceivedMessages()
             }
         }
 
@@ -839,6 +841,7 @@ class MainViewModel @Inject constructor(
         // Activity was backgrounded are present as soon as Messages is opened.
         refreshReceivedMessages()
         localAppDataStore.markMessagesRead()
+        messageNotificationNotifier.clearMessageNotifications()
         _uiState.update { it.copy(unreadMessageCount = 0) }
     }
 
