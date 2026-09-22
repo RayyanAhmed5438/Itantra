@@ -18,7 +18,6 @@ import com.tactical.platform.api.haptics.HapticEngine
 import com.tactical.platform.api.speech.SpeechToText
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
-import com.tactical.platform.speech.mms.MmsTtsModelStore
 import com.tactical.platform.speech.SpeechLanguagePreferences
 import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.ptt.controller.DefaultPttController
@@ -122,7 +121,6 @@ class MainViewModel @Inject constructor(
     private val speechToText: SpeechToText,
     private val hapticEngine: HapticEngine,
     private val mmsTtsEngine: MmsTtsEngine,
-    private val mmsTtsModelStore: MmsTtsModelStore,
     private val speechLanguagePreferences: SpeechLanguagePreferences,
     private val routingSpeechToText: RoutingSpeechToText,
     private val localAppDataStore: LocalAppDataStore
@@ -187,7 +185,6 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             runCatching {
-                mmsTtsModelStore.ensureBundledModelsAvailable()
                 mmsTtsEngine.synthesizeAndPlay(language, packet.text)
             }.onFailure { error ->
                 android.util.Log.w(
@@ -571,6 +568,12 @@ class MainViewModel @Inject constructor(
 
         speechLanguagePreferences.setSelectedLanguageCode(languageCode)
         routingSpeechToText.onSelectedLanguageChanged(languageCode)
+
+        MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
+            viewModelScope.launch {
+                runCatching { mmsTtsEngine.preload(language) }
+            }
+        }
 
         _uiState.update {
             it.copy(
