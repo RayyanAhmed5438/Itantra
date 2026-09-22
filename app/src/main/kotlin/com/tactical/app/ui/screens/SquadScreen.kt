@@ -1,5 +1,7 @@
 package com.tactical.app.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -53,6 +55,23 @@ fun SquadScreen(
         uiState.pttSessionState != SessionState.ARMED
 
     var pttHeld by remember { mutableStateOf(false) }
+    var emergencyHeld by remember { mutableStateOf(false) }
+
+    val emergencyHoldProgress by animateFloatAsState(
+        targetValue = if (
+            emergencyHeld && !uiState.emergencyComposerVisible
+        ) {
+            1f
+        } else {
+            0f
+        },
+        animationSpec = if (emergencyHeld) {
+            tween(durationMillis = 2000)
+        } else {
+            tween(durationMillis = 150)
+        },
+        label = "emergencyHoldProgress"
+    )
 
     val pttLabel = when (uiState.pttSessionState) {
         SessionState.ARMED -> "STARTING"
@@ -282,10 +301,12 @@ fun SquadScreen(
                                 Modifier.pointerInput(Unit) {
                                     detectTapGestures(
                                         onPress = {
+                                            emergencyHeld = true
                                             onEmergencyPress()
                                             try {
                                                 awaitRelease()
                                             } finally {
+                                                emergencyHeld = false
                                                 onEmergencyRelease()
                                             }
                                         }
@@ -297,6 +318,16 @@ fun SquadScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
+                    if (!uiState.emergencyComposerVisible && emergencyHoldProgress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(emergencyHoldProgress)
+                                .align(Alignment.CenterStart)
+                                .background(RedTacticalPrimaryBright)
+                        )
+                    }
+
                     Row(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
