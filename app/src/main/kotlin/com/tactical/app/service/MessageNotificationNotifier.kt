@@ -1,5 +1,6 @@
 package com.tactical.app.service
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -81,9 +82,10 @@ class MessageNotificationNotifier @Inject constructor(
         // Also clear message notifications created by an earlier app process.
         // getActiveNotifications() returns this app's own active notifications.
         runCatching {
-            manager.activeNotifications
-                .filter { it.id in MESSAGE_NOTIFICATION_ID_RANGE }
-                .forEach { manager.cancel(it.id) }
+            context.getSystemService(NotificationManager::class.java)
+                ?.activeNotifications
+                ?.filter { it.id in MESSAGE_NOTIFICATION_ID_RANGE }
+                ?.forEach { manager.cancel(it.id) }
         }
 
         activeNotificationIds.clear()
@@ -97,5 +99,6 @@ class MessageNotificationNotifier @Inject constructor(
     companion object {
         private const val TAG = "MessageNotifier"
         private val notificationId = AtomicInteger(2000)
+        private val MESSAGE_NOTIFICATION_ID_RANGE = 2000..2999
     }
 }
