@@ -198,6 +198,18 @@ class MainViewModel @Inject constructor(
 
 
     init {
+        // Keep the unread badge synchronized with messages persisted by either
+        // the Activity/ViewModel or the foreground mesh service. This avoids
+        // losing the badge when a SharedFlow packet is consumed before the
+        // Activity's collector is ready.
+        viewModelScope.launch {
+            localAppDataStore.receivedMessagesChanged.collect {
+                _uiState.update { state ->
+                    state.copy(unreadMessageCount = localAppDataStore.unreadMessageCount())
+                }
+            }
+        }
+
         viewModelScope.launch {
             emergencyTrigger.state().collect { triggerState ->
                 if (triggerState == com.tactical.emergency.trigger.PanicTriggerState.TRIGGERED) {
@@ -373,16 +385,6 @@ class MainViewModel @Inject constructor(
                     val senderName =
                         localAppDataStore.callsignForPeer(packet.sender.value)
                             ?: packet.sender.value.take(12)
-                    val details = emergencyAlertData(packet, senderName)
-                    val message = ChatMessageUi(
-                        sender = senderName,
-                        text = packet.description,
-                        timestampText = formatTimestamp(packet.timestamp),
-                        statusText = "Emergency",
-                        isAlert = true,
-                        emergencyData = details,
-                        timestampEpochMs = packet.timestamp
-                    )
 
                     localAppDataStore.saveReceivedMessage(
                         StoredReceivedMessage(
@@ -399,14 +401,6 @@ class MainViewModel @Inject constructor(
                             locationAccuracyMeters = packet.location?.accuracyMeters
                         )
                     )
-
-                    _uiState.update {
-                        it.copy(
-                            messages = listOf(message) + it.messages,
-                            receivedMessages = listOf(message) + it.receivedMessages,
-                            unreadMessageCount = localAppDataStore.unreadMessageCount()
-                        )
-                    }
                 } else if (packet is TextPacket) {
                     val senderName =
                         localAppDataStore.callsignForPeer(packet.sender.value)
@@ -432,13 +426,6 @@ class MainViewModel @Inject constructor(
                         )
                     )
 
-                    _uiState.update {
-                        it.copy(
-                            messages = listOf(message) + it.messages,
-                            receivedMessages = listOf(message) + it.receivedMessages,
-                            unreadMessageCount = localAppDataStore.unreadMessageCount()
-                        )
-                    }
                     speakIncomingMessage(packet)
                 }
             }
@@ -808,7 +795,24 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun refreshReceivedMessages() {
+        val received = localAppDataStore.loadReceivedMessages()
+            .asReversed()
+            .map(::storedMessageToUi)
+
+        _uiState.update {
+            it.copy(
+                receivedMessages = received,
+                messages = received,
+                unreadMessageCount = localAppDataStore.unreadMessageCount()
+            )
+        }
+    }
+
     fun markMessagesRead() {
+        // Refresh from persistent storage first so messages received while the
+        // Activity was backgrounded are present as soon as Messages is opened.
+        refreshReceivedMessages()
         localAppDataStore.markMessagesRead()
         _uiState.update { it.copy(unreadMessageCount = 0) }
     }
