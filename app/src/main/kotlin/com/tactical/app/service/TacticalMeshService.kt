@@ -82,7 +82,7 @@ class TacticalMeshService : Service() {
         )
 
         return NotificationCompat.Builder(this, TacticalApplication.CHANNEL_MESH)
-            .setContentTitle("SENTINEL Mesh Active")
+            .setContentTitle("Itantra Mesh Active")
             .setContentText("Wi-Fi Direct / BLE mesh service running")
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentIntent(pendingIntent)
