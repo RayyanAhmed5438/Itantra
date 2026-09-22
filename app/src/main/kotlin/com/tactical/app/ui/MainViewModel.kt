@@ -64,7 +64,8 @@ data class ChatMessageUi(
     val statusText: String,
     val isAlert: Boolean = false,
     val isVoice: Boolean = false,
-    val emergencyData: EmergencyAlertData? = null
+    val emergencyData: EmergencyAlertData? = null,
+    val timestampEpochMs: Long = 0L
 )
 
 data class EmergencyAlertData(
@@ -102,6 +103,7 @@ data class MainUiState(
     val isScanning: Boolean = false,
     val pttSessionState: SessionState = SessionState.IDLE,
     val pttLastTranscription: String? = null,
+    val unreadMessageCount: Int = 0,
     val emergencyComposerVisible: Boolean = false,
     val emergencyRecording: Boolean = false,
     val emergencySending: Boolean = false,
@@ -121,7 +123,8 @@ class MainViewModel @Inject constructor(
     private val mmsTtsEngine: MmsTtsEngine,
     private val mmsTtsModelStore: MmsTtsModelStore,
     private val speechLanguagePreferences: SpeechLanguagePreferences,
-    private val localAppDataStore: LocalAppDataStore
+    private val localAppDataStore: LocalAppDataStore,
+    private val messageNotificationNotifier: com.tactical.app.service.MessageNotificationNotifier
 ) : ViewModel() {
 
     // Must be initialized before _uiState because storedPeerToUi() uses it
@@ -144,7 +147,8 @@ class MainViewModel @Inject constructor(
                 .map(::storedMessageToUi),
             messages = localAppDataStore.loadReceivedMessages()
                 .asReversed()
-                .map(::storedMessageToUi)
+                .map(::storedMessageToUi),
+            unreadMessageCount = localAppDataStore.unreadMessageCount()
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -233,7 +237,8 @@ class MainViewModel @Inject constructor(
                         text = text,
                         timestampText = "Just now",
                         statusText = status,
-                        isVoice = true
+                        isVoice = true,
+                        timestampEpochMs = System.currentTimeMillis()
                     )
                     _uiState.update {
                         it.copy(
@@ -376,7 +381,8 @@ class MainViewModel @Inject constructor(
                         timestampText = formatTimestamp(packet.timestamp),
                         statusText = "Emergency",
                         isAlert = true,
-                        emergencyData = details
+                        emergencyData = details,
+                        timestampEpochMs = packet.timestamp
                     )
 
                     localAppDataStore.saveReceivedMessage(
@@ -398,7 +404,8 @@ class MainViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             messages = listOf(message) + it.messages,
-                            receivedMessages = listOf(message) + it.receivedMessages
+                            receivedMessages = listOf(message) + it.receivedMessages,
+                            unreadMessageCount = localAppDataStore.unreadMessageCount()
                         )
                     }
                 } else if (packet is TextPacket) {
@@ -412,7 +419,8 @@ class MainViewModel @Inject constructor(
                         text = packet.text,
                         timestampText = formatTimestamp(packet.timestamp),
                         statusText = "Received",
-                        isVoice = isVoiceMessage
+                        isVoice = isVoiceMessage,
+                        timestampEpochMs = packet.timestamp
                     )
 
                     localAppDataStore.saveReceivedMessage(
@@ -425,10 +433,17 @@ class MainViewModel @Inject constructor(
                         )
                     )
 
+                    messageNotificationNotifier.show(
+                        senderName = senderName,
+                        message = packet.text,
+                        isVoice = isVoiceMessage
+                    )
+
                     _uiState.update {
                         it.copy(
                             messages = listOf(message) + it.messages,
-                            receivedMessages = listOf(message) + it.receivedMessages
+                            receivedMessages = listOf(message) + it.receivedMessages,
+                            unreadMessageCount = localAppDataStore.unreadMessageCount()
                         )
                     }
                     speakIncomingMessage(packet)
@@ -752,7 +767,8 @@ class MainViewModel @Inject constructor(
                 timestampText = formatTimestamp(packet.timestamp),
                 statusText = status,
                 isAlert = true,
-                emergencyData = details
+                emergencyData = details,
+                timestampEpochMs = packet.timestamp
             )
 
             _uiState.update {
@@ -799,11 +815,28 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun markMessagesRead() {
+        localAppDataStore.markMessagesRead()
+        _uiState.update { it.copy(unreadMessageCount = 0) }
+    }
+
+    fun cancelPtt() {
+        viewModelScope.launch {
+            runCatching { pttController.cancel() }
+        }
+    }
+
     fun sendTextMessage(text: String) {
         val value = text.trim()
         if (value.isBlank()) return
 
-        val pending = ChatMessageUi("YOU", value, "Just now", "Sending…")
+        val pending = ChatMessageUi(
+            sender = "YOU",
+            text = value,
+            timestampText = "Just now",
+            statusText = "Sending…",
+            timestampEpochMs = System.currentTimeMillis()
+        )
         _uiState.update {
             it.copy(
                 messages = listOf(pending) + it.messages,
@@ -951,7 +984,8 @@ class MainViewModel @Inject constructor(
             statusText = if (message.isAlert) "Emergency" else "Received",
             isVoice = message.isVoice,
             isAlert = message.isAlert,
-            emergencyData = emergencyData
+            emergencyData = emergencyData,
+            timestampEpochMs = message.timestampEpochMs
         )
     }
 
