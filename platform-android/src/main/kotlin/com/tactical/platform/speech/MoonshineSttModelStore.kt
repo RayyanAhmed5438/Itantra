@@ -31,8 +31,8 @@ class MoonshineSttModelStore @Inject constructor(
         }
 
         val tempRoot = File(
-            context.cacheDir,
-            "moonshine_stt_" + System.currentTimeMillis()
+            context.filesDir,
+            ".moonshine_stt_staging_" + System.currentTimeMillis()
         )
         tempRoot.mkdirs()
 
