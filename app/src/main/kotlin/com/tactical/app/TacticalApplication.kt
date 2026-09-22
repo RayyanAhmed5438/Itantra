@@ -8,6 +8,7 @@ import android.os.Build
 import com.tactical.platform.speech.SpeechLanguagePreferences
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
+import com.tactical.platform.speech.mms.MmsTtsModelStore
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,12 +26,16 @@ class TacticalApplication : Application() {
     @Inject
     lateinit var ttsEngineProvider: Provider<MmsTtsEngine>
 
+    @Inject
+    lateinit var ttsModelStore: MmsTtsModelStore
+
     private val ttsPreloadScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
         cleanupSpeechExtractionCache()
+        ttsModelStore.cleanupUnbundledModels()
         createNotificationChannels()
         preloadSelectedTtsLanguage()
     }
