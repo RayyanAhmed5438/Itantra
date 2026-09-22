@@ -407,15 +407,6 @@ class MainViewModel @Inject constructor(
                             ?: packet.sender.value.take(12)
                     val isVoiceMessage = packet.languageCode != "und"
 
-                    val message = ChatMessageUi(
-                        sender = senderName,
-                        text = packet.text,
-                        timestampText = formatTimestamp(packet.timestamp),
-                        statusText = "Received",
-                        isVoice = isVoiceMessage,
-                        timestampEpochMs = packet.timestamp
-                    )
-
                     localAppDataStore.saveReceivedMessage(
                         StoredReceivedMessage(
                             senderId = packet.sender.value,
