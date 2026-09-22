@@ -123,8 +123,7 @@ class MainViewModel @Inject constructor(
     private val mmsTtsEngine: MmsTtsEngine,
     private val mmsTtsModelStore: MmsTtsModelStore,
     private val speechLanguagePreferences: SpeechLanguagePreferences,
-    private val localAppDataStore: LocalAppDataStore,
-    private val messageNotificationNotifier: com.tactical.app.service.MessageNotificationNotifier
+    private val localAppDataStore: LocalAppDataStore
 ) : ViewModel() {
 
     // Must be initialized before _uiState because storedPeerToUi() uses it
@@ -431,12 +430,6 @@ class MainViewModel @Inject constructor(
                             timestampEpochMs = packet.timestamp,
                             isVoice = isVoiceMessage
                         )
-                    )
-
-                    messageNotificationNotifier.show(
-                        senderName = senderName,
-                        message = packet.text,
-                        isVoice = isVoiceMessage
                     )
 
                     _uiState.update {
