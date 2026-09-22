@@ -28,8 +28,8 @@ class VoskHindiSttModelStore @Inject constructor(
         if (isComplete(rootDirectory)) return@withContext rootDirectory
 
         val tempRoot = File(
-            context.cacheDir,
-            "vosk_hi_bundle_" + System.currentTimeMillis()
+            context.filesDir,
+            ".vosk_hi_bundle_staging_" + System.currentTimeMillis()
         )
         tempRoot.mkdirs()
 
