@@ -2,7 +2,8 @@ package com.tactical.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.awaitPointerEvent
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +42,7 @@ fun SquadScreen(
     onRefresh: () -> Unit,
     onPttPress: () -> Unit,
     onPttRelease: () -> Unit,
+    onPttCancel: () -> Unit,
     onEmergencyPress: () -> Unit,
     onEmergencyRelease: () -> Unit,
     modifier: Modifier = Modifier
@@ -60,10 +64,10 @@ fun SquadScreen(
     }
 
     val pttHint = when (uiState.pttSessionState) {
-        SessionState.RECORDING -> "Release to stop recording"
+        SessionState.RECORDING -> "Release to send • swipe right to cancel"
         SessionState.TRANSMITTING -> "Transcribing and sending…"
         else -> if (hasConnection) {
-            "Hold to record • release to transcribe and send"
+            "Hold to record • release to send • swipe right to cancel"
         } else {
             "Connect to a squad member to enable PTT"
         }
@@ -139,18 +143,44 @@ fun SquadScreen(
                         .then(
                             if (pttEnabled) {
                                 Modifier.pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onPress = {
-                                            pttHeld = true
-                                            onPttPress()
-                                            try {
-                                                awaitRelease()
-                                            } finally {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        pttHeld = true
+                                        onPttPress()
+
+                                        var cancelled = false
+                                        val cancelDistance = 80.dp.toPx()
+
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+
+                                            if (change.changedToUp()) {
+                                                change.consume()
+                                                if (!cancelled) {
+                                                    pttHeld = false
+                                                    onPttRelease()
+                                                }
+                                                break
+                                            }
+
+                                            val dx = change.position.x - down.position.x
+                                            val dy = change.position.y - down.position.y
+
+                                            if (
+                                                !cancelled &&
+                                                dx > cancelDistance &&
+                                                kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
+                                            ) {
+                                                cancelled = true
                                                 pttHeld = false
-                                                onPttRelease()
+                                                change.consume()
+                                                onPttCancel()
+                                            } else {
+                                                change.consume()
                                             }
                                         }
-                                    )
+                                    }
                                 }
                             } else {
                                 Modifier
