@@ -4,9 +4,11 @@ import com.tactical.domain.audio.AudioFrame
 import com.tactical.domain.speech.TranscriptionChunk
 import com.tactical.platform.api.speech.SpeechToText
 import kotlinx.coroutines.flow.Flow
-import javax.inject.Inject
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
@@ -14,6 +16,9 @@ import javax.inject.Singleton
  *
  * This does not affect reception: incoming packets carry their own
  * languageCode on the wire.
+ *
+ * Only the currently selected backend is retained as a live native model.
+ * When the selected language changes, the previously active backend is closed.
  */
 @Singleton
 class RoutingSpeechToText @Inject constructor(
@@ -30,7 +35,7 @@ class RoutingSpeechToText @Inject constructor(
     ): Flow<TranscriptionChunk> {
         val selectedLanguage = languagePreferences.selectedLanguageCode
 
-        return kotlinx.coroutines.flow.flow {
+        return flow {
             switchMutex.withLock {
                 if (activeLanguage != selectedLanguage) {
                     when (activeLanguage) {
@@ -43,12 +48,14 @@ class RoutingSpeechToText @Inject constructor(
 
             emitAll(
                 when (selectedLanguage) {
-            "hi" -> voskHindiSpeechToText.transcribe(audio)
-            "en" -> moonshineSpeechToText.transcribe(audio)
-                else -> error(
-                    "No STT backend configured for language " +
-                        selectedLanguage
-                )
+                    "hi" -> voskHindiSpeechToText.transcribe(audio)
+                    "en" -> moonshineSpeechToText.transcribe(audio)
+                    else -> error(
+                        "No STT backend configured for language " +
+                            selectedLanguage
+                    )
+                }
             )
         }
+    }
 }
