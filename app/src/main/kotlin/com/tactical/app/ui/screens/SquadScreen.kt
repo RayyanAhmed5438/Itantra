@@ -39,6 +39,8 @@ fun SquadScreen(
     onRefresh: () -> Unit,
     onPttPress: () -> Unit,
     onPttRelease: () -> Unit,
+    onEmergencyPress: () -> Unit,
+    onEmergencyRelease: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val connectedPeers = uiState.pairedPeers.filter { it.isConnected }
@@ -183,6 +185,91 @@ fun SquadScreen(
 
             Text(
                 pttHint,
+                color = RedTacticalTextSecondary,
+                fontSize = 10.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (uiState.emergencyComposerVisible) {
+                                RedTacticalSurface
+                            } else {
+                                Color(0xFF5A1717)
+                            }
+                        )
+                        .border(
+                            width = 1.5.dp,
+                            color = if (uiState.emergencyComposerVisible) {
+                                RedTacticalSurfaceBorder
+                            } else {
+                                RedTacticalPrimaryBright
+                            },
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .then(
+                            if (!uiState.emergencyComposerVisible && uiState.pttSessionState == SessionState.IDLE) {
+                                Modifier.pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            onEmergencyPress()
+                                            try {
+                                                awaitRelease()
+                                            } finally {
+                                                onEmergencyRelease()
+                                            }
+                                        }
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🚨",
+                            fontSize = 20.sp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (uiState.emergencyComposerVisible) {
+                                "EMERGENCY ACTIVE"
+                            } else {
+                                "HOLD FOR EMERGENCY"
+                            },
+                            color = if (uiState.emergencyComposerVisible) {
+                                RedTacticalTextSecondary
+                            } else {
+                                Color.White
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(5.dp))
+
+            Text(
+                "Hold for 2 seconds to open the emergency recorder",
                 color = RedTacticalTextSecondary,
                 fontSize = 10.sp,
                 modifier = Modifier.fillMaxWidth(),
