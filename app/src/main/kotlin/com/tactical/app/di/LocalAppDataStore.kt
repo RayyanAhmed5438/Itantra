@@ -197,7 +197,13 @@ class LocalAppDataStore @Inject constructor(
 
     @Synchronized
     fun unreadMessageCount(): Int {
-        val lastRead = preferences.getLong(KEY_MESSAGES_LAST_READ, Long.MIN_VALUE)
+        val lastRead = if (preferences.contains(KEY_MESSAGES_LAST_READ)) {
+            preferences.getLong(KEY_MESSAGES_LAST_READ, 0L)
+        } else {
+            val now = System.currentTimeMillis()
+            preferences.edit().putLong(KEY_MESSAGES_LAST_READ, now).apply()
+            now
+        }
         return loadReceivedMessages().count { it.timestampEpochMs > lastRead }
     }
 
