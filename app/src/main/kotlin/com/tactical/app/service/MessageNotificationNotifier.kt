@@ -8,6 +8,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.tactical.app.TacticalApplication
 import com.tactical.app.ui.MainActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,8 @@ import javax.inject.Singleton
 class MessageNotificationNotifier @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val activeNotificationIds = ConcurrentHashMap.newKeySet<Int>()
+
     fun show(
         senderName: String,
         message: String,
@@ -50,10 +53,12 @@ class MessageNotificationNotifier @Inject constructor(
             .build()
 
         runCatching {
+            val notificationId = nextNotificationId()
             NotificationManagerCompat.from(context).notify(
-                nextNotificationId(),
+                notificationId,
                 notification
             )
+            activeNotificationIds.add(notificationId)
         }.onFailure { error ->
             android.util.Log.w(
                 TAG,
@@ -61,6 +66,18 @@ class MessageNotificationNotifier @Inject constructor(
                 error
             )
         }
+    }
+
+    /**
+     * Cancels only Itantra's message notifications. Emergency and mesh
+     * notifications use different notification IDs and remain untouched.
+     */
+    fun clearMessageNotifications() {
+        val manager = NotificationManagerCompat.from(context)
+        activeNotificationIds.forEach { id ->
+            runCatching { manager.cancel(id) }
+        }
+        activeNotificationIds.clear()
     }
 
     private fun nextNotificationId(): Int =
