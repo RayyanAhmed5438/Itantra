@@ -6,6 +6,7 @@ import com.tactical.app.di.DeviceIdentityStore
 import com.tactical.app.di.LocalAppDataStore
 import com.tactical.app.di.StoredPairedDevice
 import com.tactical.app.di.StoredReceivedMessage
+import com.tactical.app.di.StoredSentMessage
 import com.tactical.domain.identity.DeviceId
 import com.tactical.domain.identity.LinkType
 import com.tactical.domain.packet.EmergencyPacket
@@ -151,6 +152,8 @@ class MainViewModel @Inject constructor(
             messages = localAppDataStore.loadReceivedMessages()
                 .asReversed()
                 .map(::storedMessageToUi),
+            sentMessages = localAppDataStore.loadSentMessages()
+                .map(::storedSentMessageToUi),
             unreadMessageCount = localAppDataStore.unreadMessageCount()
         )
     )
@@ -231,14 +234,18 @@ class MainViewModel @Inject constructor(
                         is TacticalResult.Success -> "Sent"
                         is TacticalResult.Failure -> "Queued"
                     }
+                    val localSendTime = System.currentTimeMillis()
                     val message = ChatMessageUi(
                         sender = "YOU",
                         text = text,
                         timestampText = "Just now",
                         statusText = status,
                         isVoice = true,
-                        timestampEpochMs = System.currentTimeMillis(),
-                        conversationOrderEpochMs = System.currentTimeMillis()
+                        timestampEpochMs = localSendTime,
+                        conversationOrderEpochMs = localSendTime
+                    )
+                    localAppDataStore.saveSentMessage(
+                        storedSentMessage(message)
                     )
                     _uiState.update {
                         it.copy(
@@ -687,6 +694,7 @@ class MainViewModel @Inject constructor(
                 is TacticalResult.Failure -> "Queued"
             }
             val details = emergencyAlertData(packet, "YOU")
+            val localSendTime = System.currentTimeMillis()
             val message = ChatMessageUi(
                 sender = "YOU",
                 text = packet.description,
@@ -695,7 +703,10 @@ class MainViewModel @Inject constructor(
                 isAlert = true,
                 emergencyData = details,
                 timestampEpochMs = packet.timestamp,
-                conversationOrderEpochMs = System.currentTimeMillis()
+                conversationOrderEpochMs = localSendTime
+            )
+            localAppDataStore.saveSentMessage(
+                storedSentMessage(message)
             )
 
             _uiState.update {
@@ -748,6 +759,7 @@ class MainViewModel @Inject constructor(
         val keys = messages.mapTo(mutableSetOf()) { messageStorageKey(it) }
 
         if (isSent) {
+            localAppDataStore.deleteSentMessages(keys)
             _uiState.update { state ->
                 state.copy(
                     messages = state.messages.filterNot { messageStorageKey(it) in keys },
@@ -811,6 +823,10 @@ class MainViewModel @Inject constructor(
             timestampEpochMs = localSendTime,
             conversationOrderEpochMs = localSendTime
         )
+        localAppDataStore.saveSentMessage(
+            storedSentMessage(pending)
+        )
+
         _uiState.update {
             it.copy(
                 messages = listOf(pending) + it.messages,
@@ -821,20 +837,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             val pairedIds = bleConnectionManager.pairedDeviceIds()
             if (pairedIds.isEmpty()) {
-                _uiState.update { state ->
-                    state.copy(
-                        messages = state.messages.mapIndexed { index, msg ->
-                            if (index == 0 && msg.sender == "YOU" && msg.text == value) {
-                                msg.copy(statusText = "No paired devices")
-                            } else msg
-                        },
-                        sentMessages = state.sentMessages.mapIndexed { index, msg ->
-                            if (index == 0 && msg.text == value) {
-                                msg.copy(statusText = "No paired devices")
-                            } else msg
-                        }
-                    )
-                }
+                updateSentMessageStatus(pending, "No paired devices")
                 return@launch
             }
 
@@ -865,20 +868,7 @@ class MainViewModel @Inject constructor(
             }
 
             if (!connectionReady) {
-                _uiState.update { state ->
-                    state.copy(
-                        messages = state.messages.mapIndexed { index, msg ->
-                            if (index == 0 && msg.sender == "YOU" && msg.text == value) {
-                                msg.copy(statusText = "No active connections")
-                            } else msg
-                        },
-                        sentMessages = state.sentMessages.mapIndexed { index, msg ->
-                            if (index == 0 && msg.text == value) {
-                                msg.copy(statusText = "No active connections")
-                            } else msg
-                        }
-                    )
-                }
+                updateSentMessageStatus(pending, "No active connections")
                 return@launch
             }
 
@@ -896,20 +886,35 @@ class MainViewModel @Inject constructor(
                 is TacticalResult.Failure -> "Queued"
             }
 
-            _uiState.update { state ->
-                state.copy(
-                    messages = state.messages.mapIndexed { index, msg ->
-                        if (index == 0 && msg.sender == "YOU" && msg.text == value) {
-                            msg.copy(statusText = status)
-                        } else msg
-                    },
-                    sentMessages = state.sentMessages.mapIndexed { index, msg ->
-                        if (index == 0 && msg.text == value) {
-                            msg.copy(statusText = status)
-                        } else msg
+            updateSentMessageStatus(pending, status)
+        }
+    }
+
+    private fun updateSentMessageStatus(
+        message: ChatMessageUi,
+        statusText: String
+    ) {
+        val key = messageStorageKey(message)
+
+        localAppDataStore.updateSentMessageStatus(key, statusText)
+
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map {
+                    if (messageStorageKey(it) == key) {
+                        it.copy(statusText = statusText)
+                    } else {
+                        it
                     }
-                )
-            }
+                },
+                sentMessages = state.sentMessages.map {
+                    if (messageStorageKey(it) == key) {
+                        it.copy(statusText = statusText)
+                    } else {
+                        it
+                    }
+                }
+            )
         }
     }
 
@@ -933,6 +938,52 @@ class MainViewModel @Inject constructor(
             signalBars = if (peer.rssi != 0) signalBars(peer.rssi) else 0,
             linkText = peer.linkText,
             bleState = BleLinkState.PAIRED
+        )
+
+    private fun storedSentMessageToUi(message: StoredSentMessage): ChatMessageUi =
+        ChatMessageUi(
+            sender = message.senderName,
+            text = message.text,
+            timestampText = if (message.timestampEpochMs > 0L) {
+                formatTimestamp(message.timestampEpochMs)
+            } else {
+                "Unknown"
+            },
+            statusText = message.statusText,
+            isVoice = message.isVoice,
+            isAlert = message.isAlert,
+            emergencyData = if (message.isAlert) {
+                EmergencyAlertData(
+                    sender = message.senderName,
+                    timestampText = formatTimestamp(message.timestampEpochMs),
+                    severity = message.severity ?: Severity.CRITICAL.name,
+                    message = message.text,
+                    languageCode = message.languageCode ?: "und",
+                    locationLatitude = message.locationLatitude,
+                    locationLongitude = message.locationLongitude,
+                    locationAccuracyMeters = message.locationAccuracyMeters
+                )
+            } else {
+                null
+            },
+            timestampEpochMs = message.timestampEpochMs,
+            conversationOrderEpochMs = message.conversationOrderEpochMs
+        )
+
+    private fun storedSentMessage(message: ChatMessageUi): StoredSentMessage =
+        StoredSentMessage(
+            senderName = message.sender,
+            text = message.text,
+            timestampEpochMs = message.timestampEpochMs,
+            statusText = message.statusText,
+            isVoice = message.isVoice,
+            isAlert = message.isAlert,
+            severity = message.emergencyData?.severity,
+            languageCode = message.emergencyData?.languageCode,
+            locationLatitude = message.emergencyData?.locationLatitude,
+            locationLongitude = message.emergencyData?.locationLongitude,
+            locationAccuracyMeters = message.emergencyData?.locationAccuracyMeters,
+            conversationOrderEpochMs = message.conversationOrderEpochMs
         )
 
     private fun storedMessageToUi(message: StoredReceivedMessage): ChatMessageUi {
