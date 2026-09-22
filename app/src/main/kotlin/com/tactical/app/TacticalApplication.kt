@@ -25,6 +25,14 @@ class TacticalApplication : Application() {
                 description = "Monitors tactical mesh network connections and incoming transmissions."
             }
 
+            val messageChannel = NotificationChannel(
+                CHANNEL_MESSAGES,
+                "Itantra Messages",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications for incoming text and voice messages."
+            }
+
             val emergencyChannel = NotificationChannel(
                 CHANNEL_EMERGENCY,
                 "Itantra Emergency Alerts",
@@ -43,5 +51,6 @@ class TacticalApplication : Application() {
     companion object {
         const val CHANNEL_MESH = "channel_sentinel_mesh"
         const val CHANNEL_EMERGENCY = "channel_sentinel_emergency"
+        const val CHANNEL_MESSAGES = "channel_itantra_messages"
     }
 }
