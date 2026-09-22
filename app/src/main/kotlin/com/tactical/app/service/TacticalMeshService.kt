@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.tactical.app.TacticalApplication
 import com.tactical.app.ui.MainActivity
 import com.tactical.app.di.LocalAppDataStore
@@ -139,6 +140,27 @@ class TacticalMeshService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Some OEMs stop foreground services when the app task is swiped
+        // away. Re-assert the mesh service here so the persistent foreground
+        // service can keep BLE discovery/connection alive after the Activity
+        // is dismissed.
+        runCatching {
+            ContextCompat.startForegroundService(
+                applicationContext,
+                Intent(applicationContext, TacticalMeshService::class.java)
+            )
+        }.onFailure { error ->
+            android.util.Log.w(
+                "TacticalMeshService",
+                "Could not re-assert mesh service after task removal",
+                error
+            )
+        }
+
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
