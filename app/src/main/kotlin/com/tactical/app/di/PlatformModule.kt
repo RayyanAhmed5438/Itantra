@@ -12,6 +12,13 @@ import com.tactical.platform.ble.AndroidBleConnectionManager
 import com.tactical.platform.ble.AndroidBleScanner
 import com.tactical.platform.wifi.AndroidWifiDirectManager
 import com.tactical.platform.audio.AndroidAudioRecordRecorder
+import com.tactical.platform.audio.AlertToneGenerator
+import com.tactical.platform.audio.AndroidAudioTrackPlayer
+import com.tactical.platform.api.audio.AudioPlayer
+import com.tactical.platform.api.alarm.AlarmBypass
+import com.tactical.platform.alarm.AndroidAlarmBypass
+import com.tactical.platform.api.flashlight.FlashlightController
+import com.tactical.platform.flashlight.CameraFlashlightController
 import com.tactical.platform.haptics.AndroidHapticEngine
 import android.net.wifi.p2p.WifiP2pManager
 import dagger.Module
@@ -29,6 +36,32 @@ object PlatformModule {
     @Singleton
     fun provideAudioRecorder(): AudioRecorder =
         AndroidAudioRecordRecorder()
+
+    @Provides
+    @Singleton
+    fun provideAlertToneGenerator(): AlertToneGenerator =
+        AlertToneGenerator()
+
+    @Provides
+    @Singleton
+    fun provideAudioPlayer(
+        alertToneGenerator: AlertToneGenerator
+    ): AudioPlayer =
+        AndroidAudioTrackPlayer(alertToneGenerator)
+
+    @Provides
+    @Singleton
+    fun provideAlarmBypass(
+        @ApplicationContext context: Context
+    ): AlarmBypass =
+        AndroidAlarmBypass(context)
+
+    @Provides
+    @Singleton
+    fun provideFlashlightController(
+        @ApplicationContext context: Context
+    ): FlashlightController =
+        CameraFlashlightController(context)
 
     @Provides
     @Singleton
