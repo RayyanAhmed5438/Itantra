@@ -249,7 +249,8 @@ class MainActivity : ComponentActivity() {
                                     2 -> MessagesScreen(
                                         state,
                                         viewModel::sendTextMessage,
-                                        viewModel::markMessagesRead
+                                        viewModel::markMessagesRead,
+                                        viewModel::deleteMessages
                                     )
                                 }
                             }
