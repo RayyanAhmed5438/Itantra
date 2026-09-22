@@ -59,19 +59,60 @@ class DefaultPttController(
 
         sessionJob = scope.launch {
             try {
+                var accumulatedText = ""
+                var latestPartial = ""
+                var languageCode = session.languageTag.isoCode
+
                 speechToText.transcribe(frames).collect { chunk ->
+                    if (chunk.languageCode.isNotBlank()) {
+                        languageCode = chunk.languageCode
+                    }
+
                     if (chunk.isFinal) {
-                        _state.update {
-                            it.copy(
-                                lastTranscription = chunk.text,
-                                sessionState = SessionState.TRANSMITTING
+                        val finalText = chunk.text.trim()
+                        if (finalText.isNotBlank()) {
+                            // STT backends may finalize a segment whenever the
+                            // speaker pauses. PTT must keep recording until
+                            // release, so accumulate finalized segments instead
+                            // of transmitting the first one immediately.
+                            accumulatedText = appendTranscript(
+                                accumulatedText,
+                                finalText
                             )
                         }
-                        transmit(session, chunk)
-                        _state.update { it.copy(sessionState = SessionState.IDLE) }
+                        latestPartial = ""
                     } else {
-                        _state.update { it.copy(lastTranscription = chunk.text) }
+                        latestPartial = chunk.text.trim()
                     }
+
+                    val liveText = appendTranscript(
+                        accumulatedText,
+                        latestPartial
+                    )
+                    if (liveText.isNotBlank()) {
+                        _state.update {
+                            it.copy(lastTranscription = liveText)
+                        }
+                    }
+                }
+
+                // AudioRecorder.stop() closes the audio stream on PTT release.
+                // Only now is the complete utterance transmitted.
+                val completeText = accumulatedText.trim()
+                if (completeText.isNotBlank()) {
+                    val finalChunk = TranscriptionChunk(
+                        text = completeText,
+                        isFinal = true,
+                        languageCode = languageCode
+                    )
+                    _state.update {
+                        it.copy(
+                            lastTranscription = completeText,
+                            sessionState = SessionState.TRANSMITTING
+                        )
+                    }
+                    transmit(session, finalChunk)
+                    _state.update { it.copy(sessionState = SessionState.IDLE) }
                 }
             } catch (t: Throwable) {
                 _state.update {
@@ -101,6 +142,13 @@ class DefaultPttController(
         } else {
             _state.update { it.copy(sessionState = SessionState.IDLE) }
         }
+    }
+
+    private fun appendTranscript(existing: String, next: String): String {
+        if (next.isBlank()) return existing
+        if (existing.isBlank()) return next.trim()
+        if (existing == next.trim()) return existing
+        return existing.trim() + " " + next.trim()
     }
 
     private suspend fun transmit(session: PttSession, chunk: TranscriptionChunk) {
