@@ -5,15 +5,50 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import com.tactical.platform.speech.SpeechLanguagePreferences
+import com.tactical.platform.speech.mms.MmsTtsEngine
+import com.tactical.platform.speech.mms.MmsTtsLanguage
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltAndroidApp
 class TacticalApplication : Application() {
+
+    @Inject
+    lateinit var speechLanguagePreferences: SpeechLanguagePreferences
+
+    @Inject
+    lateinit var ttsEngine: MmsTtsEngine
+
+    private val ttsPreloadScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
         cleanupSpeechExtractionCache()
         createNotificationChannels()
+        preloadSelectedTtsLanguage()
+    }
+
+    private fun preloadSelectedTtsLanguage() {
+        val language = MmsTtsLanguage.fromIsoCode(
+            speechLanguagePreferences.selectedLanguageCode
+        ) ?: return
+
+        ttsPreloadScope.launch {
+            runCatching {
+                ttsEngine.preload(language)
+            }.onFailure { error ->
+                android.util.Log.w(
+                    "TacticalApplication",
+                    "TTS preload failed: " + (error.message ?: error.javaClass.simpleName)
+                )
+            }
+        }
     }
 
     /**
