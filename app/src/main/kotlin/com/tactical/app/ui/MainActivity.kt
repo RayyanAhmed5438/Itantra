@@ -51,7 +51,6 @@ import com.tactical.app.ui.theme.RedTacticalTheme
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsModelStore
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -73,21 +72,12 @@ class MainActivity : ComponentActivity() {
     private val ttsLanguages = mutableStateOf<List<com.tactical.platform.speech.mms.MmsTtsLanguage>>(emptyList())
 
     private fun loadBundledTtsModels() {
-        if (ttsLoading.value) return
-        lifecycleScope.launch {
-            ttsLoading.value = true
-            ttsMessage.value = "Loading bundled TTS models…"
-            runCatching { ttsModelStore.ensureBundledModelsAvailable() }
-                .onSuccess {
-                    ttsLanguages.value = ttsModelStore.installedLanguages()
-                    ttsMessage.value = "TTS models ready: " + ttsLanguages.value.size + " bundled languages."
-                }
-                .onFailure { error ->
-                    ttsLanguages.value = ttsModelStore.installedLanguages()
-                    ttsMessage.value = "TTS model load failed: " + (error.message ?: error.javaClass.simpleName)
-                }
-            ttsLoading.value = false
-        }
+        // Do not extract or instantiate every TTS model when opening the lab.
+        // Each language is extracted and loaded only when it is actually spoken.
+        ttsLoading.value = false
+        ttsLanguages.value = ttsModelStore.bundledLanguages()
+        ttsMessage.value =
+            "TTS models load on demand; only the language being spoken is kept in memory."
     }
 
     private val wirelessStateReceiver = object : BroadcastReceiver() {
