@@ -15,6 +15,8 @@ import com.tactical.emergency.receiver.EmergencyReceiver
 import com.tactical.emergency.squelch.SquelchBreaker
 import com.tactical.engine.discovery.service.DiscoveryService
 import com.tactical.engine.mesh.service.MeshService
+import com.tactical.platform.speech.mms.MmsTtsEngine
+import com.tactical.platform.speech.mms.MmsTtsLanguage
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +53,9 @@ class TacticalMeshService : Service() {
 
     @Inject
     lateinit var localAppDataStore: LocalAppDataStore
+
+    @Inject
+    lateinit var mmsTtsEngine: MmsTtsEngine
 
     private val serviceScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -141,6 +146,26 @@ class TacticalMeshService : Service() {
                             message = packet.text,
                             isVoice = isVoiceMessage
                         )
+
+                        if (isVoiceMessage) {
+                            serviceScope.launch {
+                                val language = MmsTtsLanguage.fromIsoCode(packet.languageCode)
+                                if (language != null) {
+                                    runCatching {
+                                        mmsTtsEngine.synthesizeAndPlay(
+                                            language,
+                                            packet.text
+                                        )
+                                    }.onFailure { error ->
+                                        android.util.Log.w(
+                                            "TacticalMeshService",
+                                            "Automatic voice-message TTS playback failed: " +
+                                                (error.message ?: error.javaClass.simpleName)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
