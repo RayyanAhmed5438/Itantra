@@ -30,6 +30,25 @@ class RoutingSpeechToText @Inject constructor(
     private val switchMutex = Mutex()
     private var activeLanguage: String? = null
 
+    fun onSelectedLanguageChanged(languageCode: String) {
+        if (!switchMutex.tryLock()) return
+
+        try {
+            if (activeLanguage == languageCode) return
+
+            when (activeLanguage) {
+                "hi" -> voskHindiSpeechToText.close()
+                "en" -> moonshineSpeechToText.close()
+            }
+
+            // The next transcription call will lazily load the newly selected
+            // backend. Until then, no STT model is intentionally kept loaded.
+            activeLanguage = null
+        } finally {
+            switchMutex.unlock()
+        }
+    }
+
     override fun transcribe(
         audio: Flow<AudioFrame>
     ): Flow<TranscriptionChunk> {
