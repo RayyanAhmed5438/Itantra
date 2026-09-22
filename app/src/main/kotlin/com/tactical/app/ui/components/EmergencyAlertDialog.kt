@@ -172,8 +172,8 @@ fun EmergencyAlertDialog(
                                     text = String.format(
                                         java.util.Locale.US,
                                         "%.6f, %.6f",
-                                        alertData.locationLatitude,
-                                        alertData.locationLongitude
+                                        requireNotNull(alertData.locationLatitude),
+                                        requireNotNull(alertData.locationLongitude)
                                     ),
                                     color = Color.White,
                                     fontSize = 13.sp
