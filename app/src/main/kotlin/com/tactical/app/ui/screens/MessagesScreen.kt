@@ -28,16 +28,28 @@ import com.tactical.app.ui.theme.*
 fun MessagesScreen(
     uiState: MainUiState,
     onSendMessage: (String) -> Unit,
+    onMessagesOpened: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var input by remember { mutableStateOf("") }
     var selected by remember { mutableIntStateOf(0) }
     var selectedEmergency by remember { mutableStateOf<ChatMessageUi?>(null) }
+    var todayOnly by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        onMessagesOpened()
+    }
 
     val currentMessages = if (selected == 0) {
         uiState.receivedMessages
     } else {
         uiState.sentMessages
+    }
+
+    val filteredMessages = if (todayOnly) {
+        currentMessages.filter { isToday(it.timestampEpochMs) }
+    } else {
+        currentMessages
     }
 
     Column(
@@ -75,10 +87,23 @@ fun MessagesScreen(
             )
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            FilterChip(
+                selected = todayOnly,
+                onClick = { todayOnly = !todayOnly },
+                label = { Text(if (todayOnly) "TODAY ONLY" else "TODAY") }
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
 
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -86,15 +111,20 @@ fun MessagesScreen(
             if (currentMessages.isEmpty()) {
                 item {
                     Text(
-                        if (selected == 0) "No received messages" else "No sent messages",
+                        when {
+                            todayOnly && selected == 0 -> "No received messages today"
+                            todayOnly -> "No sent messages today"
+                            selected == 0 -> "No received messages"
+                            else -> "No sent messages"
+                        },
                         color = RedTacticalTextSecondary,
-                        fontSize = 13.sp
+                        fontSize = if (message.isAlert) 13.sp else 11.sp
                     )
                 }
             }
 
             itemsIndexed(
-                items = currentMessages,
+                items = filteredMessages,
                 key = { index, message ->
                     // Content-based keys can collide when two messages have
                     // the same timestamp, sender, and text. Include the
@@ -175,6 +205,16 @@ fun MessagesScreen(
 }
 
 @Composable
+
+private fun isToday(epochMs: Long): Boolean {
+    if (epochMs <= 0L) return false
+    val messageDate = java.util.Calendar.getInstance().apply { timeInMillis = epochMs }
+    val today = java.util.Calendar.getInstance()
+    return messageDate.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+        messageDate.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
+}
+
+@Composable
 private fun MessageRow(
     message: ChatMessageUi,
     isSent: Boolean,
@@ -204,7 +244,7 @@ private fun MessageRow(
                 }
             )
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(if (message.isAlert) 14.dp else 9.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -226,16 +266,16 @@ private fun MessageRow(
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(if (message.isAlert) 6.dp else 3.dp))
 
             Text(
                 message.text,
                 color = Color.White,
-                fontSize = 14.sp,
-                maxLines = if (message.isAlert) 2 else Int.MAX_VALUE
+                fontSize = if (message.isAlert) 14.sp else 12.sp,
+                maxLines = if (message.isAlert) 4 else 3
             )
 
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(if (message.isAlert) 5.dp else 2.dp))
 
             Text(
                 text = when {
@@ -244,7 +284,7 @@ private fun MessageRow(
                     else -> message.statusText
                 },
                 color = borderColor,
-                fontSize = 10.sp,
+                fontSize = if (message.isAlert) 10.sp else 9.sp,
                 fontWeight = if (message.isAlert) FontWeight.Bold else FontWeight.Normal
             )
         }
