@@ -13,12 +13,15 @@ import com.tactical.ptt.session.PttSession
 import com.tactical.ptt.session.SessionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.UUID
 
 class DefaultPttController(
     private val deviceId: DeviceId,
@@ -49,7 +52,9 @@ class DefaultPttController(
                 sessionState = SessionState.ARMED,
                 sessionId = session.sessionId,
                 lastTranscription = null,
-                lastResult = null
+                lastResult = null,
+                continuousSession = false,
+                transmissions = emptyList()
             )
         }
         hapticFeedback.onPress()
@@ -113,7 +118,10 @@ class DefaultPttController(
                     }
                     transmit(session, finalChunk)
                     _state.update { it.copy(sessionState = SessionState.IDLE) }
+                } else {
+                    _state.update { it.copy(sessionState = SessionState.IDLE) }
                 }
+                currentSession = null
             } catch (t: Throwable) {
                 _state.update {
                     it.copy(
@@ -123,7 +131,142 @@ class DefaultPttController(
                         )
                     )
                 }
+                currentSession = null
             }
+        }
+    }
+
+    override suspend fun startContinuous() {
+        if (_state.value.sessionState != SessionState.IDLE) return
+
+        val session = PttSession(deviceId = deviceId, isVox = true)
+        currentSession = session
+
+        _state.update {
+            it.copy(
+                sessionState = SessionState.RECORDING,
+                sessionId = session.sessionId,
+                lastTranscription = null,
+                lastResult = null,
+                continuousSession = true,
+                transmissions = emptyList()
+            )
+        }
+        hapticFeedback.onPress()
+
+        val frames = audioRecorder.start(audioConfig)
+
+        sessionJob = scope.launch {
+            val sendQueue = Channel<PttTransmission>(Channel.UNLIMITED)
+
+            val senderJob = launch {
+                for (transmission in sendQueue) {
+                    val packet = packetBuilder.build(
+                        session,
+                        TranscriptionChunk(
+                            text = transmission.text,
+                            isFinal = true,
+                            languageCode = transmission.languageCode
+                        )
+                    )
+
+                    val result = runCatching {
+                        meshDispatcher.dispatch(packet)
+                    }.getOrElse {
+                        TacticalResult.Failure(
+                            error = it.message ?: it.javaClass.simpleName
+                        )
+                    }
+
+                    val status = when (result) {
+                        is TacticalResult.Success -> PttTransmissionStatus.SENT
+                        is TacticalResult.Failure -> PttTransmissionStatus.QUEUED
+                    }
+
+                    _state.update {
+                        it.copy(
+                            lastResult = result,
+                            transmissions = it.transmissions.map { item ->
+                                if (item.id == transmission.id) {
+                                    item.copy(status = status)
+                                } else {
+                                    item
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            try {
+                speechToText.transcribe(frames).collect { chunk ->
+                    val partial = chunk.text.trim()
+
+                    if (chunk.isFinal) {
+                        if (partial.isNotBlank()) {
+                            val transmission = PttTransmission(
+                                id = UUID.randomUUID().toString(),
+                                text = partial,
+                                languageCode = chunk.languageCode.ifBlank {
+                                    session.languageTag.isoCode
+                                },
+                                timestampEpochMs = System.currentTimeMillis()
+                            )
+
+                            _state.update {
+                                it.copy(
+                                    lastTranscription = partial,
+                                    transmissions = (
+                                        it.transmissions + transmission
+                                    ).takeLast(MAX_TRANSMISSION_HISTORY)
+                                )
+                            }
+
+                            sendQueue.send(transmission)
+                        }
+                    } else if (partial.isNotBlank()) {
+                        _state.update {
+                            it.copy(lastTranscription = partial)
+                        }
+                    }
+                }
+            } finally {
+                sendQueue.close()
+                senderJob.join()
+            }
+
+            _state.update {
+                it.copy(sessionState = SessionState.IDLE)
+            }
+            currentSession = null
+        }
+    }
+
+    override suspend fun stopContinuous() {
+        if (!_state.value.continuousSession &&
+            _state.value.sessionState == SessionState.IDLE
+        ) {
+            return
+        }
+
+        hapticFeedback.onRelease()
+        audioRecorder.stop()
+
+        val job = sessionJob
+        if (job != null) {
+            withTimeoutOrNull(releaseGraceMs) {
+                job.join()
+            }
+            job.cancel()
+            sessionJob = null
+        }
+
+        currentSession = null
+        _state.update {
+            it.copy(
+                sessionState = SessionState.IDLE,
+                continuousSession = true
+            )
         }
     }
 
@@ -138,7 +281,8 @@ class DefaultPttController(
                 sessionState = SessionState.IDLE,
                 sessionId = null,
                 lastTranscription = null,
-                lastResult = null
+                lastResult = null,
+                continuousSession = false
             )
         }
     }
@@ -176,5 +320,9 @@ class DefaultPttController(
             is TacticalResult.Success -> hapticFeedback.onTransmitComplete()
             is TacticalResult.Failure -> hapticFeedback.onTransmitFailed()
         }
+    }
+
+    companion object {
+        private const val MAX_TRANSMISSION_HISTORY = 20
     }
 }
