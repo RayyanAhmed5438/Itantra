@@ -42,6 +42,7 @@ data class StoredSentMessage(
     val timestampEpochMs: Long,
     val statusText: String,
     val isVoice: Boolean = false,
+    val isCallMode: Boolean = false,
     val isAlert: Boolean = false,
     val severity: String? = null,
     val languageCode: String? = null,
@@ -186,6 +187,7 @@ class LocalAppDataStore @Inject constructor(
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("statusText", item.statusText)
                     put("isVoice", item.isVoice)
+                    put("isCallMode", item.isCallMode)
                     put("isAlert", item.isAlert)
                     put("conversationOrderEpochMs", item.conversationOrderEpochMs)
                     item.severity?.let { put("severity", it) }
@@ -225,6 +227,7 @@ class LocalAppDataStore @Inject constructor(
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("statusText", item.statusText)
                     put("isVoice", item.isVoice)
+                    put("isCallMode", item.isCallMode)
                     put("isAlert", item.isAlert)
                     put("conversationOrderEpochMs", item.conversationOrderEpochMs)
                     item.severity?.let { put("severity", it) }
@@ -389,6 +392,7 @@ class LocalAppDataStore @Inject constructor(
                     put("text", item.text)
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("isVoice", item.isVoice)
+                    put("isCallMode", item.isCallMode)
                     put("isAlert", item.isAlert)
                     put("receivedAtEpochMs", item.receivedAtEpochMs)
                     item.severity?.let { put("severity", it) }
@@ -434,6 +438,7 @@ class LocalAppDataStore @Inject constructor(
                     put("text", item.text)
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("isVoice", item.isVoice)
+                    put("isCallMode", item.isCallMode)
                     put("isAlert", item.isAlert)
                     put("receivedAtEpochMs", item.receivedAtEpochMs)
                     item.severity?.let { put("severity", it) }
