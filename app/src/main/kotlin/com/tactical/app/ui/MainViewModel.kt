@@ -895,7 +895,12 @@ class MainViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 receivedMessages = received,
-                messages = received,
+                messages = (it.sentMessages + received)
+                    .distinctBy(::messageStorageKey)
+                    .sortedBy {
+                        it.conversationOrderEpochMs.takeIf { time -> time > 0L }
+                            ?: it.timestampEpochMs
+                    },
                 unreadMessageCount = localAppDataStore.unreadMessageCount()
             )
         }
