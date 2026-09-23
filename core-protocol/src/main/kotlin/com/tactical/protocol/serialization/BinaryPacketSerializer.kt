@@ -12,6 +12,11 @@ import java.util.zip.CRC32
 
 class BinaryPacketSerializer : PacketSerializer {
 
+    // 100 Julian years represented as whole days. The day alignment means
+    // legacy clients that only display HH:mm retain the same clock time.
+    private val callModeTimestampOffsetMs: Long =
+        36500L * 24L * 60L * 60L * 1000L
+
     override fun serialize(packet: Packet): ByteArray {
         val payload = when (packet) {
             is TextPacket -> encodeTextPacket(packet)
@@ -54,10 +59,18 @@ class BinaryPacketSerializer : PacketSerializer {
         writeString(packet.sender.value)
         writeString(packet.languageCode)
         writeString(packet.text)
-        // Reserve the timestamp's least-significant bit as the Call Mode
-        // marker. Millisecond timestamps are normalized to an even value,
-        // so old protocol readers still see a valid timestamp.
-        writeLong((packet.timestamp and -2L) or if (packet.isCallMode) 1L else 0L)
+        // Encode Call Mode with a large day-aligned timestamp offset.
+        // This keeps the packet layout unchanged and, importantly, makes
+        // ordinary packets from older app versions unambiguously non-Call
+        // Mode when decoded by a newer app. Older readers still parse the
+        // packet as a normal TextPacket and retain the same HH:mm time.
+        writeLong(
+            if (packet.isCallMode) {
+                packet.timestamp + callModeTimestampOffsetMs
+            } else {
+                packet.timestamp
+            }
+        )
     }
 
     private fun encodeVoicePacket(packet: VoicePacket): ByteArray = byteStream {
@@ -151,12 +164,17 @@ class BinaryPacketSerializer : PacketSerializer {
                 val languageCode = it.readString()
                 val text = it.readString()
                 val wireTimestamp = it.readLong()
+                val isCallMode = wireTimestamp >= callModeTimestampOffsetMs
                 TextPacket(
                     sender = sender,
                     text = text,
                     languageCode = languageCode,
-                    timestamp = wireTimestamp and -2L,
-                    isCallMode = (wireTimestamp and 1L) != 0L
+                    timestamp = if (isCallMode) {
+                        wireTimestamp - callModeTimestampOffsetMs
+                    } else {
+                        wireTimestamp
+                    },
+                    isCallMode = isCallMode
                 )
             }
             2 -> input.use {
