@@ -11,6 +11,7 @@ import com.tactical.ptt.relay.PttMeshDispatcher
 import com.tactical.ptt.relay.PttPacketBuilder
 import com.tactical.ptt.session.PttSession
 import com.tactical.ptt.session.SessionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -230,9 +231,20 @@ class DefaultPttController(
                         }
                     }
                 }
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+
+                _state.update {
+                    it.copy(
+                        sessionState = SessionState.IDLE,
+                        lastResult = TacticalResult.Failure(
+                            error = t.message ?: t.javaClass.simpleName
+                        )
+                    )
+                }
             } finally {
                 sendQueue.close()
-                senderJob.join()
+                runCatching { senderJob.join() }
             }
 
             _state.update {
