@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tactical.app.di.DeviceIdentityStore
 import com.tactical.app.di.LocalAppDataStore
+import com.tactical.app.di.PttModePreferences
 import com.tactical.app.di.StoredPairedDevice
 import com.tactical.app.di.StoredReceivedMessage
 import com.tactical.app.di.StoredSentMessage
@@ -22,6 +23,8 @@ import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.platform.speech.SpeechLanguagePreferences
 import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.ptt.controller.DefaultPttController
+import com.tactical.ptt.controller.PttTransmission
+import com.tactical.ptt.controller.PttTransmissionStatus
 import com.tactical.ptt.controller.PttController
 import com.tactical.ptt.feedback.PatternedHapticFeedback
 import com.tactical.ptt.relay.PttMeshDispatcher
@@ -93,6 +96,13 @@ data class NetworkMetrics(
     val transportName: String = "BLE / Wi-Fi Direct"
 )
 
+data class PttTransmissionUi(
+    val id: String,
+    val text: String,
+    val timestampEpochMs: Long,
+    val statusText: String
+)
+
 data class MainUiState(
     val username: String = "",
     val selectedLanguageCode: String = "hi",
@@ -107,6 +117,9 @@ data class MainUiState(
     val isScanning: Boolean = false,
     val pttSessionState: SessionState = SessionState.IDLE,
     val pttLastTranscription: String? = null,
+    val pttEnabled: Boolean = true,
+    val pttContinuousSession: Boolean = false,
+    val pttTransmissionHistory: List<PttTransmissionUi> = emptyList(),
     val unreadMessageCount: Int = 0,
     val emergencyComposerVisible: Boolean = false,
     val emergencyRecording: Boolean = false,
@@ -128,6 +141,7 @@ class MainViewModel @Inject constructor(
     private val speechLanguagePreferences: SpeechLanguagePreferences,
     private val routingSpeechToText: RoutingSpeechToText,
     private val localAppDataStore: LocalAppDataStore,
+    private val pttModePreferences: PttModePreferences,
     private val messageNotificationNotifier: com.tactical.app.service.MessageNotificationNotifier
 ) : ViewModel() {
 
@@ -154,6 +168,7 @@ class MainViewModel @Inject constructor(
                 .map(::storedMessageToUi),
             sentMessages = localAppDataStore.loadSentMessages()
                 .map(::storedSentMessageToUi),
+            pttEnabled = pttModePreferences.isPttEnabled,
             unreadMessageCount = localAppDataStore.unreadMessageCount()
         )
     )
@@ -175,6 +190,8 @@ class MainViewModel @Inject constructor(
     )
 
     private var lastHandledPttSessionId: String? = null
+    private val continuousTransmissionMessages = mutableMapOf<String, ChatMessageUi>()
+    private var resumeContinuousAfterEmergency = false
 
     private val emergencyTrigger =
         com.tactical.emergency.trigger.HoldPanicTrigger(viewModelScope)
@@ -214,8 +231,21 @@ class MainViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         pttSessionState = ptt.sessionState,
-                        pttLastTranscription = ptt.lastTranscription
+                        pttLastTranscription = ptt.lastTranscription,
+                        pttContinuousSession = ptt.continuousSession,
+                        pttTransmissionHistory = if (
+                            ptt.continuousSession && ptt.transmissions.isNotEmpty()
+                        ) {
+                            ptt.transmissions.map(::pttTransmissionToUi)
+                        } else {
+                            it.pttTransmissionHistory
+                        }
                     )
+                }
+
+                if (ptt.continuousSession) {
+                    syncContinuousTransmissions(ptt.transmissions)
+                    return@collect
                 }
 
                 val sessionId = ptt.sessionId
@@ -250,7 +280,15 @@ class MainViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             messages = listOf(message) + it.messages,
-                            sentMessages = listOf(message) + it.sentMessages
+                            sentMessages = listOf(message) + it.sentMessages,
+                            pttTransmissionHistory = listOf(
+                                PttTransmissionUi(
+                                    id = sessionId,
+                                    text = text,
+                                    timestampEpochMs = localSendTime,
+                                    statusText = status
+                                )
+                            ) + it.pttTransmissionHistory.take(19)
                         )
                     }
                 }
@@ -538,6 +576,40 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun setPttEnabled(enabled: Boolean) {
+        val state = _uiState.value
+
+        if (state.pttEnabled == enabled) return
+        if (state.emergencyComposerVisible) return
+
+        // Do not hide an active manual PTT session underneath the user.
+        if (enabled && state.pttSessionState != SessionState.IDLE && !state.pttContinuousSession) {
+            return
+        }
+
+        pttModePreferences.setPttEnabled(enabled)
+        _uiState.update { it.copy(pttEnabled = enabled) }
+
+        viewModelScope.launch {
+            if (enabled) {
+                runCatching { pttController.stopContinuous() }
+            } else {
+                runCatching { pttController.startContinuous() }
+            }
+        }
+    }
+
+    /**
+     * Starts continuous voice mode after microphone permission is available.
+     */
+    fun ensureVoiceMode() {
+        if (!_uiState.value.pttEnabled) {
+            viewModelScope.launch {
+                runCatching { pttController.startContinuous() }
+            }
+        }
+    }
+
     fun setUsername(username: String): String? {
         val cleaned = username.trim()
         if (cleaned.isBlank()) return "Username cannot be blank."
@@ -564,9 +636,22 @@ class MainViewModel @Inject constructor(
 
 
     fun startEmergencyHold() {
-        if (_uiState.value.pttSessionState != SessionState.IDLE ||
-            _uiState.value.emergencyComposerVisible
-        ) return
+        val state = _uiState.value
+        if (state.emergencyComposerVisible) return
+
+        if (state.pttContinuousSession) {
+            // Emergency recording shares the microphone with continuous mode.
+            // Stop continuous capture immediately while the existing 2-second
+            // emergency hold timer continues from the user's initial press.
+            resumeContinuousAfterEmergency = !state.pttEnabled
+            audioRecorder.stop()
+            viewModelScope.launch {
+                runCatching { pttController.stopContinuous() }
+            }
+        } else if (state.pttSessionState != SessionState.IDLE) {
+            return
+        }
+
         emergencyTrigger.startHold()
     }
 
@@ -576,6 +661,13 @@ class MainViewModel @Inject constructor(
 
     private fun startEmergencyRecording() {
         if (_uiState.value.emergencyComposerVisible) return
+
+        // Make certain continuous mode has released the microphone before
+        // opening the emergency recorder.
+        audioRecorder.stop()
+        viewModelScope.launch {
+            runCatching { pttController.stopContinuous() }
+        }
 
         _uiState.update {
             it.copy(
@@ -628,6 +720,7 @@ class MainViewModel @Inject constructor(
                         emergencyError = t.message ?: t.javaClass.simpleName
                     )
                 }
+                resumeContinuousVoiceIfNeeded()
             }
         }
     }
@@ -653,6 +746,7 @@ class MainViewModel @Inject constructor(
                 emergencyError = null
             )
         }
+        resumeContinuousVoiceIfNeeded()
     }
 
     fun sendEmergency() {
@@ -723,6 +817,7 @@ class MainViewModel @Inject constructor(
 
             emergencyRecordingJob = null
             emergencyTrigger.reset()
+            resumeContinuousVoiceIfNeeded()
         }
     }
 
@@ -742,12 +837,14 @@ class MainViewModel @Inject constructor(
         )
 
     fun pressPtt() {
+        if (!_uiState.value.pttEnabled) return
         viewModelScope.launch {
             runCatching { pttController.press() }
         }
     }
 
     fun releasePtt() {
+        if (!_uiState.value.pttEnabled) return
         viewModelScope.launch {
             runCatching { pttController.release() }
         }
@@ -918,6 +1015,75 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    private fun pttTransmissionToUi(transmission: PttTransmission): PttTransmissionUi =
+        PttTransmissionUi(
+            id = transmission.id,
+            text = transmission.text,
+            timestampEpochMs = transmission.timestampEpochMs,
+            statusText = when (transmission.status) {
+                PttTransmissionStatus.SENDING -> "Sending…"
+                PttTransmissionStatus.SENT -> "Sent"
+                PttTransmissionStatus.QUEUED -> "Queued"
+            }
+        )
+
+    private suspend fun syncContinuousTransmissions(
+        transmissions: List<PttTransmission>
+    ) {
+        transmissions.forEach { transmission ->
+            val statusText = when (transmission.status) {
+                PttTransmissionStatus.SENDING -> "Sending…"
+                PttTransmissionStatus.SENT -> "Sent"
+                PttTransmissionStatus.QUEUED -> "Queued"
+            }
+
+            val existingMessage = continuousTransmissionMessages[transmission.id]
+
+            if (existingMessage == null) {
+                val message = ChatMessageUi(
+                    sender = "YOU",
+                    text = transmission.text,
+                    timestampText = formatTimestamp(transmission.timestampEpochMs),
+                    statusText = statusText,
+                    isVoice = true,
+                    timestampEpochMs = transmission.timestampEpochMs,
+                    conversationOrderEpochMs = transmission.timestampEpochMs
+                )
+
+                continuousTransmissionMessages[transmission.id] = message
+                localAppDataStore.saveSentMessage(storedSentMessage(message))
+
+                _uiState.update { state ->
+                    if (state.sentMessages.any {
+                        messageStorageKey(it) == messageStorageKey(message)
+                    }) {
+                        state
+                    } else {
+                        state.copy(
+                            messages = listOf(message) + state.messages,
+                            sentMessages = listOf(message) + state.sentMessages
+                        )
+                    }
+                }
+            } else if (existingMessage.statusText != statusText) {
+                val updated = existingMessage.copy(statusText = statusText)
+                continuousTransmissionMessages[transmission.id] = updated
+                updateSentMessageStatus(existingMessage, statusText)
+            }
+        }
+    }
+
+    private fun resumeContinuousVoiceIfNeeded() {
+        if (!resumeContinuousAfterEmergency) return
+        resumeContinuousAfterEmergency = false
+
+        if (!_uiState.value.pttEnabled) {
+            viewModelScope.launch {
+                runCatching { pttController.startContinuous() }
+            }
+        }
+    }
+
     private fun displayLanguageName(languageCode: String): String =
         when (languageCode) {
             "hi" -> "हिन्दी"
@@ -1035,6 +1201,7 @@ class MainViewModel @Inject constructor(
     override fun onCleared() {
         scanLoopJob?.cancel()
         healthJob?.cancel()
+        audioRecorder.stop()
         viewModelScope.launch { discoveryService.stop() }
         scanJob?.cancel()
         reconnectJobs.values.forEach { it.cancel() }
