@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +52,8 @@ fun SquadScreen(
     val connectedPeers = uiState.pairedPeers.filter { it.isConnected }
     val pairedPeers = uiState.pairedPeers.filter { !it.isConnected }
     val hasConnection = connectedPeers.isNotEmpty()
-    val pttEnabled = hasConnection &&
+    val pttButtonEnabled = uiState.pttEnabled &&
+        hasConnection &&
         uiState.pttSessionState != SessionState.TRANSMITTING &&
         uiState.pttSessionState != SessionState.ARMED
 
@@ -131,7 +134,271 @@ fun SquadScreen(
         }
 
         item {
-            uiState.pttLastTranscription?.takeIf { it.isNotBlank() }?.let { transcript ->
+            var transmissionExpanded by rememberSaveable { mutableStateOf(false) }
+
+            if (uiState.pttTransmissionHistory.isNotEmpty() || !uiState.pttEnabled) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = RedTacticalSurface
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = uiState.pttTransmissionHistory.isNotEmpty()) {
+                            transmissionExpanded = !transmissionExpanded
+                        }
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (uiState.pttEnabled) {
+                                        "LAST PTT TRANSMISSION"
+                                    } else {
+                                        "CALL MODE • VOICE TRANSMISSIONS"
+                                    },
+                                    color = RedTacticalTextSecondary,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp
+                                )
+                                if (!uiState.pttEnabled) {
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        if (uiState.pttContinuousSession) {
+                                            "Listening continuously"
+                                        } else {
+                                            "Continuous voice mode ready"
+                                        },
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            if (uiState.pttTransmissionHistory.isNotEmpty()) {
+                                Text(
+                                    if (transmissionExpanded) "▲" else "▼",
+                                    color = RedTacticalTextSecondary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        if (uiState.pttTransmissionHistory.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+
+                            if (!transmissionExpanded) {
+                                val latest = uiState.pttTransmissionHistory.last()
+                                Text(
+                                    latest.text,
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        latest.statusText,
+                                        color = transmissionStatusColor(latest.statusText),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        formatPttTimestamp(latest.timestampEpochMs),
+                                        color = RedTacticalTextSecondary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            } else {
+                                uiState.pttTransmissionHistory
+                                    .asReversed()
+                                    .forEachIndexed { index, transmission ->
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(
+                                                        transmission.text,
+                                                        color = Color.White,
+                                                        fontSize = 13.sp
+                                                    )
+                                                    Spacer(Modifier.height(3.dp))
+                                                    Text(
+                                                        formatPttTimestamp(transmission.timestampEpochMs),
+                                                        color = RedTacticalTextSecondary,
+                                                        fontSize = 9.sp
+                                                    )
+                                                }
+                                                Spacer(Modifier.width(10.dp))
+                                                Text(
+                                                    transmission.statusText,
+                                                    color = transmissionStatusColor(
+                                                        transmission.statusText
+                                                    ),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            if (
+                                                index <
+                                                uiState.pttTransmissionHistory.lastIndex
+                                            ) {
+                                                Spacer(Modifier.height(8.dp))
+                                                HorizontalDivider(
+                                                    color = RedTacticalSurfaceBorder
+                                                )
+                                                Spacer(Modifier.height(8.dp))
+                                            }
+                                        }
+                                    }
+                            }
+                        } else if (!uiState.pttEnabled) {
+                            Spacer(Modifier.height(7.dp))
+                            uiState.pttLastTranscription
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { liveText ->
+                                    Text(
+                                        "LIVE: $liveText",
+                                        color = Color.White,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                ?: Text(
+                                    "Speak normally. Each finalized sentence is sent automatically.",
+                                    color = RedTacticalTextSecondary,
+                                    fontSize = 10.sp
+                                )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+            }
+
+            if (uiState.pttEnabled) {
+                Spacer(Modifier.height(4.dp))
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(190.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    !pttButtonEnabled -> RedTacticalSurface
+                                    pttHeld -> RedTacticalPrimaryBright
+                                    else -> RedTacticalPrimary
+                                }
+                            )
+                            .border(
+                                width = if (pttButtonEnabled) 2.dp else 1.dp,
+                                color = when {
+                                    !pttButtonEnabled -> RedTacticalSurfaceBorder
+                                    pttHeld -> RedTacticalPrimaryBright
+                                    else -> RedTacticalPrimary
+                                },
+                                shape = CircleShape
+                            )
+                            .then(
+                                if (pttButtonEnabled) {
+                                    Modifier.pointerInput(Unit) {
+                                        var cancelled = false
+                                        var totalDragX = 0f
+                                        var totalDragY = 0f
+
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                cancelled = false
+                                                totalDragX = 0f
+                                                totalDragY = 0f
+                                                pttHeld = true
+                                                onPttPress()
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                totalDragX += dragAmount.x
+                                                totalDragY += dragAmount.y
+
+                                                if (
+                                                    !cancelled &&
+                                                    totalDragX > 80.dp.toPx() &&
+                                                    totalDragX > kotlin.math.abs(totalDragY) * 1.2f
+                                                ) {
+                                                    cancelled = true
+                                                    pttHeld = false
+                                                    onPttCancel()
+                                                }
+
+                                                change.consume()
+                                            },
+                                            onDragEnd = {
+                                                if (!cancelled && pttHeld) {
+                                                    pttHeld = false
+                                                    onPttRelease()
+                                                }
+                                            },
+                                            onDragCancel = {
+                                                if (!cancelled && pttHeld) {
+                                                    pttHeld = false
+                                                    onPttCancel()
+                                                }
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = null,
+                                tint = if (pttButtonEnabled) Color.White else RedTacticalTextSecondary,
+                                modifier = Modifier.size(38.dp)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                pttLabel,
+                                color = if (pttButtonEnabled) Color.White else RedTacticalTextSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    pttHint,
+                    color = RedTacticalTextSecondary,
+                    fontSize = 10.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            } else {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = RedTacticalSurface
@@ -139,135 +406,37 @@ fun SquadScreen(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(
-                            "LAST PTT TRANSCRIPTION",
-                            color = RedTacticalTextSecondary,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            transcript,
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(6.dp))
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(190.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                !pttEnabled -> RedTacticalSurface
-                                pttHeld -> RedTacticalPrimaryBright
-                                else -> RedTacticalPrimary
-                            }
-                        )
-                        .border(
-                            width = if (pttEnabled) 2.dp else 1.dp,
-                            color = when {
-                                !pttEnabled -> RedTacticalSurfaceBorder
-                                pttHeld -> RedTacticalPrimaryBright
-                                else -> RedTacticalPrimary
-                            },
-                            shape = CircleShape
-                        )
-                        .then(
-                            if (pttEnabled) {
-                                Modifier.pointerInput(Unit) {
-                                    var cancelled = false
-                                    var totalDragX = 0f
-                                    var totalDragY = 0f
-
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            cancelled = false
-                                            totalDragX = 0f
-                                            totalDragY = 0f
-                                            pttHeld = true
-                                            onPttPress()
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            totalDragX += dragAmount.x
-                                            totalDragY += dragAmount.y
-
-                                            if (
-                                                !cancelled &&
-                                                totalDragX > 80.dp.toPx() &&
-                                                totalDragX > kotlin.math.abs(totalDragY) * 1.2f
-                                            ) {
-                                                cancelled = true
-                                                pttHeld = false
-                                                onPttCancel()
-                                            }
-
-                                            change.consume()
-                                        },
-                                        onDragEnd = {
-                                            if (!cancelled && pttHeld) {
-                                                pttHeld = false
-                                                onPttRelease()
-                                            }
-                                        },
-                                        onDragCancel = {
-                                            if (!cancelled && pttHeld) {
-                                                pttHeld = false
-                                                onPttCancel()
-                                            }
-                                        }
-                                    )
-                                }
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Mic,
                             contentDescription = null,
-                            tint = if (pttEnabled) Color.White else RedTacticalTextSecondary,
-                            modifier = Modifier.size(38.dp)
+                            tint = RedTacticalPrimaryBright,
+                            modifier = Modifier.size(26.dp)
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            pttLabel,
-                            color = if (pttEnabled) Color.White else RedTacticalTextSecondary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "CALL MODE",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Continuous STT • sentence-by-sentence transmission",
+                                color = RedTacticalTextSecondary,
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                pttHint,
-                color = RedTacticalTextSecondary,
-                fontSize = 10.sp,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
 
             Spacer(Modifier.height(16.dp))
 
@@ -297,7 +466,13 @@ fun SquadScreen(
                             shape = RoundedCornerShape(16.dp)
                         )
                         .then(
-                            if (!uiState.emergencyComposerVisible && uiState.pttSessionState == SessionState.IDLE) {
+                            if (
+                                !uiState.emergencyComposerVisible &&
+                                (
+                                    uiState.pttSessionState == SessionState.IDLE ||
+                                        uiState.pttContinuousSession
+                                    )
+                            ) {
                                 Modifier.pointerInput(Unit) {
                                     detectTapGestures(
                                         onPress = {
@@ -410,6 +585,23 @@ fun SquadScreen(
 
     }
 }
+
+private fun formatPttTimestamp(epochMs: Long): String =
+    if (epochMs > 0L) {
+        java.text.SimpleDateFormat(
+            "HH:mm",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date(epochMs))
+    } else {
+        "Unknown"
+    }
+
+private fun transmissionStatusColor(status: String): Color =
+    when (status) {
+        "Sent" -> RedTacticalStatusGreen
+        "Sending…" -> RedTacticalPrimaryBright
+        else -> RedTacticalTextSecondary
+    }
 
 @Composable
 private fun SectionDividerLabel(label: String) {
