@@ -7,6 +7,7 @@ import com.tactical.platform.api.ble.BleBeaconPayloadCodec
 import com.tactical.platform.api.radio.RadioTransport
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.logging.Logger
 
 class PeriodicBeaconEmitter(
     private val localDeviceId: DeviceId,
@@ -35,8 +36,7 @@ class PeriodicBeaconEmitter(
                         // attempt must not stop the discovery loop. Log the
                         // actual platform failure so OEM-specific advertising
                         // problems are visible during testing.
-                        android.util.Log.w(
-                            "PeriodicBeaconEmitter",
+                        LOGGER.warning(
                             "BLE beacon advertisement failed: " +
                                 (e.message ?: e.javaClass.simpleName)
                         )
@@ -81,5 +81,7 @@ class PeriodicBeaconEmitter(
 
     companion object {
         private const val BEACON_INTERVAL_MS = 2000L
+        private val LOGGER: Logger =
+            Logger.getLogger(PeriodicBeaconEmitter::class.java.name)
     }
 }
