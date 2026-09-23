@@ -23,6 +23,7 @@ data class StoredReceivedMessage(
     val text: String,
     val timestampEpochMs: Long,
     val isVoice: Boolean,
+    val isCallMode: Boolean = false,
     val isAlert: Boolean = false,
     val severity: String? = null,
     val languageCode: String? = null,
@@ -86,6 +87,7 @@ class LocalAppDataStore @Inject constructor(
                             timestampEpochMs = item.optLong("timestampEpochMs", 0L),
                             statusText = item.optString("statusText", "Sent"),
                             isVoice = item.optBoolean("isVoice", false),
+                            isCallMode = item.optBoolean("isCallMode", false),
                             isAlert = item.optBoolean("isAlert", false),
                             severity = item.optString("severity").takeIf { it.isNotBlank() },
                             languageCode = item.optString("languageCode").takeIf { it.isNotBlank() },
@@ -134,6 +136,7 @@ class LocalAppDataStore @Inject constructor(
                     put("timestampEpochMs", item.timestampEpochMs)
                     put("statusText", item.statusText)
                     put("isVoice", item.isVoice)
+                    put("isCallMode", item.isCallMode)
                     put("isAlert", item.isAlert)
                     put("conversationOrderEpochMs", item.conversationOrderEpochMs)
                     item.severity?.let { put("severity", it) }
@@ -332,6 +335,7 @@ class LocalAppDataStore @Inject constructor(
                             text = item.getString("text"),
                             timestampEpochMs = item.optLong("timestampEpochMs", 0L),
                             isVoice = item.optBoolean("isVoice", false),
+                            isCallMode = item.optBoolean("isCallMode", false),
                             isAlert = item.optBoolean("isAlert", false),
                             severity = item.optString("severity").takeIf { it.isNotBlank() },
                             languageCode = item.optString("languageCode").takeIf { it.isNotBlank() },
@@ -453,13 +457,15 @@ class LocalAppDataStore @Inject constructor(
         timestampEpochMs: Long,
         text: String,
         isAlert: Boolean,
-        isVoice: Boolean
+        isVoice: Boolean,
+        isCallMode: Boolean = false
     ): String =
         senderName + "|" +
             timestampEpochMs + "|" +
             text + "|" +
             isAlert + "|" +
-            isVoice
+            isVoice + "|" +
+            isCallMode
 
     @Synchronized
     fun unreadMessageCount(): Int {
