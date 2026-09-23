@@ -16,7 +16,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -52,8 +51,6 @@ private val OUTGOING_LANGUAGES = listOf(
 fun SettingsScreen(
     selectedLanguageCode: String,
     onLanguageSelected: (String) -> Unit,
-    pttEnabled: Boolean,
-    onPttEnabled: (Boolean) -> Unit,
     username: String,
     onUsernameSave: (String) -> String?,
     modifier: Modifier = Modifier
@@ -131,75 +128,6 @@ fun SettingsScreen(
             )
         ) {
             Text("SAVE USERNAME", fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            "VOICE MODE",
-            color = Color.White,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.sp
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        Text(
-            "Choose how your voice is transmitted to the squad.",
-            color = RedTacticalTextSecondary,
-            fontSize = 12.sp
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = RedTacticalSurface
-            ),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    width = 1.dp,
-                    color = if (pttEnabled) {
-                        RedTacticalPrimary
-                    } else {
-                        RedTacticalSurfaceBorder
-                    },
-                    shape = RoundedCornerShape(14.dp)
-                )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "PUSH TO TALK",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        if (pttEnabled) {
-                            "Hold the PTT button to record and send."
-                        } else {
-                            "CALL MODE: microphone stays active and sends each finalized sentence."
-                        },
-                        color = RedTacticalTextSecondary,
-                        fontSize = 11.sp
-                    )
-                }
-
-                Switch(
-                    checked = pttEnabled,
-                    onCheckedChange = onPttEnabled
-                )
-            }
         }
 
         Spacer(Modifier.height(24.dp))
