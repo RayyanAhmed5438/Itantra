@@ -140,7 +140,11 @@ class DefaultPttController(
     override suspend fun startContinuous() {
         if (_state.value.sessionState != SessionState.IDLE) return
 
-        val session = PttSession(deviceId = deviceId, isVox = true)
+        val session = PttSession(
+            deviceId = deviceId,
+            isVox = true,
+            isCallMode = true
+        )
         currentSession = session
 
         _state.update {
