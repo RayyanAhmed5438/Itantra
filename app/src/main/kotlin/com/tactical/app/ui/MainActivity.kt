@@ -169,8 +169,6 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     selectedLanguageCode = state.selectedLanguageCode,
                                     onLanguageSelected = viewModel::setSelectedLanguage,
-                                    pttEnabled = state.pttEnabled,
-                                    onPttEnabled = viewModel::setPttEnabled,
                                     username = state.username,
                                     onUsernameSave = viewModel::setUsername
                                 )
@@ -184,6 +182,9 @@ class MainActivity : ComponentActivity() {
                                 1 -> SquadScreen(
                                     uiState = state,
                                     onRefresh = viewModel::forceDiscovery,
+                                    onPttToggle = {
+                                        viewModel.setPttEnabled(!state.pttEnabled)
+                                    },
                                     onPttPress = viewModel::pressPtt,
                                     onPttRelease = viewModel::releasePtt,
                                     onPttCancel = viewModel::cancelPtt,
