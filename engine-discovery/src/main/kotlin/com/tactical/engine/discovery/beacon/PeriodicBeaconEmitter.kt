@@ -31,10 +31,15 @@ class PeriodicBeaconEmitter(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        // A single failed beacon (bad payload, adapter
-                        // momentarily off, etc.) shouldn't take the whole
-                        // service down — skip this tick, try again in 2s.
-
+                        // Keep advertising recoverable: one failed beacon
+                        // attempt must not stop the discovery loop. Log the
+                        // actual platform failure so OEM-specific advertising
+                        // problems are visible during testing.
+                        android.util.Log.w(
+                            "PeriodicBeaconEmitter",
+                            "BLE beacon advertisement failed: " +
+                                (e.message ?: e.javaClass.simpleName)
+                        )
                     }
                     delay(BEACON_INTERVAL_MS)
                 }
