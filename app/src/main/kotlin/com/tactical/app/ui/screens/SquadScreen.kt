@@ -194,7 +194,7 @@ fun SquadScreen(
                             Spacer(Modifier.height(8.dp))
 
                             if (!transmissionExpanded) {
-                                val latest = uiState.pttTransmissionHistory.last()
+                                val latest = uiState.pttTransmissionHistory.first()
                                 Text(
                                     latest.text,
                                     color = Color.White,
