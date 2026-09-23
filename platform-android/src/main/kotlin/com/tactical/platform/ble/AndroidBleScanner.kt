@@ -76,15 +76,10 @@ class AndroidBleScanner(
             return@callbackFlow
         }
 
-        val scanFilter = ScanFilter.Builder()
-            .setManufacturerData(
-                MANUFACTURER_ID,
-                byteArrayOf(
-                    MAGIC_1,
-                    MAGIC_2
-                )
-            )
-            .build()
+        // Do not rely on a hardware manufacturer-data filter here.
+        // Some OEM BLE stacks can register the scanner successfully but
+        // silently return no results for partial/custom manufacturer filters.
+        // We filter by the iTantra magic bytes in software below instead.
 
         val callback = object : ScanCallback() {
 
@@ -106,10 +101,18 @@ val manufacturerData =
                     val payload = manufacturerData.valueAt(index)
                         ?: continue
 BleBeaconPayloadCodec.decode(payload)?.let { packet ->
-                        BlePeerAddressRegistry.remember(packet.sender.value, result.device.address)
-                    }
+                        BlePeerAddressRegistry.remember(
+                            packet.sender.value,
+                            result.device.address
+                        )
+                        android.util.Log.d(
+                            TAG,
+                            "iTantra beacon detected from " +
+                                packet.callsign +
+                                " (" + result.device.address + ")"
+                        )
 
-                    trySend(
+                        trySend(
                         ScannedBleDevice(
                             deviceId = result.device.address,
                             rssi = result.rssi,
@@ -139,10 +142,18 @@ BleBeaconPayloadCodec.decode(payload)?.let { packet ->
                             ?: continue
 
                         BleBeaconPayloadCodec.decode(payload)?.let { packet ->
-                            BlePeerAddressRegistry.remember(packet.sender.value, result.device.address)
-                        }
+                            BlePeerAddressRegistry.remember(
+                                packet.sender.value,
+                                result.device.address
+                            )
+                            android.util.Log.d(
+                                TAG,
+                                "iTantra beacon detected from " +
+                                    packet.callsign +
+                                    " (" + result.device.address + ")"
+                            )
 
-                        trySend(
+                            trySend(
                             ScannedBleDevice(
                                 deviceId = result.device.address,
                                 rssi = result.rssi,
@@ -176,10 +187,11 @@ BleBeaconPayloadCodec.decode(payload)?.let { packet ->
 
         try {
             le.startScan(
-                listOf(scanFilter),
+                null,
                 settings,
                 callback
             )
+            android.util.Log.d(TAG, "BLE scan started (software beacon filtering)")
         } catch (e: SecurityException) {
             close(
                 SecurityException(
