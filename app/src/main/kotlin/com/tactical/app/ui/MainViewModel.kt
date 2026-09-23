@@ -557,20 +557,34 @@ class MainViewModel @Inject constructor(
     fun setSelectedLanguage(languageCode: String) {
         if (languageCode !in setOf("hi", "en")) return
 
-        speechLanguagePreferences.setSelectedLanguageCode(languageCode)
-        routingSpeechToText.onSelectedLanguageChanged(languageCode)
+        val wasContinuousCallMode =
+            !_uiState.value.pttEnabled && _uiState.value.pttContinuousSession
 
-        MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
-            viewModelScope.launch {
+        // A running call-mode STT flow must be stopped before swapping the
+        // selected backend. Otherwise the old backend can keep owning the
+        // microphone/model while the preference changes underneath it.
+        viewModelScope.launch {
+            if (wasContinuousCallMode) {
+                runCatching { pttController.stopContinuous() }
+            }
+
+            speechLanguagePreferences.setSelectedLanguageCode(languageCode)
+            routingSpeechToText.onSelectedLanguageChanged(languageCode)
+
+            _uiState.update {
+                it.copy(
+                    selectedLanguageCode = languageCode,
+                    selectedLanguage = displayLanguageName(languageCode)
+                )
+            }
+
+            MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
                 runCatching { mmsTtsEngine.preload(language) }
             }
-        }
 
-        _uiState.update {
-            it.copy(
-                selectedLanguageCode = languageCode,
-                selectedLanguage = displayLanguageName(languageCode)
-            )
+            if (wasContinuousCallMode && !_uiState.value.pttEnabled) {
+                runCatching { pttController.startContinuous() }
+            }
         }
     }
 
