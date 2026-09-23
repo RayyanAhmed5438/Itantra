@@ -233,9 +233,7 @@ class MainViewModel @Inject constructor(
                         pttSessionState = ptt.sessionState,
                         pttLastTranscription = ptt.lastTranscription,
                         pttContinuousSession = ptt.continuousSession,
-                        pttTransmissionHistory = if (
-                            ptt.continuousSession && ptt.transmissions.isNotEmpty()
-                        ) {
+                        pttTransmissionHistory = if (ptt.continuousSession) {
                             ptt.transmissions.map(::pttTransmissionToUi)
                         } else {
                             it.pttTransmissionHistory
