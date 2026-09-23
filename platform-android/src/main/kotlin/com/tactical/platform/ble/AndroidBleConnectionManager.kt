@@ -163,6 +163,9 @@ class AndroidBleConnectionManager(
         if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
+        if (!isBluetoothAddress(deviceAddress)) {
+            BlePeerAddressRegistry.remember(deviceAddress, resolvedAddress)
+        }
         val device = deviceForAddress(resolvedAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
         if (device.bondState == BluetoothDevice.BOND_BONDED) {
             rememberPairedPeer(deviceAddress, resolvedAddress)
@@ -215,7 +218,16 @@ class AndroidBleConnectionManager(
         // The app-level paired list is the explicit pairing gate.
         // Android's system bond may be absent after a system/app reset; BLE GATT
         // itself can still establish the transport without requiring that bond.
-        // gattClients contains only fully initialized/ready GATT sessions.
+        // A peer can already be connected in the opposite GATT role:
+        // this device is the server and the peer is the client. That link is
+        // already bidirectional for iTantra (peer writes to us; we notify it),
+        // so do not create a duplicate outbound session.
+        if (registry.inboundDevice(resolvedAddress) != null) {
+            setState(resolvedAddress, BleLinkState.CONNECTED)
+            return TacticalResult.Success(Unit)
+        }
+
+        // gattClients contains only fully initialized/ready outbound GATT sessions.
         gattClients[resolvedAddress]?.let {
             setState(resolvedAddress, BleLinkState.CONNECTED)
             return TacticalResult.Success(Unit)
@@ -254,7 +266,15 @@ class AndroidBleConnectionManager(
             if (pending.remove(resolvedAddress, completion)) {
                 completion.complete(TacticalResult.Failure(message))
             }
-            setState(resolvedAddress, state)
+
+            setState(
+                resolvedAddress,
+                if (hasDirectConnection(resolvedAddress)) {
+                    BleLinkState.CONNECTED
+                } else {
+                    state
+                }
+            )
             if (targetGatt != null) {
                 try { targetGatt.disconnect() } catch (_: Exception) {}
                 try { targetGatt.close() } catch (_: Exception) {}
@@ -308,18 +328,23 @@ class AndroidBleConnectionManager(
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                         gattClients.remove(resolvedAddress, gatt)
                         registry.unregisterOutboundConnection(resolvedAddress)
-                        val appId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress)
-                        val appPaired = appId != null && pairedDeviceIds().contains(appId)
-                        val state = if (appPaired) {
-                            BleLinkState.DISCONNECTED
-                        } else {
-                            BleLinkState.NOT_PAIRED
-                        }
                         rssiJobs.remove(resolvedAddress)?.cancel()
                         if (pending.remove(resolvedAddress, completion)) {
-                            completion.complete(TacticalResult.Failure("GATT disconnected: status=$status"))
+                            completion.complete(
+                                TacticalResult.Failure("GATT disconnected: status=$status")
+                            )
                         }
-                        setState(resolvedAddress, state)
+
+                        // Do not report DISCONNECTED when the same peer is
+                        // still connected through the inbound GATT role.
+                        refreshLinkState(
+                            resolvedAddress,
+                            if (isPairedAddress(resolvedAddress)) {
+                                BleLinkState.DISCONNECTED
+                            } else {
+                                BleLinkState.NOT_PAIRED
+                            }
+                        )
                         try { gatt.close() } catch (_: Exception) {}
                     }
                 }
@@ -532,7 +557,14 @@ class AndroidBleConnectionManager(
             try { it.close() } catch (_: Exception) {}
         }
         registry.unregisterOutboundConnection(resolvedAddress)
-        setState(resolvedAddress, BleLinkState.DISCONNECTED)
+        refreshLinkState(
+            resolvedAddress,
+            if (isPairedAddress(resolvedAddress)) {
+                BleLinkState.DISCONNECTED
+            } else {
+                BleLinkState.NOT_PAIRED
+            }
+        )
     }
 
     override fun state(deviceAddress: String): Flow<BleLinkState> = stateFlow(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
@@ -553,9 +585,14 @@ class AndroidBleConnectionManager(
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
 
-        // Each paired phone keeps its own outbound GATT client session.
-        // An inbound session may also exist because the peer connected first;
-        // it does not replace the outbound path used for normal traffic.
+        // Prefer an already-established inbound GATT session. The local
+        // server can notify that client, while the client can write back to
+        // this server, so another outbound session is unnecessary.
+        if (registry.inboundDevice(resolvedAddress) != null) {
+            setState(resolvedAddress, BleLinkState.CONNECTED)
+            return TacticalResult.Success(Unit)
+        }
+
         if (gattClients.containsKey(resolvedAddress)) {
             setState(resolvedAddress, BleLinkState.CONNECTED)
             return TacticalResult.Success(Unit)
@@ -577,7 +614,11 @@ class AndroidBleConnectionManager(
     }
 
     override fun onInboundConnected(device: BluetoothDevice) {
-        val appId = BlePeerAddressRegistry.applicationIdFor(device.address) ?: return
+        // The scan/address registry is intentionally in-memory, so after
+        // process recreation an inbound GATT can arrive before discovery has
+        // repopulated it. Recover the stable iTantra ID from the persisted
+        // appId -> address mapping as a fallback.
+        val appId = applicationIdForAddress(device.address) ?: return
         if (pairedDeviceIds().contains(appId)) {
             rememberPeer(appId, device.address)
             setState(device.address, BleLinkState.CONNECTED)
@@ -590,11 +631,17 @@ class AndroidBleConnectionManager(
     }
 
     override fun onInboundDisconnected(device: BluetoothDevice) {
-        if (gattClients.containsKey(device.address)) return
-        val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
-        setState(
+        // The peer may still have an outbound GATT session to this device.
+        // Compute the state from both GATT roles instead of blindly marking
+        // the address disconnected.
+        val appId = applicationIdForAddress(device.address)
+        refreshLinkState(
             device.address,
-            if (appId != null) BleLinkState.DISCONNECTED else BleLinkState.NOT_PAIRED
+            if (appId != null && pairedDeviceIds().contains(appId)) {
+                BleLinkState.DISCONNECTED
+            } else {
+                BleLinkState.NOT_PAIRED
+            }
         )
         android.util.Log.d(
             TAG,
@@ -651,6 +698,33 @@ class AndroidBleConnectionManager(
             ?: prefs.getString(PREF_ADDRESS_PREFIX + identifier, null)
     }
 
+    private fun applicationIdForAddress(address: String): String? {
+        BlePeerAddressRegistry.applicationIdFor(address)?.let { return it }
+
+        // Recover the stable app id even before discovery has refreshed the
+        // in-memory address registry.
+        return pairedDeviceIds().firstOrNull { id ->
+            prefs.getString(PREF_ADDRESS_PREFIX + id, null) == address
+        }
+    }
+
+    private fun hasDirectConnection(address: String): Boolean =
+        registry.inboundDevice(address) != null ||
+            registry.outboundGatt(address) != null
+
+    private fun isPairedAddress(address: String): Boolean {
+        val appId = applicationIdForAddress(address)
+        return appId != null && pairedDeviceIds().contains(appId)
+    }
+
+    private fun refreshLinkState(address: String, disconnectedState: BleLinkState) {
+        if (hasDirectConnection(address)) {
+            setState(address, BleLinkState.CONNECTED)
+        } else {
+            setState(address, disconnectedState)
+        }
+    }
+
     private fun rememberPairedPeer(identifier: String, address: String) {
         val appId = BlePeerAddressRegistry.applicationIdFor(address) ?: identifier
         val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -687,6 +761,9 @@ class AndroidBleConnectionManager(
         }
     }
     private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    private fun isBluetoothAddress(value: String): Boolean =
+        value.matches(Regex("(?i)^([0-9a-f]{2}:){5}[0-9a-f]{2}$"))
 
     companion object {
         private const val TAG = "AndroidBleConnection"
