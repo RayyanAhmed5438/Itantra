@@ -6,7 +6,9 @@ data class TextPacket(
     val sender: DeviceId,
     val text: String,
     val languageCode: String,
-    val timestamp: Long
+    val timestamp: Long,
+    /** True when this sentence came from continuous Call Mode. */
+    val isCallMode: Boolean = false
 ) : Packet {
     init {
         require(text.isNotBlank()) { "text must not be blank" }
