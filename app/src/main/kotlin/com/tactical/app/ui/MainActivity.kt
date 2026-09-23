@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
 
         if (!criticalDenied) {
             ensureWirelessEnabled()
+            ensureVoiceModeIfPermissionGranted()
         } else {
             wirelessWarning.value = "Bluetooth / microphone permissions are required."
         }
@@ -168,6 +169,8 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     selectedLanguageCode = state.selectedLanguageCode,
                                     onLanguageSelected = viewModel::setSelectedLanguage,
+                                    pttEnabled = state.pttEnabled,
+                                    onPttEnabled = viewModel::setPttEnabled,
                                     username = state.username,
                                     onUsernameSave = viewModel::setUsername
                                 )
@@ -251,6 +254,17 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    private fun ensureVoiceModeIfPermissionGranted() {
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            viewModel.ensureVoiceMode()
+        }
+    }
+
     private fun requestStartupPermissions() {
         val permissions = buildList {
             add(Manifest.permission.RECORD_AUDIO)
@@ -277,6 +291,7 @@ class MainActivity : ComponentActivity() {
 
         if (missing.isEmpty()) {
             ensureWirelessEnabled()
+            ensureVoiceModeIfPermissionGranted()
         } else {
             requestPermissions.launch(missing.toTypedArray())
         }
@@ -315,5 +330,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         viewModel.refreshReceivedMessages()
         ensureWirelessEnabled()
+        ensureVoiceModeIfPermissionGranted()
     }
 }
