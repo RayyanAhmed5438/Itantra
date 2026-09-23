@@ -115,13 +115,15 @@ class LocalAppDataStore @Inject constructor(
                     timestampEpochMs = existing.timestampEpochMs,
                     text = existing.text,
                     isAlert = existing.isAlert,
-                    isVoice = existing.isVoice
+                    isVoice = existing.isVoice,
+                    isCallMode = existing.isCallMode
                 ) == messageStorageKey(
                     senderName = message.senderName,
                     timestampEpochMs = message.timestampEpochMs,
                     text = message.text,
                     isAlert = message.isAlert,
-                    isVoice = message.isVoice
+                    isVoice = message.isVoice,
+                    isCallMode = message.isCallMode
                 )
             }
             .toMutableList()
@@ -165,7 +167,8 @@ class LocalAppDataStore @Inject constructor(
                 timestampEpochMs = item.timestampEpochMs,
                 text = item.text,
                 isAlert = item.isAlert,
-                isVoice = item.isVoice
+                isVoice = item.isVoice,
+                isCallMode = item.isCallMode
             )
 
             if (key == messageKey) {
@@ -214,7 +217,8 @@ class LocalAppDataStore @Inject constructor(
                 timestampEpochMs = message.timestampEpochMs,
                 text = message.text,
                 isAlert = message.isAlert,
-                isVoice = message.isVoice
+                isVoice = message.isVoice,
+                isCallMode = message.isCallMode
             ) in messageKeys
         }
 
@@ -425,7 +429,8 @@ class LocalAppDataStore @Inject constructor(
                 timestampEpochMs = message.timestampEpochMs,
                 text = message.text,
                 isAlert = message.isAlert,
-                isVoice = message.isVoice
+                isVoice = message.isVoice,
+                isCallMode = message.isCallMode
             ) in messageKeys
         }
 
