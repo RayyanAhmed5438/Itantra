@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.tactical.app.TacticalApplication
 import com.tactical.app.ui.MainActivity
+import com.tactical.app.di.DeviceIdentityStore
 import com.tactical.app.di.LocalAppDataStore
 import com.tactical.emergency.receiver.EmergencyReceiver
 import com.tactical.emergency.squelch.SquelchBreaker
@@ -53,6 +54,9 @@ class TacticalMeshService : Service() {
 
     @Inject
     lateinit var localAppDataStore: LocalAppDataStore
+
+    @Inject
+    lateinit var identityStore: DeviceIdentityStore
 
     @Inject
     lateinit var mmsTtsEngine: MmsTtsEngine
@@ -128,6 +132,13 @@ class TacticalMeshService : Service() {
             messageJob = serviceScope.launch {
                 meshService.receive().collect { packet ->
                     if (packet is com.tactical.domain.packet.TextPacket) {
+                        // A routed mesh packet can come back to its original
+                        // sender. Never treat our own packet as incoming, or
+                        // the device will notify and speak its own message.
+                        if (packet.sender.value == identityStore.deviceIdValue) {
+                            return@collect
+                        }
+
                         val senderName =
                             localAppDataStore.callsignForPeer(packet.sender.value)
                                 ?: packet.sender.value.take(8)
