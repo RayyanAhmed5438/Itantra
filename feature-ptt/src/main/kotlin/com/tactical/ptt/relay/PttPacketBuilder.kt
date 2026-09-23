@@ -17,6 +17,7 @@ class PttPacketBuilder {
             sender = session.deviceId,
             text = chunk.text,
             languageCode = chunk.languageCode,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            isCallMode = session.isCallMode
         )
 }
