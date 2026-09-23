@@ -42,6 +42,7 @@ import com.tactical.app.ui.theme.*
 fun SquadScreen(
     uiState: MainUiState,
     onRefresh: () -> Unit,
+    onPttToggle: () -> Unit,
     onPttPress: () -> Unit,
     onPttRelease: () -> Unit,
     onPttCancel: () -> Unit,
@@ -123,12 +124,49 @@ fun SquadScreen(
                         fontSize = 11.sp
                     )
                 }
-                IconButton(onClick = onRefresh) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Refresh",
-                        tint = Color.White
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = onPttToggle,
+                        enabled = uiState.pttSessionState == SessionState.IDLE ||
+                            uiState.pttContinuousSession,
+                        color = if (uiState.pttEnabled) {
+                            RedTacticalPrimary
+                        } else {
+                            RedTacticalSurface
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (uiState.pttEnabled) {
+                                RedTacticalPrimaryBright
+                            } else {
+                                RedTacticalSurfaceBorder
+                            }
+                        )
+                    ) {
+                        Text(
+                            if (uiState.pttEnabled) "PTT ON" else "CALL",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.5.sp,
+                            modifier = Modifier.padding(
+                                horizontal = 8.dp,
+                                vertical = 6.dp
+                            )
+                        )
+                    }
+
+                    IconButton(onClick = onRefresh) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
         }
