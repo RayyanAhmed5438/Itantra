@@ -54,7 +54,10 @@ class BinaryPacketSerializer : PacketSerializer {
         writeString(packet.sender.value)
         writeString(packet.languageCode)
         writeString(packet.text)
-        writeLong(packet.timestamp)
+        // Reserve the timestamp's least-significant bit as the Call Mode
+        // marker. Millisecond timestamps are normalized to an even value,
+        // so old protocol readers still see a valid timestamp.
+        writeLong((packet.timestamp and -2L) or if (packet.isCallMode) 1L else 0L)
     }
 
     private fun encodeVoicePacket(packet: VoicePacket): ByteArray = byteStream {
@@ -147,8 +150,14 @@ class BinaryPacketSerializer : PacketSerializer {
                 val sender = DeviceId(it.readString())
                 val languageCode = it.readString()
                 val text = it.readString()
-                val timestamp = it.readLong()
-                TextPacket(sender = sender, text = text, languageCode = languageCode, timestamp = timestamp)
+                val wireTimestamp = it.readLong()
+                TextPacket(
+                    sender = sender,
+                    text = text,
+                    languageCode = languageCode,
+                    timestamp = wireTimestamp and -2L,
+                    isCallMode = (wireTimestamp and 1L) != 0L
+                )
             }
             2 -> input.use {
                 val sender = DeviceId(it.readString())
