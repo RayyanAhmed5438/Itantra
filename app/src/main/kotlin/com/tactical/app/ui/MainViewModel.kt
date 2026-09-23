@@ -582,8 +582,9 @@ class MainViewModel @Inject constructor(
         if (state.pttEnabled == enabled) return
         if (state.emergencyComposerVisible) return
 
-        // Do not hide an active manual PTT session underneath the user.
-        if (enabled && state.pttSessionState != SessionState.IDLE && !state.pttContinuousSession) {
+        // Do not switch voice mode underneath an active manual PTT session.
+        // The microphone must remain owned by exactly one capture session.
+        if (state.pttSessionState != SessionState.IDLE && !state.pttContinuousSession) {
             return
         }
 
