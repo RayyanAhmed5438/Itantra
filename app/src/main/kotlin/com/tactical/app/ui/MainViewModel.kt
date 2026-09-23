@@ -68,6 +68,7 @@ data class ChatMessageUi(
     val statusText: String,
     val isAlert: Boolean = false,
     val isVoice: Boolean = false,
+    val isCallMode: Boolean = false,
     val emergencyData: EmergencyAlertData? = null,
     val timestampEpochMs: Long = 0L,
     // Local time used only for ordering messages in the conversation.
@@ -898,7 +899,8 @@ class MainViewModel @Inject constructor(
             timestampEpochMs = message.timestampEpochMs,
             text = message.text,
             isAlert = message.isAlert,
-            isVoice = message.isVoice
+            isVoice = message.isVoice,
+            isCallMode = message.isCallMode
         )
 
     fun refreshReceivedMessages() {
@@ -1074,6 +1076,7 @@ class MainViewModel @Inject constructor(
                     timestampText = formatTimestamp(transmission.timestampEpochMs),
                     statusText = statusText,
                     isVoice = true,
+                    isCallMode = true,
                     timestampEpochMs = transmission.timestampEpochMs,
                     conversationOrderEpochMs = transmission.timestampEpochMs
                 )
@@ -1145,6 +1148,7 @@ class MainViewModel @Inject constructor(
             },
             statusText = message.statusText,
             isVoice = message.isVoice,
+            isCallMode = message.isCallMode,
             isAlert = message.isAlert,
             emergencyData = if (message.isAlert) {
                 EmergencyAlertData(
@@ -1171,6 +1175,7 @@ class MainViewModel @Inject constructor(
             timestampEpochMs = message.timestampEpochMs,
             statusText = message.statusText,
             isVoice = message.isVoice,
+            isCallMode = message.isCallMode,
             isAlert = message.isAlert,
             severity = message.emergencyData?.severity,
             languageCode = message.emergencyData?.languageCode,
@@ -1202,6 +1207,7 @@ class MainViewModel @Inject constructor(
             timestampText = formatTimestamp(message.timestampEpochMs),
             statusText = if (message.isAlert) "Emergency" else "Received",
             isVoice = message.isVoice,
+            isCallMode = message.isCallMode,
             isAlert = message.isAlert,
             emergencyData = emergencyData,
             timestampEpochMs = message.timestampEpochMs,
