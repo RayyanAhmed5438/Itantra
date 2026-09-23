@@ -656,23 +656,25 @@ class MainViewModel @Inject constructor(
     }
 
     fun releaseEmergencyHold() {
+        val shouldResume = resumeContinuousAfterEmergency &&
+            !_uiState.value.emergencyComposerVisible
+
         emergencyTrigger.releaseHold()
+
+        if (shouldResume) {
+            resumeContinuousVoiceIfNeeded()
+        }
     }
 
     private fun startEmergencyRecording() {
         if (_uiState.value.emergencyComposerVisible) return
 
-        // Make certain continuous mode has released the microphone before
-        // opening the emergency recorder.
-        audioRecorder.stop()
-        viewModelScope.launch {
-            runCatching { pttController.stopContinuous() }
-        }
-
+        // The emergency UI becomes active first so releasing the emergency
+        // button after the verified hold cannot accidentally restart call mode.
         _uiState.update {
             it.copy(
                 emergencyComposerVisible = true,
-                emergencyRecording = true,
+                emergencyRecording = false,
                 emergencySending = false,
                 emergencyTranscription = "",
                 emergencyError = null
@@ -682,6 +684,14 @@ class MainViewModel @Inject constructor(
         emergencyRecordingJob?.cancel()
         emergencyRecordingJob = viewModelScope.launch {
             try {
+                // Continuous voice mode shares the same microphone. Wait for it
+                // to finish releasing the recorder before starting emergency STT.
+                runCatching { pttController.stopContinuous() }
+
+                _uiState.update {
+                    it.copy(emergencyRecording = true)
+                }
+
                 var finalizedText = ""
                 var latestPartial = ""
 
