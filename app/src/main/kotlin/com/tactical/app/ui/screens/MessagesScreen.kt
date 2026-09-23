@@ -104,6 +104,18 @@ fun MessagesScreen(
         }
     }
 
+    fun selectAllCurrentTab() {
+        val allKeys = conversationMessages.map(::messageStorageKey).toSet()
+        if (allKeys.isEmpty()) return
+
+        val allSelected = allKeys.all { it in selectedKeys }
+        selectedKeys = if (allSelected) {
+            selectedKeys - allKeys
+        } else {
+            selectedKeys + allKeys
+        }
+    }
+
     fun exitSelection() {
         selectionMode = false
         selectedKeys = emptySet()
@@ -136,6 +148,26 @@ fun MessagesScreen(
             )
 
             if (selectionMode) {
+                TextButton(
+                    onClick = ::selectAllCurrentTab
+                ) {
+                    Text(
+                        if (
+                            conversationMessages.isNotEmpty() &&
+                                conversationMessages.all {
+                                    messageStorageKey(it) in selectedKeys
+                                }
+                        ) {
+                            "CLEAR"
+                        } else {
+                            "SELECT ALL"
+                        },
+                        color = RedTacticalPrimaryBright,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 IconButton(
                     onClick = { showDeleteConfirmation = true },
                     enabled = selectedKeys.isNotEmpty()
@@ -177,7 +209,10 @@ fun MessagesScreen(
         ) {
             Tab(
                 selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
+                onClick = {
+                    selectedTab = 0
+                    selectedKeys = emptySet()
+                },
                 text = {
                     Text(
                         "CHAT",
@@ -188,7 +223,10 @@ fun MessagesScreen(
             )
             Tab(
                 selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
+                onClick = {
+                    selectedTab = 1
+                    selectedKeys = emptySet()
+                },
                 text = {
                     Text(
                         "CALL",
