@@ -150,7 +150,8 @@ class TacticalMeshService : Service() {
                                 senderName = senderName,
                                 text = packet.text,
                                 timestampEpochMs = packet.timestamp,
-                                isVoice = isVoiceMessage
+                                isVoice = isVoiceMessage,
+                                isCallMode = packet.isCallMode
                             )
                         )
 
