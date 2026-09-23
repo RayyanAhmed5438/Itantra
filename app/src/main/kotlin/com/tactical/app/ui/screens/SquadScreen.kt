@@ -174,7 +174,15 @@ fun SquadScreen(
         item {
             var transmissionExpanded by rememberSaveable { mutableStateOf(false) }
 
-            if (uiState.pttTransmissionHistory.isNotEmpty() || !uiState.pttEnabled) {
+            if (
+                uiState.pttTransmissionHistory.isNotEmpty() ||
+                !uiState.pttEnabled ||
+                (
+                    uiState.pttEnabled &&
+                        uiState.pttSessionState == SessionState.RECORDING &&
+                        !uiState.pttLastTranscription.isNullOrBlank()
+                    )
+            ) {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = RedTacticalSurface
@@ -193,10 +201,13 @@ fun SquadScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    if (uiState.pttEnabled) {
-                                        "LAST PTT TRANSMISSION"
-                                    } else {
-                                        "CALL MODE • VOICE TRANSMISSIONS"
+                                    when {
+                                        !uiState.pttEnabled ->
+                                            "CALL MODE • VOICE TRANSMISSIONS"
+                                        uiState.pttSessionState == SessionState.RECORDING ->
+                                            "LIVE PTT TRANSCRIPTION"
+                                        else ->
+                                            "LAST PTT TRANSMISSION"
                                     },
                                     color = RedTacticalTextSecondary,
                                     fontSize = 9.sp,
@@ -228,7 +239,36 @@ fun SquadScreen(
                             }
                         }
 
-                        if (uiState.pttTransmissionHistory.isNotEmpty()) {
+                        if (
+                            uiState.pttEnabled &&
+                                uiState.pttSessionState == SessionState.RECORDING &&
+                                !uiState.pttLastTranscription.isNullOrBlank()
+                        ) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                uiState.pttLastTranscription.orEmpty(),
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Recording…",
+                                    color = RedTacticalVoiceOrange,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "LIVE",
+                                    color = RedTacticalTextSecondary,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (uiState.pttTransmissionHistory.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
 
                             if (!transmissionExpanded) {
@@ -340,7 +380,7 @@ fun SquadScreen(
                             .background(
                                 when {
                                     !pttButtonEnabled -> RedTacticalSurface
-                                    pttHeld -> RedTacticalPrimaryBright
+                                    pttHeld -> RedTacticalVoiceOrange
                                     else -> RedTacticalPrimary
                                 }
                             )
@@ -348,7 +388,7 @@ fun SquadScreen(
                                 width = if (pttButtonEnabled) 2.dp else 1.dp,
                                 color = when {
                                     !pttButtonEnabled -> RedTacticalSurfaceBorder
-                                    pttHeld -> RedTacticalPrimaryBright
+                                    pttHeld -> RedTacticalVoiceOrange
                                     else -> RedTacticalPrimary
                                 },
                                 shape = CircleShape
