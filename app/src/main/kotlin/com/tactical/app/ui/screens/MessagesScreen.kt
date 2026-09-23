@@ -71,7 +71,7 @@ fun MessagesScreen(
 
     val conversationMessages = remember(allMessages, selectedTab) {
         allMessages.filter { message ->
-            if (selectedTab == 1) message.isVoice else !message.isVoice
+            if (selectedTab == 1) message.isCallMode else !message.isCallMode
         }
     }
 
@@ -191,7 +191,7 @@ fun MessagesScreen(
                 onClick = { selectedTab = 1 },
                 text = {
                     Text(
-                        "VOICE",
+                        "CALL",
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
