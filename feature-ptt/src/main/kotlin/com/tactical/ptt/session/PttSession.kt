@@ -25,5 +25,6 @@ data class PttSession(
     val startTime: Long = System.currentTimeMillis(),
     val languageTag: LanguageTag = LanguageTag(isoCode = "en", backendId = "en"),
     val deviceId: DeviceId,
-    val isVox: Boolean = false
+    val isVox: Boolean = false,
+    val isCallMode: Boolean = false
 )
