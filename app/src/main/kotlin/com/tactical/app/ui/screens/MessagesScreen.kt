@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +42,7 @@ fun MessagesScreen(
     var selectionMode by remember { mutableStateOf(false) }
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
 
     // The Messages destination is only composed while it is visible, so
     // entering this screen (and receiving a new message while it stays open)
@@ -52,10 +54,10 @@ fun MessagesScreen(
         onMessagesOpened()
     }
 
-    // One conversation stream: sent + received, oldest first.
-    // Sort by each message's local conversation time so different device
-    // clocks cannot reorder messages. Deduplicate defensively as well.
-    val conversationMessages = remember(
+    // Keep normal text and speech-derived traffic in separate tabs
+    // so Call Mode sentence-by-sentence transmissions do not flood the
+    // ordinary conversation.
+    val allMessages = remember(
         uiState.sentMessages,
         uiState.receivedMessages
     ) {
@@ -65,6 +67,12 @@ fun MessagesScreen(
                 it.conversationOrderEpochMs.takeIf { time -> time > 0L }
                     ?: it.timestampEpochMs
             }
+    }
+
+    val conversationMessages = remember(allMessages, selectedTab) {
+        allMessages.filter { message ->
+            if (selectedTab == 1) message.isVoice else !message.isVoice
+        }
     }
 
     val listState = rememberLazyListState()
@@ -162,6 +170,37 @@ fun MessagesScreen(
 
         Spacer(Modifier.height(8.dp))
 
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = RedTacticalBackground,
+            contentColor = Color.White
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = {
+                    Text(
+                        "CHAT",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = {
+                    Text(
+                        "VOICE",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
         LazyColumn(
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -206,7 +245,7 @@ fun MessagesScreen(
             }
         }
 
-        if (!selectionMode) {
+        if (!selectionMode && selectedTab == 0) {
             Spacer(Modifier.height(10.dp))
 
             Row(
@@ -255,6 +294,7 @@ fun MessagesScreen(
                 }
             }
         }
+
     }
 
     selectedEmergency?.emergencyData?.let { alert ->
