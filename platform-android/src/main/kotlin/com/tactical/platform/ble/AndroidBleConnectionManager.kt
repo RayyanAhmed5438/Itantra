@@ -251,7 +251,7 @@ class AndroidBleConnectionManager(
         android.util.Log.d(
             TAG,
             "GATT connect requested for " + resolvedAddress +
-                " (squad=true)
+                " (squad=true)"
         )
 
         return try {
