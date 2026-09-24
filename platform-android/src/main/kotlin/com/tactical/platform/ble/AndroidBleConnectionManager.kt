@@ -720,8 +720,24 @@ class AndroidBleConnectionManager(
         }
     }
 
-    private fun stateFlow(address: String): MutableStateFlow<BleLinkState> = states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
-    private fun setState(address: String, state: BleLinkState) { stateFlow(address).value = state }
+    private fun stateFlow(address: String): MutableStateFlow<BleLinkState> =
+        states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
+
+    /**
+     * UI code normally observes peers by stable iTantra application ID, while
+     * the GATT callbacks report the physical Bluetooth address. Keep both keys
+     * synchronized so a connection that appears after discovery is reflected
+     * immediately without requiring an app restart.
+     */
+    private fun setState(address: String, state: BleLinkState) {
+        stateFlow(address).value = state
+
+        val appId = applicationIdForAddress(address)
+        if (!appId.isNullOrBlank() && appId != address) {
+            stateFlow(appId).value = state
+        }
+    }
+
     private fun initialState(address: String): BleLinkState =
         if (hasDirectConnection(address)) BleLinkState.CONNECTED else BleLinkState.AVAILABLE
     private fun deviceForAddress(identifier: String): BluetoothDevice? {
