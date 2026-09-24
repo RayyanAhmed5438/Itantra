@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import kotlinx.coroutines.launch
 import android.os.Build
 import com.tactical.domain.result.TacticalResult
+import com.tactical.platform.ble.BlePeerAddressRegistry
 import com.tactical.platform.api.radio.RadioTransport
 import com.tactical.platform.api.radio.RawPacket
 import kotlinx.coroutines.CoroutineScope
@@ -299,13 +300,29 @@ class BleRadioTransport(
             return TacticalResult.Failure("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before calling broadcast()")
         }
 
-        // Only bonded BLE peers participate in application broadcasts.
-        // Pairing is the explicit gate before a peer enters the squad.
-        val inboundDevices = connectionRegistry.inboundConnectedDevices()
-            .filter { it.bondState == BluetoothDevice.BOND_BONDED }
-        val outboundGatts = connectionRegistry.outboundConnectedGatts()
+        // Android bonding/pairing is deliberately irrelevant to iTantra.
+        // null targetDeviceIds means mesh/emergency broadcast to every connected
+        // iTantra GATT peer. A non-null set is a direct application-level
+        // delivery list; an empty set means nobody is selected.
+        val targetAddresses = raw.targetDeviceIds?.mapNotNull {
+            BlePeerAddressRegistry.addressFor(it)
+        }?.toSet()
 
-        android.util.Log.d(TAG, "Broadcast: inbound=" + inboundDevices.size + ", outbound=" + outboundGatts.size)
+        val inboundDevices = connectionRegistry.inboundConnectedDevices()
+            .filter { device ->
+                targetAddresses == null || device.address in targetAddresses
+            }
+        val outboundGatts = connectionRegistry.outboundConnectedGatts()
+            .filter { gatt ->
+                targetAddresses == null || gatt.device.address in targetAddresses
+            }
+
+        android.util.Log.d(
+            TAG,
+            "Broadcast: inbound=" + inboundDevices.size +
+                ", outbound=" + outboundGatts.size +
+                ", targeted=" + (raw.targetDeviceIds != null)
+        )
         if (inboundDevices.isEmpty() && outboundGatts.isEmpty()) {
             android.util.Log.w(TAG, "Broadcast dropped: no connected peers")
             return TacticalResult.Failure("No connected peers to broadcast to")
