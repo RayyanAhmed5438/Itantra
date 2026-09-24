@@ -9,7 +9,14 @@ package com.tactical.platform.api.radio
 data class RawPacket(
     val data: ByteArray,
     val rssi: Int,
-    val timestamp: Long
+    val timestamp: Long,
+    /**
+     * Optional stable iTantra application IDs for direct delivery.
+     *
+     * null means transport-wide broadcast (used by mesh relays and
+     * emergency packets). An empty set means there are no direct recipients.
+     */
+    val targetDeviceIds: Set<String>? = null
 ) {
     init {
         require(data.isNotEmpty()) { "data must not be empty" }
@@ -18,13 +25,17 @@ data class RawPacket(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is RawPacket) return false
-        return data.contentEquals(other.data) && rssi == other.rssi && timestamp == other.timestamp
+        return data.contentEquals(other.data) &&
+            rssi == other.rssi &&
+            timestamp == other.timestamp &&
+            targetDeviceIds == other.targetDeviceIds
     }
 
     override fun hashCode(): Int {
         var result = data.contentHashCode()
         result = 31 * result + rssi
         result = 31 * result + timestamp.hashCode()
+        result = 31 * result + (targetDeviceIds?.hashCode() ?: 0)
         return result
     }
 }
