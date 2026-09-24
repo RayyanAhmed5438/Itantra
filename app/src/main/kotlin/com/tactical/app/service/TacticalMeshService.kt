@@ -26,6 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -270,7 +271,9 @@ class TacticalMeshService : Service() {
 
         discoveryConnectionJob?.cancel()
         discoveryConnectionJob = null
-        runCatching { discoveryService.stop() }
+        runCatching {
+            runBlocking(Dispatchers.IO) { discoveryService.stop() }
+        }
 
         serviceScope.cancel()
         super.onDestroy()
