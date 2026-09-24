@@ -148,6 +148,7 @@ android {
 dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-protocol"))
+    implementation(project(":core-platform-api"))
     implementation(project(":platform-android"))
     implementation(project(":engine-discovery"))
     implementation(project(":engine-mesh"))
