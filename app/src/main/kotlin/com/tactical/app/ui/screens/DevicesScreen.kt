@@ -109,34 +109,31 @@ private fun AvailableDeviceCard(
                     Spacer(Modifier.height(3.dp))
                     Text(peer.linkText + " • " + peer.distanceText, color = RedTacticalTextSecondary, fontSize = 11.sp)
                 }
-                val paired = peer.bleState != BleLinkState.AVAILABLE && peer.bleState != BleLinkState.FAILED
                 Text(
-                    if (peer.bleState == BleLinkState.CONNECTED) "CONNECTED" else if (paired) "IN SQUAD" else "AVAILABLE",
-                    color = if (paired) RedTacticalStatusGreen else RedTacticalStatusYellow,
+                    when (peer.bleState) {
+                        BleLinkState.CONNECTED -> "CONNECTED"
+                        BleLinkState.CONNECTING -> "CONNECTING"
+                        BleLinkState.FAILED -> "AVAILABLE"
+                        else -> "AVAILABLE"
+                    },
+                    color = if (peer.bleState == BleLinkState.CONNECTED) {
+                        RedTacticalStatusGreen
+                    } else {
+                        RedTacticalStatusYellow
+                    },
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.height(10.dp))
-            if (peer.bleState == BleLinkState.AVAILABLE || peer.bleState == BleLinkState.FAILED) {
-                Button(
-                    onClick = { onAddToSquad(peer.deviceAddress) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Link, contentDescription = null)
-                    Spacer(Modifier.width(5.dp))
-                    Text("ADD TO SQUAD")
-                }
-            } else {
-                OutlinedButton(
-                    onClick = {},
-                    enabled = false,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (peer.bleState == BleLinkState.CONNECTING) "CONNECTING…" else "IN SQUAD")
-                }
+            Button(
+                onClick = { onAddToSquad(peer.deviceAddress) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Default.Link, contentDescription = null)
+                Spacer(Modifier.width(5.dp))
+                Text("ADD TO SQUAD")
             }
         }
     }
