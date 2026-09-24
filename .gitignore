@@ -46,7 +46,8 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Large local TTS model pack (bundled into debug APK but not committed to Git)
+# Large local model packs. They are generated/downloaded for local builds
+# and bundled into the APK, but are intentionally not committed to Git.
 app/src/main/assets/models/quantized_models.zip
 app/src/main/assets/models/moonshine_stt_tiny_en.zip
 
