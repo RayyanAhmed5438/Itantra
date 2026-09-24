@@ -26,6 +26,7 @@ import com.tactical.protocol.serialization.BinaryPacketSerializer
 import com.tactical.protocol.serialization.PacketSerializer
 import com.tactical.platform.api.ble.BleBeaconAdvertiser
 import com.tactical.platform.api.ble.BleBeaconScanner
+import com.tactical.platform.api.ble.BleConnectionManager
 import com.tactical.platform.api.wifi.WifiDirectManager
 import dagger.Module
 import dagger.Provides
@@ -94,13 +95,15 @@ object MeshModule {
         router: MeshRouter,
         serializer: PacketSerializer,
         transport: RadioTransport,
-        qualityMonitor: LinkQualityMonitor
+        qualityMonitor: LinkQualityMonitor,
+        bleConnectionManager: BleConnectionManager
     ): MeshService = DefaultMeshService(
-        DeviceId(localDeviceIdValue),
-        router,
-        serializer,
-        transport,
-        qualityMonitor
+        localDeviceId = DeviceId(localDeviceIdValue),
+        router = router,
+        serializer = serializer,
+        transport = transport,
+        qualityMonitor = qualityMonitor,
+        squadDeviceIdsProvider = bleConnectionManager::squadDeviceIds
     )
 
     @Provides
