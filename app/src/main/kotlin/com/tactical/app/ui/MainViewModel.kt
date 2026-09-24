@@ -58,7 +58,7 @@ data class PeerNodeUi(
     val distanceText: String,
     val signalBars: Int,
     val linkText: String,
-    val bleState: BleLinkState = BleLinkState.NOT_PAIRED
+    val bleState: BleLinkState = BleLinkState.AVAILABLE
 )
 
 data class ChatMessageUi(
@@ -110,7 +110,6 @@ data class MainUiState(
     val selectedLanguage: String = "हिन्दी",
     val squadPeers: List<PeerNodeUi> = emptyList(),
     val availablePeers: List<PeerNodeUi> = emptyList(),
-    val pairedPeers: List<PeerNodeUi> = emptyList(),
     val messages: List<ChatMessageUi> = emptyList(),
     val sentMessages: List<ChatMessageUi> = emptyList(),
     val receivedMessages: List<ChatMessageUi> = emptyList(),
@@ -155,11 +154,8 @@ class MainViewModel @Inject constructor(
             username = identityStore.callsign,
             selectedLanguageCode = speechLanguagePreferences.selectedLanguageCode,
             selectedLanguage = displayLanguageName(speechLanguagePreferences.selectedLanguageCode),
-            pairedPeers = localAppDataStore.loadPairedDevices()
-                .filter { it.deviceId in bleConnectionManager.pairedDeviceIds() }
-                .map(::storedPeerToUi),
             squadPeers = localAppDataStore.loadPairedDevices()
-                .filter { it.deviceId in bleConnectionManager.pairedDeviceIds() }
+                .filter { it.deviceId in bleConnectionManager.squadDeviceIds() }
                 .map(::storedPeerToUi),
             receivedMessages = localAppDataStore.loadReceivedMessages()
                 .asReversed()
@@ -298,21 +294,21 @@ class MainViewModel @Inject constructor(
             startDiscovery()
         }
 
-        bleConnectionManager.pairedDeviceIds().forEach { pairedId ->
+        bleConnectionManager.squadDeviceIds().forEach { pairedId ->
             if (observedPeerIds.add(pairedId)) {
                 observePeerState(pairedId)
             }
         }
         viewModelScope.launch {
-            bleConnectionManager.pairedDeviceIds().forEach { pairedId ->
-                runCatching { bleConnectionManager.reconnectPaired(pairedId) }
+            bleConnectionManager.squadDeviceIds().forEach { pairedId ->
+                runCatching { bleConnectionManager.reconnectSquadMember(pairedId) }
             }
         }
 
         viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->
-                    val existing = (state.availablePeers + state.pairedPeers)
+                    val existing = (state.availablePeers + state.squadPeers)
                         .associateBy { it.deviceAddress }
 
                     val peers = devices.map { device ->
@@ -322,7 +318,7 @@ class MainViewModel @Inject constructor(
                         val callsign = device.callsign.ifBlank {
                             previous?.callsign ?: id
                         }
-                        if (id in bleConnectionManager.pairedDeviceIds()) {
+                        if (id in bleConnectionManager.squadDeviceIds()) {
                             localAppDataStore.savePairedDevice(
                                 StoredPairedDevice(
                                     deviceId = id,
@@ -345,7 +341,7 @@ class MainViewModel @Inject constructor(
                             },
                             signalBars = if (hasRssi) signalBars(device.rssi) else (previous?.signalBars ?: 0),
                             linkText = if (hasRssi) device.link.name else (previous?.linkText ?: device.link.name),
-                            bleState = previous?.bleState ?: BleLinkState.NOT_PAIRED
+                            bleState = previous?.bleState ?: BleLinkState.AVAILABLE
                         )
                     }
 
@@ -354,15 +350,16 @@ class MainViewModel @Inject constructor(
                             observePeerState(peer.deviceAddress)
                         }
 
-                        // Discovery resolves the peer's current BLE address.
-                        // Trigger at most one reconnect attempt at a time per
-                        // peer; scan callbacks can fire many times per second.
-                        if (bleConnectionManager.pairedDeviceIds().contains(peer.deviceAddress)) {
-                            val existingReconnect = reconnectJobs[peer.deviceAddress]
-                            if (existingReconnect?.isActive != true) {
+                        // Every nearby iTantra device may establish a GATT session
+                        // without Android bonding. Only the device with the
+                        // lexicographically smaller stable ID initiates, preventing
+                        // duplicate outbound connections for the same peer pair.
+                        if (identityStore.deviceIdValue < peer.deviceAddress) {
+                            val existingConnectionJob = reconnectJobs[peer.deviceAddress]
+                            if (existingConnectionJob?.isActive != true) {
                                 val job = viewModelScope.launch {
                                     runCatching {
-                                        bleConnectionManager.reconnectPaired(peer.deviceAddress)
+                                        bleConnectionManager.connect(peer.deviceAddress)
                                     }
                                 }
                                 reconnectJobs[peer.deviceAddress] = job
@@ -373,18 +370,16 @@ class MainViewModel @Inject constructor(
                                 }
                             }
                         }
-                    }
-
-                    val pairedIds = bleConnectionManager.pairedDeviceIds()
-                    val pairedById = state.pairedPeers.associateBy { it.deviceAddress }
-                    val pairedPeers = pairedIds.mapNotNull { id ->
-                        peers.firstOrNull { it.deviceAddress == id } ?: pairedById[id]
+                    val squadIds = bleConnectionManager.squadDeviceIds()
+                    val squadById = state.squadPeers.associateBy { it.deviceAddress }
+                    val squadPeers = squadIds.mapNotNull { id ->
+                        peers.firstOrNull { it.deviceAddress == id } ?: squadById[id]
                     }
 
                     state.copy(
-                        squadPeers = pairedPeers,
-                        availablePeers = peers.filter { it.deviceAddress !in pairedIds },
-                        pairedPeers = pairedPeers
+                        squadPeers = squadPeers,
+                        availablePeers = peers.filter { it.deviceAddress !in squadIds },
+                        squadPeers = squadPeers
                     )
                 }
 
@@ -468,90 +463,55 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch { runScanCycle() }
     }
 
-    fun pairPeer(deviceAddress: String) {
+    fun addPeerToSquad(deviceAddress: String) {
         viewModelScope.launch {
-            val result = bleConnectionManager.pair(deviceAddress)
+            val result = bleConnectionManager.addToSquad(deviceAddress)
             if (result is TacticalResult.Success) {
-                refreshPairedPeers()
-                // Pairing is followed by the deterministic BLE link strategy.
-                // Only one phone becomes the outbound GATT initiator; the peer
-                // remains passive and can send through server notifications.
-                bleConnectionManager.reconnectPaired(deviceAddress)
-                refreshPairedPeers()
+                val peer = _uiState.value.availablePeers.firstOrNull {
+                    it.deviceAddress == deviceAddress
+                }
+                if (peer != null) {
+                    localAppDataStore.savePairedDevice(
+                        StoredPairedDevice(
+                            deviceId = peer.deviceAddress,
+                            callsign = peer.callsign,
+                            lastSeenEpochMs = System.currentTimeMillis(),
+                            rssi = 0,
+                            linkText = peer.linkText
+                        )
+                    )
+                }
+                refreshSquadPeers()
             }
         }
     }
 
-    private fun refreshPairedPeers() {
-        val pairedIds = bleConnectionManager.pairedDeviceIds()
+    fun removePeerFromSquad(deviceAddress: String) {
+        viewModelScope.launch {
+            bleConnectionManager.removeFromSquad(deviceAddress)
+            localAppDataStore.removePairedDevice(deviceAddress)
+            refreshSquadPeers()
+        }
+    }
+
+    private fun refreshSquadPeers() {
+        val squadIds = bleConnectionManager.squadDeviceIds()
         _uiState.update { state ->
-            val pairedById = state.availablePeers.associateBy { it.deviceAddress } + state.pairedPeers.associateBy { it.deviceAddress }
-            val paired = pairedIds.mapNotNull { pairedById[it] }
+            val knownById = (state.availablePeers + state.squadPeers)
+                .associateBy { it.deviceAddress }
+            val squad = squadIds.mapNotNull { id -> knownById[id] }
             state.copy(
-                pairedPeers = paired,
-                squadPeers = paired,
-                availablePeers = state.availablePeers.filter { it.deviceAddress !in pairedIds }
+                squadPeers = squad,
+                availablePeers = knownById.values
+                    .filter { it.deviceAddress !in squadIds }
             )
         }
     }
-
-    fun observePeerState(deviceAddress: String) {
-        viewModelScope.launch {
-            bleConnectionManager.state(deviceAddress).collect { linkState ->
-                _uiState.update { state ->
-                    fun updatePeer(peer: PeerNodeUi): PeerNodeUi {
-                        return if (peer.deviceAddress == deviceAddress) {
-                            peer.copy(
-                                bleState = linkState,
-                                isConnected = linkState == BleLinkState.CONNECTED
-                            )
-                        } else {
-                            peer
-                        }
-                    }
-
-                    state.copy(
-                        squadPeers = state.squadPeers.map(::updatePeer),
-                        availablePeers = state.availablePeers.map(::updatePeer),
-                        pairedPeers = state.pairedPeers.map(::updatePeer)
-                    )
-                }
-            }
-        }
-
-        // RSSI is read directly from the established GATT session, so the
-        // distance/signal display keeps updating between discovery scans.
-        viewModelScope.launch {
-            bleConnectionManager.rssi(deviceAddress).collect { rssi ->
-                if (rssi == null) return@collect
-
-                _uiState.update { state ->
-                    fun updatePeer(peer: PeerNodeUi): PeerNodeUi {
-                        return if (peer.deviceAddress == deviceAddress) {
-                            peer.copy(
-                                distanceText = formatDistance(estimator.estimate(rssi)),
-                                signalBars = signalBars(rssi)
-                            )
-                        } else {
-                            peer
-                        }
-                    }
-
-                    state.copy(
-                        squadPeers = state.squadPeers.map(::updatePeer),
-                        availablePeers = state.availablePeers.map(::updatePeer),
-                        pairedPeers = state.pairedPeers.map(::updatePeer)
-                    )
-                }
-            }
-        }
-    }
-
     fun connectPeer(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.connect(deviceAddress) }
     }
 
-    fun repairPeer(deviceAddress: String) {
+    fun readdPeerToSquad(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.repairAndReconnect(deviceAddress) }
     }
 
@@ -962,17 +922,17 @@ class MainViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val pairedIds = bleConnectionManager.pairedDeviceIds()
-            if (pairedIds.isEmpty()) {
-                updateSentMessageStatus(pending, "No paired devices")
+            val squadIds = bleConnectionManager.squadDeviceIds()
+            if (squadIds.isEmpty()) {
+                updateSentMessageStatus(pending, "No squad members")
                 return@launch
             }
 
             // Send immediately when a GATT session is already ready.
             // Do not block the UI behind the BLE manager's 20-second reconnect
-            // timeout just because a paired peer is temporarily disconnected.
+            // timeout just because a squad member is temporarily disconnected.
             // The connection manager already performs background retries.
-            val hasConnectedPeer = pairedIds.any { peerId ->
+            val hasConnectedPeer = squadIds.any { peerId ->
                 bleConnectionManager.state(peerId).first() == BleLinkState.CONNECTED
             }
 
@@ -980,13 +940,13 @@ class MainViewModel @Inject constructor(
                 true
             } else {
                 // Give one short, parallel reconnect window rather than
-                // reconnecting paired peers serially.
+                // reconnecting squad members serially.
                 coroutineScope {
                     pairedIds.map { peerId ->
                         async {
                             runCatching {
                                 kotlinx.coroutines.withTimeoutOrNull(4000L) {
-                                    bleConnectionManager.reconnectPaired(peerId)
+                                    bleConnectionManager.reconnectSquadMember(peerId)
                                 }
                             }.getOrNull() is TacticalResult.Success
                         }
@@ -1134,7 +1094,7 @@ class MainViewModel @Inject constructor(
             },
             signalBars = if (peer.rssi != 0) signalBars(peer.rssi) else 0,
             linkText = peer.linkText,
-            bleState = BleLinkState.PAIRED
+            bleState = BleLinkState.DISCONNECTED
         )
 
     private fun storedSentMessageToUi(message: StoredSentMessage): ChatMessageUi =
