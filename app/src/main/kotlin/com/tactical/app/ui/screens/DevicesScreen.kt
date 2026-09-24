@@ -27,7 +27,7 @@ import com.tactical.platform.api.ble.BleLinkState
 fun DevicesScreen(
     uiState: MainUiState,
     onScan: () -> Unit,
-    onPair: (String) -> Unit = {},
+    onAddToSquad: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -81,7 +81,7 @@ fun DevicesScreen(
                     .navigationBarsPadding()
             ) {
                 items(uiState.availablePeers, key = { it.deviceAddress }) { peer ->
-                    AvailableDeviceCard(peer, onPair)
+                    AvailableDeviceCard(peer, onAddToSquad)
                 }
             }
         }
@@ -91,7 +91,7 @@ fun DevicesScreen(
 @Composable
 private fun AvailableDeviceCard(
     peer: PeerNodeUi,
-    onPair: (String) -> Unit
+    onAddToSquad: (String) -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
@@ -109,24 +109,24 @@ private fun AvailableDeviceCard(
                     Spacer(Modifier.height(3.dp))
                     Text(peer.linkText + " • " + peer.distanceText, color = RedTacticalTextSecondary, fontSize = 11.sp)
                 }
-                val paired = peer.bleState != BleLinkState.NOT_PAIRED && peer.bleState != BleLinkState.FAILED
+                val paired = peer.bleState != BleLinkState.AVAILABLE && peer.bleState != BleLinkState.FAILED
                 Text(
-                    if (peer.bleState == BleLinkState.CONNECTED) "CONNECTED" else if (paired) "PAIRED" else "AVAILABLE",
+                    if (peer.bleState == BleLinkState.CONNECTED) "CONNECTED" else if (paired) "IN SQUAD" else "AVAILABLE",
                     color = if (paired) RedTacticalStatusGreen else RedTacticalStatusYellow,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.height(10.dp))
-            if (peer.bleState == BleLinkState.NOT_PAIRED || peer.bleState == BleLinkState.FAILED) {
+            if (peer.bleState == BleLinkState.AVAILABLE || peer.bleState == BleLinkState.FAILED) {
                 Button(
-                    onClick = { onPair(peer.deviceAddress) },
+                    onClick = { onAddToSquad(peer.deviceAddress) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(Icons.Default.Link, contentDescription = null)
                     Spacer(Modifier.width(5.dp))
-                    Text("PAIR DEVICE")
+                    Text("ADD TO SQUAD")
                 }
             } else {
                 OutlinedButton(
@@ -135,7 +135,7 @@ private fun AvailableDeviceCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(if (peer.bleState == BleLinkState.CONNECTING || peer.bleState == BleLinkState.PAIRING) "WORKING…" else "PAIRED — IN SQUAD")
+                    Text(if (peer.bleState == BleLinkState.CONNECTING) "CONNECTING…" else "IN SQUAD")
                 }
             }
         }
