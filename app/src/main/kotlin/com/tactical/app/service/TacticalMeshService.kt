@@ -268,11 +268,9 @@ class TacticalMeshService : Service() {
         messageJob?.cancel()
         messageJob = null
 
-        serviceScope.launch {
-            discoveryConnectionJob?.cancel()
+        discoveryConnectionJob?.cancel()
         discoveryConnectionJob = null
-        discoveryService.stop()
-        }
+        runCatching { discoveryService.stop() }
 
         serviceScope.cancel()
         super.onDestroy()
