@@ -175,10 +175,10 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 when (selectedTab) {
                                     0 -> DevicesScreen(
-                                    uiState = state,
-                                    onScan = viewModel::forceDiscovery,
-                                    onPair = viewModel::addPeerToSquad
-                                )
+                                        uiState = state,
+                                        onScan = viewModel::forceDiscovery,
+                                        onAddToSquad = viewModel::addPeerToSquad
+                                    )
                                 1 -> SquadScreen(
                                     uiState = state,
                                     onRefresh = viewModel::forceDiscovery,
