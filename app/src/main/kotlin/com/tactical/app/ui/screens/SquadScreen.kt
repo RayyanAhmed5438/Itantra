@@ -642,10 +642,10 @@ fun SquadScreen(
             SectionDividerLabel("SQUAD MEMBERS")
         }
 
-        if (pairedPeers.isEmpty()) {
+        if (squadOfflinePeers.isEmpty()) {
             item {
                 EmptySquadSection(
-                    if (uiState.pairedPeers.isEmpty()) {
+                    if (uiState.squadPeers.isEmpty()) {
                         "No squad members"
                     } else {
                         "All squad members are connected"
@@ -655,7 +655,7 @@ fun SquadScreen(
         } else {
             items(
                 squadOfflinePeers,
-                key = { "paired_" + it.deviceAddress }
+                key = { "squad_" + it.deviceAddress }
             ) { peer ->
                 PeerCard(peer)
             }
