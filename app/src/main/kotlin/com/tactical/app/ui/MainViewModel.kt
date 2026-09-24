@@ -515,6 +515,53 @@ class MainViewModel @Inject constructor(
             )
         }
     }
+    fun observePeerState(deviceAddress: String) {
+        viewModelScope.launch {
+            bleConnectionManager.state(deviceAddress).collect { linkState ->
+                _uiState.update { state ->
+                    fun updatePeer(peer: PeerNodeUi): PeerNodeUi =
+                        if (peer.deviceAddress == deviceAddress) {
+                            peer.copy(
+                                bleState = linkState,
+                                isConnected = linkState == BleLinkState.CONNECTED
+                            )
+                        } else {
+                            peer
+                        }
+
+                    state.copy(
+                        squadPeers = state.squadPeers.map(::updatePeer),
+                        availablePeers = state.availablePeers.map(::updatePeer)
+                    )
+                }
+            }
+        }
+
+        // Keep RSSI/distance/signal information fresh between discovery scans.
+        viewModelScope.launch {
+            bleConnectionManager.rssi(deviceAddress).collect { rssi ->
+                if (rssi == null) return@collect
+
+                _uiState.update { state ->
+                    fun updatePeer(peer: PeerNodeUi): PeerNodeUi =
+                        if (peer.deviceAddress == deviceAddress) {
+                            peer.copy(
+                                distanceText = formatDistance(estimator.estimate(rssi)),
+                                signalBars = signalBars(rssi)
+                            )
+                        } else {
+                            peer
+                        }
+
+                    state.copy(
+                        squadPeers = state.squadPeers.map(::updatePeer),
+                        availablePeers = state.availablePeers.map(::updatePeer)
+                    )
+                }
+            }
+        }
+    }
+
     fun connectPeer(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.connect(deviceAddress) }
     }
