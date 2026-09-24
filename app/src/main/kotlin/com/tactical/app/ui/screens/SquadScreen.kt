@@ -50,8 +50,8 @@ fun SquadScreen(
     onEmergencyRelease: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val connectedPeers = uiState.pairedPeers.filter { it.isConnected }
-    val pairedPeers = uiState.pairedPeers.filter { !it.isConnected }
+    val connectedPeers = uiState.squadPeers.filter { it.isConnected }
+    val squadOfflinePeers = uiState.squadPeers.filter { !it.isConnected }
     val hasConnection = connectedPeers.isNotEmpty()
     val pttButtonEnabled = uiState.pttEnabled &&
         hasConnection &&
@@ -119,7 +119,7 @@ fun SquadScreen(
                     )
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        "${connectedPeers.size} CONNECTED • ${pairedPeers.size} PAIRED",
+                        "${connectedPeers.size} CONNECTED • ${squadOfflinePeers.size} IN SQUAD",
                         color = RedTacticalTextSecondary,
                         fontSize = 11.sp
                     )
@@ -639,22 +639,22 @@ fun SquadScreen(
 
         item {
             Spacer(Modifier.height(2.dp))
-            SectionDividerLabel("PAIRED DEVICES")
+            SectionDividerLabel("SQUAD MEMBERS")
         }
 
         if (pairedPeers.isEmpty()) {
             item {
                 EmptySquadSection(
                     if (uiState.pairedPeers.isEmpty()) {
-                        "No paired devices"
+                        "No squad members"
                     } else {
-                        "All paired devices are connected"
+                        "All squad members are connected"
                     }
                 )
             }
         } else {
             items(
-                pairedPeers,
+                squadOfflinePeers,
                 key = { "paired_" + it.deviceAddress }
             ) { peer ->
                 PeerCard(peer)
@@ -764,7 +764,7 @@ fun PeerCard(peer: PeerNodeUi) {
                 Text(peer.callsign, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    if (peer.isConnected) "Connected • " + peer.distanceText else "Paired • " + peer.distanceText,
+                    if (peer.isConnected) "Connected • " + peer.distanceText else "In squad • " + peer.distanceText,
                     color = if (peer.isConnected) RedTacticalStatusGreen else RedTacticalTextSecondary,
                     fontSize = 11.sp
                 )
