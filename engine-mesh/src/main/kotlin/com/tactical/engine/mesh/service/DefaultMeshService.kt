@@ -23,6 +23,7 @@ class DefaultMeshService(
     private val serializer: PacketSerializer,
     private val transport: RadioTransport,
     private val qualityMonitor: LinkQualityMonitor,
+    private val squadDeviceIdsProvider: () -> Set<String> = { emptySet() },
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 ) : MeshService {
 
@@ -51,7 +52,16 @@ class DefaultMeshService(
             hopCount = 0,
             payload = packet
         )
-        return broadcastRelay(relayPacket)
+        // Locally originated normal text is sent directly only to the
+        // application's squad. Emergency packets remain a full broadcast.
+        // Relay traffic is handled separately below and is not restricted,
+        // preserving mesh forwarding.
+        val targetDeviceIds = when (packet) {
+            is com.tactical.domain.packet.TextPacket -> squadDeviceIdsProvider()
+            is com.tactical.domain.packet.EmergencyPacket -> null
+            else -> null
+        }
+        return broadcastRelay(relayPacket, targetDeviceIds)
     }
 
     override fun receive(): Flow<Packet> = _incomingPackets.asSharedFlow()
@@ -84,9 +94,17 @@ class DefaultMeshService(
         }
     }
 
-    private suspend fun broadcastRelay(relay: MeshRelayPacket): TacticalResult<Unit> {
-        val bytes = serializer.serializeRelay(relay)
-        val raw = RawPacket(bytes, 0, System.currentTimeMillis())
+    private suspend fun broadcastRelay(
+        relayPacket: MeshRelayPacket,
+        targetDeviceIds: Set<String>? = null
+    ): TacticalResult<Unit> {
+        val bytes = serializer.serializeRelay(relayPacket)
+        val raw = RawPacket(
+            data = bytes,
+            rssi = 0,
+            timestamp = System.currentTimeMillis(),
+            targetDeviceIds = targetDeviceIds
+        )
         return transport.broadcast(raw)
     }
 }
