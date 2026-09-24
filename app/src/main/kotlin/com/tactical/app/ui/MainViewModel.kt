@@ -318,6 +318,7 @@ class MainViewModel @Inject constructor(
                         val callsign = device.callsign.ifBlank {
                             previous?.callsign ?: id
                         }
+
                         if (id in bleConnectionManager.squadDeviceIds()) {
                             localAppDataStore.savePairedDevice(
                                 StoredPairedDevice(
@@ -329,18 +330,26 @@ class MainViewModel @Inject constructor(
                                 )
                             )
                         }
+
                         PeerNodeUi(
                             deviceAddress = id,
-                            callsign = localAppDataStore.callsignForPeer(id)
-                                ?: callsign,
+                            callsign = localAppDataStore.callsignForPeer(id) ?: callsign,
                             isConnected = previous?.isConnected ?: false,
                             distanceText = if (hasRssi) {
                                 formatDistance(estimator.estimate(device.rssi))
                             } else {
                                 previous?.distanceText ?: "Unknown"
                             },
-                            signalBars = if (hasRssi) signalBars(device.rssi) else (previous?.signalBars ?: 0),
-                            linkText = if (hasRssi) device.link.name else (previous?.linkText ?: device.link.name),
+                            signalBars = if (hasRssi) {
+                                signalBars(device.rssi)
+                            } else {
+                                previous?.signalBars ?: 0
+                            },
+                            linkText = if (hasRssi) {
+                                device.link.name
+                            } else {
+                                previous?.linkText ?: device.link.name
+                            },
                             bleState = previous?.bleState ?: BleLinkState.AVAILABLE
                         )
                     }
@@ -350,10 +359,9 @@ class MainViewModel @Inject constructor(
                             observePeerState(peer.deviceAddress)
                         }
 
-                        // Every nearby iTantra device may establish a GATT session
-                        // without Android bonding. Only the device with the
-                        // lexicographically smaller stable ID initiates, preventing
-                        // duplicate outbound connections for the same peer pair.
+                        // All nearby iTantra peers may form a GATT link without
+                        // Android bonding. Only the stable-ID-low side initiates
+                        // to avoid simultaneous duplicate GATT attempts.
                         if (identityStore.deviceIdValue < peer.deviceAddress) {
                             val existingConnectionJob = reconnectJobs[peer.deviceAddress]
                             if (existingConnectionJob?.isActive != true) {
@@ -370,19 +378,19 @@ class MainViewModel @Inject constructor(
                                 }
                             }
                         }
+                    }
+
                     val squadIds = bleConnectionManager.squadDeviceIds()
                     val squadById = state.squadPeers.associateBy { it.deviceAddress }
-                    val squadPeers = squadIds.mapNotNull { id ->
+                    val currentSquad = squadIds.mapNotNull { id ->
                         peers.firstOrNull { it.deviceAddress == id } ?: squadById[id]
                     }
 
                     state.copy(
-                        squadPeers = squadPeers,
-                        availablePeers = peers.filter { it.deviceAddress !in squadIds },
-                        squadPeers = squadPeers
+                        squadPeers = currentSquad,
+                        availablePeers = peers.filter { it.deviceAddress !in squadIds }
                     )
                 }
-
             }
         }
 
@@ -511,7 +519,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch { bleConnectionManager.connect(deviceAddress) }
     }
 
-    fun readdPeerToSquad(deviceAddress: String) {
+    fun repairPeer(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.repairAndReconnect(deviceAddress) }
     }
 
@@ -942,7 +950,7 @@ class MainViewModel @Inject constructor(
                 // Give one short, parallel reconnect window rather than
                 // reconnecting squad members serially.
                 coroutineScope {
-                    pairedIds.map { peerId ->
+                    squadIds.map { peerId ->
                         async {
                             runCatching {
                                 kotlinx.coroutines.withTimeoutOrNull(4000L) {
@@ -1094,7 +1102,7 @@ class MainViewModel @Inject constructor(
             },
             signalBars = if (peer.rssi != 0) signalBars(peer.rssi) else 0,
             linkText = peer.linkText,
-            bleState = BleLinkState.DISCONNECTED
+            bleState = BleLinkState.AVAILABLE
         )
 
     private fun storedSentMessageToUi(message: StoredSentMessage): ChatMessageUi =
