@@ -42,6 +42,18 @@ class CompositeRadioTransport(
         )
 
     override suspend fun broadcast(raw: RawPacket): TacticalResult<Unit> = coroutineScope {
+        // Squad-targeted delivery currently has stable iTantra IDs only on the
+        // BLE bearer. Wi-Fi Direct uses socket addresses without an iTantra-ID
+        // handshake, so targeted packets stay on BLE. Unrestricted mesh and
+        // emergency broadcasts continue over both bearers.
+        if (raw.targetDeviceIds != null) {
+            return@coroutineScope runCatching {
+                bleTransport.broadcast(raw)
+            }.getOrElse {
+                TacticalResult.Failure("BLE targeted broadcast threw: ${it.message}")
+            }
+        }
+
         val bleDeferred = async { runCatching { bleTransport.broadcast(raw) } }
         val wifiDeferred = async { runCatching { wifiDirectTransport.broadcast(raw) } }
 
