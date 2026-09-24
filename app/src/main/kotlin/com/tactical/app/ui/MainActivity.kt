@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
                                     0 -> DevicesScreen(
                                     uiState = state,
                                     onScan = viewModel::forceDiscovery,
-                                    onPair = viewModel::pairPeer
+                                    onPair = viewModel::addPeerToSquad
                                 )
                                 1 -> SquadScreen(
                                     uiState = state,
