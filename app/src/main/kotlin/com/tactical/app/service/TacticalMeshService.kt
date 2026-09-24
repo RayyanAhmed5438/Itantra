@@ -67,6 +67,7 @@ class TacticalMeshService : Service() {
     private val binder = MeshBinder()
     private var emergencyJob: kotlinx.coroutines.Job? = null
     private var messageJob: kotlinx.coroutines.Job? = null
+    private var discoveryConnectionJob: kotlinx.coroutines.Job? = null
 
     inner class MeshBinder : Binder() {
         fun getService(): TacticalMeshService = this@TacticalMeshService
@@ -187,20 +188,42 @@ class TacticalMeshService : Service() {
             }
         }
 
-        // Re-establish paired GATT client sessions from the foreground
-        // service after process/activity recreation.
+        // Re-establish application-level squad GATT sessions from the
+        // foreground service after process/activity recreation.
         serviceScope.launch {
             delay(1000L)
-            bleConnectionManager.pairedDeviceIds().forEach { peerId ->
+            bleConnectionManager.squadDeviceIds().forEach { peerId ->
                 runCatching {
-                    bleConnectionManager.reconnectPaired(peerId)
+                    bleConnectionManager.reconnectSquadMember(peerId)
                 }
             }
         }
 
-        serviceScope.launch {
+        discoveryConnectionJob?.cancel()
+        discoveryConnectionJob = serviceScope.launch {
             try {
                 discoveryService.start()
+
+                // Every nearby iTantra device may establish a GATT session
+                // without Android Bluetooth bonding. To avoid two phones
+                // initiating the same link simultaneously, the device with
+                // the lexicographically smaller stable iTantra ID initiates.
+                discoveryService.peers().collect { devices ->
+                    devices.forEach { peer ->
+                        val peerId = peer.id.value
+                        if (
+                            peerId.isNotBlank() &&
+                            peerId != identityStore.deviceIdValue &&
+                            identityStore.deviceIdValue < peerId
+                        ) {
+                            launch {
+                                runCatching {
+                                    bleConnectionManager.connect(peerId)
+                                }
+                            }
+                        }
+                    }
+                }
             } catch (e: SecurityException) {
                 android.util.Log.e(
                     "TacticalMeshService",
@@ -246,7 +269,9 @@ class TacticalMeshService : Service() {
         messageJob = null
 
         serviceScope.launch {
-            discoveryService.stop()
+            discoveryConnectionJob?.cancel()
+        discoveryConnectionJob = null
+        discoveryService.stop()
         }
 
         serviceScope.cancel()
