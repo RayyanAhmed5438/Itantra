@@ -305,10 +305,13 @@ class AndroidBleConnectionManager(
                         // still connected through the inbound GATT role.
                         refreshLinkState(
                             resolvedAddress,
-                            if (isSquadMemberAddress(resolvedAddress)) {
+                            if (squadDeviceIds().contains(
+                                    applicationIdForAddress(resolvedAddress)
+                                )
+                            ) {
                                 BleLinkState.DISCONNECTED
                             } else {
-                                BleLinkState.NOT_PAIRED
+                                BleLinkState.AVAILABLE
                             }
                         )
                         try { gatt.close() } catch (_: Exception) {}
@@ -525,10 +528,13 @@ class AndroidBleConnectionManager(
         registry.unregisterOutboundConnection(resolvedAddress)
         refreshLinkState(
             resolvedAddress,
-            if (isPairedAddress(resolvedAddress)) {
+            if (squadDeviceIds().contains(
+                    applicationIdForAddress(resolvedAddress)
+                )
+            ) {
                 BleLinkState.DISCONNECTED
             } else {
-                BleLinkState.NOT_PAIRED
+                BleLinkState.AVAILABLE
             }
         )
     }
@@ -682,11 +688,6 @@ class AndroidBleConnectionManager(
     private fun hasDirectConnection(address: String): Boolean =
         registry.inboundDevice(address) != null ||
             registry.outboundGatt(address) != null
-
-    private fun isSquadMemberAddress(address: String): Boolean {
-        val appId = applicationIdForAddress(address)
-        return appId != null && squadDeviceIds().contains(appId)
-    }
 
     private fun refreshLinkState(address: String, disconnectedState: BleLinkState) {
         if (hasDirectConnection(address)) {
