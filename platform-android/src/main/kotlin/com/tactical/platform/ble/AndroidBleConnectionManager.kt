@@ -38,7 +38,7 @@ import kotlinx.coroutines.withTimeout
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-/** Explicit pairing and persistent BLE GATT client sessions. */
+/** App-level squad membership plus persistent BLE GATT client sessions. Android bonding is not used. */
 @SuppressLint("MissingPermission")
 class AndroidBleConnectionManager(
     private val context: Context,
@@ -61,42 +61,6 @@ class AndroidBleConnectionManager(
     private var scanFailures = 0
     private var lastRecovery = 0L
 
-    private val bondReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
-            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-            } else {
-                @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-            } ?: return
-            when (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)) {
-                BluetoothDevice.BOND_BONDED -> {
-                    val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
-                    if (appId != null) {
-                        rememberPairedPeer(appId, device.address)
-                        setState(device.address, BleLinkState.PAIRED)
-                        // Each paired phone maintains its own outbound GATT client
-                        // session. This keeps normal send/receive traffic symmetric
-                        // and avoids depending on server-side notifications.
-                        reconnectScope.launch {
-                            delay(500L)
-                            runCatching { reconnectPaired(appId) }
-                        }
-                    } else {
-                        setState(device.address, BleLinkState.PAIRED)
-                    }
-                }
-                BluetoothDevice.BOND_NONE -> {
-                    val appId = BlePeerAddressRegistry.applicationIdFor(device.address)
-                    if (appId != null) {
-                        forgetPairedPeer(appId)
-                    }
-                    setState(device.address, BleLinkState.NOT_PAIRED)
-                }
-            }
-        }
-    }
-
     private val adapterStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
@@ -113,11 +77,11 @@ class AndroidBleConnectionManager(
                 registry.allConnectedAddresses().toList().forEach { registry.unregisterOutboundConnection(it) }
                 states.keys.toList().forEach { setState(it, BleLinkState.DISCONNECTED) }
             } else if (state == BluetoothAdapter.STATE_ON) {
-                android.util.Log.d(TAG, "Bluetooth turned on; reconnecting paired iTantra peers")
+                android.util.Log.d(TAG, "Bluetooth turned on; reconnecting squad members")
                 reconnectScope.launch {
                     delay(1500L)
-                    pairedDeviceIds().forEach { id ->
-                        runCatching { reconnectPaired(id) }
+                    squadDeviceIds().forEach { id ->
+                        runCatching { reconnectSquadMember(id) }
                     }
                 }
             }
@@ -137,8 +101,8 @@ class AndroidBleConnectionManager(
                 }.getOrNull()
 
                 if (adapter?.isEnabled == true) {
-                    pairedDeviceIds().forEach { id ->
-                        runCatching { reconnectPaired(id) }
+                    squadDeviceIds().forEach { id ->
+                        runCatching { reconnectSquadMember(id) }
                     }
                 }
 
@@ -146,59 +110,61 @@ class AndroidBleConnectionManager(
             }
         }
 
-        val bondFilter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         val adapterFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(bondReceiver, bondFilter, Context.RECEIVER_NOT_EXPORTED)
             context.registerReceiver(adapterStateReceiver, adapterFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            @Suppress("DEPRECATION")
-            context.registerReceiver(bondReceiver, bondFilter)
             @Suppress("DEPRECATION")
             context.registerReceiver(adapterStateReceiver, adapterFilter)
         }
     }
 
-    override suspend fun pair(deviceAddress: String): TacticalResult<Unit> {
-        if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
+    override suspend fun addToSquad(deviceAddress: String): TacticalResult<Unit> {
+        if (!hasConnectPermission()) {
+            return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
+        }
+
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
-        if (!isBluetoothAddress(deviceAddress)) {
-            BlePeerAddressRegistry.remember(deviceAddress, resolvedAddress)
+
+        val appId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress)
+            ?: deviceAddress
+
+        rememberAddress(appId, resolvedAddress)
+
+        val ids = squadDeviceIds().toMutableSet()
+        ids.add(appId)
+        prefs.edit()
+            .putStringSet(SQUAD_IDS_KEY, ids)
+            .remove(LEGACY_PAIRED_IDS_KEY)
+            .apply()
+
+        setState(resolvedAddress, if (hasDirectConnection(resolvedAddress)) {
+            BleLinkState.CONNECTED
+        } else {
+            BleLinkState.AVAILABLE
+        })
+
+        android.util.Log.d(TAG, "Added " + appId + " to iTantra squad (no Android pairing)")
+        return TacticalResult.Success(Unit)
+    }
+
+    override suspend fun removeFromSquad(deviceAddress: String) {
+        val resolvedAddress = resolveAddress(deviceAddress) ?: deviceAddress
+        val appId = applicationIdForAddress(resolvedAddress) ?: deviceAddress
+        val ids = squadDeviceIds().toMutableSet()
+
+        if (ids.remove(appId)) {
+            prefs.edit()
+                .putStringSet(SQUAD_IDS_KEY, ids)
+                .remove(LEGACY_PAIRED_IDS_KEY)
+                .apply()
         }
-        val device = deviceForAddress(resolvedAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
-        if (device.bondState == BluetoothDevice.BOND_BONDED) {
-            rememberPairedPeer(deviceAddress, resolvedAddress)
-            setState(resolvedAddress, BleLinkState.PAIRED)
-            return TacticalResult.Success(Unit)
-        }
-        setState(resolvedAddress, BleLinkState.PAIRING)
-        android.util.Log.d(TAG, "PAIR requested for " + resolvedAddress)
-        return try {
-            if (!device.createBond()) {
-                setState(resolvedAddress, BleLinkState.FAILED)
-                TacticalResult.Failure("Android pairing could not be started")
-            } else {
-                withTimeout(30_000L) {
-                    while (device.bondState == BluetoothDevice.BOND_BONDING) delay(250L)
-                }
-                if (device.bondState == BluetoothDevice.BOND_BONDED) {
-                    rememberPairedPeer(deviceAddress, resolvedAddress)
-                    setState(resolvedAddress, BleLinkState.PAIRED)
-                    android.util.Log.d(TAG, "PAIR successful for " + resolvedAddress)
-                    TacticalResult.Success(Unit)
-                } else {
-                    setState(resolvedAddress, BleLinkState.FAILED)
-                    TacticalResult.Failure("Bluetooth pairing did not complete")
-                }
-            }
-        } catch (_: TimeoutCancellationException) {
-            setState(resolvedAddress, BleLinkState.FAILED)
-            TacticalResult.Failure("Bluetooth pairing timed out")
-        } catch (e: Exception) {
-            setState(resolvedAddress, BleLinkState.FAILED)
-            TacticalResult.Failure("Bluetooth pairing failed: ${e.message}")
-        }
+
+        // Squad membership and physical GATT connectivity are intentionally
+        // independent. Keep the GATT link available for mesh participation.
+        refreshLinkState(resolvedAddress, BleLinkState.AVAILABLE)
+        android.util.Log.d(TAG, "Removed " + appId + " from iTantra squad")
     }
 
     override suspend fun connect(deviceAddress: String): TacticalResult<Unit> {
@@ -285,7 +251,7 @@ class AndroidBleConnectionManager(
         android.util.Log.d(
             TAG,
             "GATT connect requested for " + resolvedAddress +
-                " (bondState=" + device.bondState + ")"
+                " (squad=true)
         )
 
         return try {
@@ -339,7 +305,7 @@ class AndroidBleConnectionManager(
                         // still connected through the inbound GATT role.
                         refreshLinkState(
                             resolvedAddress,
-                            if (isPairedAddress(resolvedAddress)) {
+                            if (isSquadMemberAddress(resolvedAddress)) {
                                 BleLinkState.DISCONNECTED
                             } else {
                                 BleLinkState.NOT_PAIRED
@@ -572,10 +538,23 @@ class AndroidBleConnectionManager(
     override fun rssi(deviceAddress: String): Flow<Int?> =
         rssiState(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
 
-    override fun pairedDeviceIds(): Set<String> =
-        prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toSet() ?: emptySet()
+    override fun squadDeviceIds(): Set<String> {
+        val current = prefs.getStringSet(SQUAD_IDS_KEY, null)
+        if (current != null) return current.toSet()
 
-    override suspend fun reconnectPaired(deviceAddress: String): TacticalResult<Unit> {
+        // Migrate the previous app-level paired list once. These IDs are
+        // treated only as squad membership; no Android bond is required.
+        val legacy = prefs.getStringSet(LEGACY_PAIRED_IDS_KEY, emptySet())?.toSet() ?: emptySet()
+        if (legacy.isNotEmpty()) {
+            prefs.edit()
+                .putStringSet(SQUAD_IDS_KEY, legacy)
+                .remove(LEGACY_PAIRED_IDS_KEY)
+                .apply()
+        }
+        return legacy
+    }
+
+    override suspend fun reconnectSquadMember(deviceAddress: String): TacticalResult<Unit> {
         val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
         if (adapter == null || !adapter.isEnabled) {
             setState(deviceAddress, BleLinkState.DISCONNECTED)
@@ -604,12 +583,9 @@ class AndroidBleConnectionManager(
     }
 
     override suspend fun repairAndReconnect(deviceAddress: String): TacticalResult<Unit> {
+        // "Repair" now means reset and re-establish the GATT session. It never
+        // invokes Android Bluetooth bonding.
         disconnect(deviceAddress)
-        val device = deviceForAddress(deviceAddress) ?: return TacticalResult.Failure("Bluetooth device not found")
-        if (device.bondState != BluetoothDevice.BOND_BONDED) {
-            val paired = pair(deviceAddress)
-            if (paired is TacticalResult.Failure) return paired
-        }
         return connect(deviceAddress)
     }
 
@@ -619,15 +595,13 @@ class AndroidBleConnectionManager(
         // repopulated it. Recover the stable iTantra ID from the persisted
         // appId -> address mapping as a fallback.
         val appId = applicationIdForAddress(device.address) ?: return
-        if (pairedDeviceIds().contains(appId)) {
-            rememberPeer(appId, device.address)
-            setState(device.address, BleLinkState.CONNECTED)
-            android.util.Log.d(
-                TAG,
-                "Inbound BLE link ready for " + appId +
-                    " (bondState=" + device.bondState + ")"
-            )
-        }
+        rememberAddress(appId, device.address)
+        setState(device.address, BleLinkState.CONNECTED)
+        android.util.Log.d(
+            TAG,
+            "Inbound BLE link ready for " + appId +
+                " (no Android pairing)"
+        )
     }
 
     override fun onInboundDisconnected(device: BluetoothDevice) {
@@ -637,10 +611,10 @@ class AndroidBleConnectionManager(
         val appId = applicationIdForAddress(device.address)
         refreshLinkState(
             device.address,
-            if (appId != null && pairedDeviceIds().contains(appId)) {
+            if (appId != null && squadDeviceIds().contains(appId)) {
                 BleLinkState.DISCONNECTED
             } else {
-                BleLinkState.NOT_PAIRED
+                BleLinkState.AVAILABLE
             }
         )
         android.util.Log.d(
@@ -666,11 +640,8 @@ class AndroidBleConnectionManager(
         emptyCycles = 0
     }
 
-    private fun rememberPeer(appId: String, address: String) {
-        val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
-        ids.add(appId)
+    private fun rememberAddress(appId: String, address: String) {
         prefs.edit()
-            .putStringSet(PAIRED_IDS_KEY, ids)
             .putString(PREF_ADDRESS_PREFIX + appId, address)
             .apply()
         BlePeerAddressRegistry.remember(appId, address)
@@ -703,7 +674,7 @@ class AndroidBleConnectionManager(
 
         // Recover the stable app id even before discovery has refreshed the
         // in-memory address registry.
-        return pairedDeviceIds().firstOrNull { id ->
+        return squadDeviceIds().firstOrNull { id ->
             prefs.getString(PREF_ADDRESS_PREFIX + id, null) == address
         }
     }
@@ -712,9 +683,9 @@ class AndroidBleConnectionManager(
         registry.inboundDevice(address) != null ||
             registry.outboundGatt(address) != null
 
-    private fun isPairedAddress(address: String): Boolean {
+    private fun isSquadMemberAddress(address: String): Boolean {
         val appId = applicationIdForAddress(address)
-        return appId != null && pairedDeviceIds().contains(appId)
+        return appId != null && squadDeviceIds().contains(appId)
     }
 
     private fun refreshLinkState(address: String, disconnectedState: BleLinkState) {
@@ -725,22 +696,24 @@ class AndroidBleConnectionManager(
         }
     }
 
-    private fun rememberPairedPeer(identifier: String, address: String) {
+    private fun rememberSquadMember(identifier: String, address: String) {
         val appId = BlePeerAddressRegistry.applicationIdFor(address) ?: identifier
-        val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
+        val ids = squadDeviceIds().toMutableSet()
         ids.add(appId)
         prefs.edit()
-            .putStringSet(PAIRED_IDS_KEY, ids)
+            .putStringSet(SQUAD_IDS_KEY, ids)
+            .remove(LEGACY_PAIRED_IDS_KEY)
             .putString(PREF_ADDRESS_PREFIX + appId, address)
             .apply()
         BlePeerAddressRegistry.remember(appId, address)
     }
 
-    private fun forgetPairedPeer(appId: String) {
-        val ids = prefs.getStringSet(PAIRED_IDS_KEY, emptySet())?.toMutableSet() ?: return
+    private fun forgetSquadMember(appId: String) {
+        val ids = squadDeviceIds().toMutableSet()
         if (ids.remove(appId)) {
             prefs.edit()
-                .putStringSet(PAIRED_IDS_KEY, ids)
+                .putStringSet(SQUAD_IDS_KEY, ids)
+                .remove(LEGACY_PAIRED_IDS_KEY)
                 .remove(PREF_ADDRESS_PREFIX + appId)
                 .apply()
         }
@@ -748,7 +721,8 @@ class AndroidBleConnectionManager(
 
     private fun stateFlow(address: String): MutableStateFlow<BleLinkState> = states.computeIfAbsent(address) { MutableStateFlow(initialState(address)) }
     private fun setState(address: String, state: BleLinkState) { stateFlow(address).value = state }
-    private fun initialState(address: String): BleLinkState = try { if (deviceForAddress(address)?.bondState == BluetoothDevice.BOND_BONDED) BleLinkState.PAIRED else BleLinkState.NOT_PAIRED } catch (_: Exception) { BleLinkState.NOT_PAIRED }
+    private fun initialState(address: String): BleLinkState =
+        if (hasDirectConnection(address)) BleLinkState.CONNECTED else BleLinkState.AVAILABLE
     private fun deviceForAddress(identifier: String): BluetoothDevice? {
         if (!hasConnectPermission()) return null
         return try {
@@ -768,7 +742,8 @@ class AndroidBleConnectionManager(
     companion object {
         private const val TAG = "AndroidBleConnection"
         private const val PREFS_NAME = "itantra_ble_links"
-        private const val PAIRED_IDS_KEY = "paired_device_ids"
+        private const val SQUAD_IDS_KEY = "squad_device_ids"
+        private const val LEGACY_PAIRED_IDS_KEY = "paired_device_ids"
         private const val PREF_ADDRESS_PREFIX = "address_"
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
