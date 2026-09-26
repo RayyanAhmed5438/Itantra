@@ -25,6 +25,8 @@ class BleConnectionRegistry {
 
     private val rawIncomingListeners = java.util.concurrent.CopyOnWriteArrayList<(String, ByteArray) -> Unit>()
     private val connectionListeners = java.util.concurrent.CopyOnWriteArrayList<ConnectionListener>()
+    private val controlIncomingListeners = java.util.concurrent.CopyOnWriteArrayList<(String, ByteArray) -> Unit>()
+    private val controlSenders = java.util.concurrent.CopyOnWriteArrayList<(String, ByteArray) -> Boolean>()
 
     interface ConnectionListener {
         fun onInboundConnected(device: BluetoothDevice)
@@ -47,10 +49,32 @@ class BleConnectionRegistry {
         rawIncomingListeners.remove(listener)
     }
 
-    /** Called by whatever holds the outbound BluetoothGattCallback when a
-     *  peer notifies this device (this device acting as GATT client) of
-     *  new data — not yet wired up, since outbound connection code hasn't
-     *  been written yet. Every registered listener gets the raw fragment. */
+    fun addControlIncomingListener(listener: (String, ByteArray) -> Unit) {
+        controlIncomingListeners.add(listener)
+    }
+
+    fun removeControlIncomingListener(listener: (String, ByteArray) -> Unit) {
+        controlIncomingListeners.remove(listener)
+    }
+
+    fun dispatchControlIncoming(peerAddress: String, data: ByteArray) {
+        controlIncomingListeners.forEach { it(peerAddress, data) }
+    }
+
+    fun addControlSender(sender: (String, ByteArray) -> Boolean) {
+        controlSenders.add(sender)
+    }
+
+    fun removeControlSender(sender: (String, ByteArray) -> Boolean) {
+        controlSenders.remove(sender)
+    }
+
+    fun sendControl(peerAddress: String, data: ByteArray): Boolean =
+        controlSenders.any { sender ->
+            runCatching { sender(peerAddress, data) }.getOrDefault(false)
+        }
+
+    /** Raw packet data arriving through the outbound GATT client role. */
     fun dispatchRawIncoming(peerAddress: String, fragment: ByteArray) {
         rawIncomingListeners.forEach { it(peerAddress, fragment) }
     }
