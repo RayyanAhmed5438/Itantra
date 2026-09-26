@@ -63,13 +63,16 @@ class AndroidBleConnectionManager(
 
     private val controlSender: (String, ByteArray) -> Boolean = { address, data ->
         val gatt = gattClients[address]
-        val characteristic = gatt
-            ?.getService(BleRadioTransport.GATT_SERVICE_UUID)
-            ?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
-
-        if (characteristic == null) {
+        if (gatt == null) {
             false
         } else {
+            val characteristic = gatt
+                .getService(BleRadioTransport.GATT_SERVICE_UUID)
+                ?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
+
+            if (characteristic == null) {
+                false
+            } else {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     gatt.writeCharacteristic(
@@ -84,6 +87,7 @@ class AndroidBleConnectionManager(
                 }
             } catch (_: Exception) {
                 false
+            }
             }
         }
     }
