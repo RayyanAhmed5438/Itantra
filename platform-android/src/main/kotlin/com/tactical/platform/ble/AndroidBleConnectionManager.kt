@@ -391,6 +391,26 @@ class AndroidBleConnectionManager(
                 private fun isCurrentGatt(gatt: BluetoothGatt): Boolean =
                     pending[resolvedAddress] === completion || gattClients[resolvedAddress] === gatt
 
+                private fun startServiceDiscovery(gatt: BluetoothGatt) {
+                    if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
+                    serviceDiscoveryStarted = true
+                    android.util.Log.d(
+                        TAG,
+                        "GATT connected, discovering services for " + resolvedAddress
+                    )
+                    val started = try {
+                        gatt.discoverServices()
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (!started) {
+                        failConnection(
+                            gatt,
+                            "GATT service discovery could not start"
+                        )
+                    }
+                }
+
                 override fun onConnectionStateChange(
                     gatt: BluetoothGatt,
                     status: Int,
@@ -412,26 +432,6 @@ class AndroidBleConnectionManager(
                                 " for " + resolvedAddress
                         )
 
-                        fun startServiceDiscovery() {
-                            if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
-                            serviceDiscoveryStarted = true
-                            android.util.Log.d(
-                                TAG,
-                                "GATT connected, discovering services for " + resolvedAddress
-                            )
-                            val started = try {
-                                gatt.discoverServices()
-                            } catch (_: Exception) {
-                                false
-                            }
-                            if (!started) {
-                                failConnection(
-                                    gatt,
-                                    "GATT service discovery could not start"
-                                )
-                            }
-                        }
-
                         val mtuRequestStarted = try {
                             gatt.requestMtu(DESIRED_MTU)
                         } catch (_: Exception) {
@@ -439,11 +439,11 @@ class AndroidBleConnectionManager(
                         }
 
                         if (!mtuRequestStarted) {
-                            startServiceDiscovery()
+                            startServiceDiscovery(gatt)
                         } else {
                             reconnectScope.launch {
                                 delay(MTU_NEGOTIATION_FALLBACK_MS)
-                                startServiceDiscovery()
+                                startServiceDiscovery(gatt)
                             }
                         }
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
