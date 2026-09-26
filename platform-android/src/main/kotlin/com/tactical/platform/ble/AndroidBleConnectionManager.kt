@@ -45,8 +45,7 @@ import java.util.concurrent.ConcurrentHashMap
 class AndroidBleConnectionManager(
     private val context: Context,
     private val registry: BleConnectionRegistry,
-    private val localDeviceId: String,
-    private val localCallsignProvider: () -> String
+    private val localDeviceId: String
 ) : BleConnectionManager, BleConnectionRegistry.ConnectionListener {
 
     private val states = ConcurrentHashMap<String, MutableStateFlow<BleLinkState>>()
@@ -94,6 +93,7 @@ class AndroidBleConnectionManager(
 
     override fun pendingSquadRequests(): StateFlow<List<SquadRequest>> =
         _pendingSquadRequests.asStateFlow()
+
     private val reconnectScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val prefs by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
