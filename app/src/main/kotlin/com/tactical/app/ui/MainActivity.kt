@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
             ensureWirelessEnabled()
             ensureVoiceModeIfPermissionGranted()
         } else {
-            wirelessWarning.value = ui.text(UiTextKey.BLUETOOTH_MIC_PERMISSIONS)
+            wirelessWarning.value = com.tactical.app.ui.i18n.UiStrings.forCode(viewModel.uiState.value.uiLanguageCode).text(UiTextKey.BLUETOOTH_MIC_PERMISSIONS)
         }
     }
 
@@ -400,7 +400,7 @@ class MainActivity : ComponentActivity() {
         wirelessWarning.value = if (bluetoothOn) {
             null
         } else {
-            ui.text(UiTextKey.BLUETOOTH_OFF)
+            com.tactical.app.ui.i18n.UiStrings.forCode(viewModel.uiState.value.uiLanguageCode).text(UiTextKey.BLUETOOTH_OFF)
         }
 
         if (bluetoothOn) {
