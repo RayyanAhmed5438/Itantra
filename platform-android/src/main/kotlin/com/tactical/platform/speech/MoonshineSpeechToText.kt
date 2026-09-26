@@ -1,15 +1,13 @@
 package com.tactical.platform.speech
 
-import ai.moonshine.voice.AssetDownloader
 import ai.moonshine.voice.JNI
-import ai.moonshine.voice.ModelSpec
-import android.content.Context
+import ai.moonshine.voice.Transcriber
+import ai.moonshine.voice.TranscriptEvent
 import com.tactical.domain.audio.AudioFrame
 import com.tactical.domain.speech.TranscriptionChunk
 import com.tactical.platform.api.speech.SpeechToText
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
@@ -24,13 +22,14 @@ import javax.inject.Singleton
 /**
  * English-only offline STT using Moonshine Tiny Streaming.
  *
- * The model is installed lazily into app-private storage on first English STT
- * use. After installation, transcription is fully offline and the native
- * transcriber remains lazily cached until the selected STT language changes.
+ * The existing AudioRecorder remains the audio source. PCM16 mono frames are
+ * converted to normalized float samples and fed directly to Moonshine's
+ * low-level streaming Transcriber, so PTT/VOX does not need a second
+ * microphone pipeline.
  */
 @Singleton
 class MoonshineSpeechToText @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val modelStore: MoonshineSttModelStore
 ) : SpeechToText {
 
     private val loadMutex = Mutex()
@@ -53,9 +52,10 @@ class MoonshineSpeechToText @Inject constructor(
             return@callbackFlow
         }
 
-        val listener = Consumer<ai.moonshine.voice.TranscriptEvent> { event ->
+        val listener = Consumer<TranscriptEvent> { event ->
             when (event) {
-                is ai.moonshine.voice.TranscriptEvent.LineTextChanged -> {
+                is TranscriptEvent.LineTextChanged -> {
+                    android.util.Log.d(TAG, "STT partial: " + event.line.text.orEmpty())
                     trySend(
                         TranscriptionChunk(
                             text = event.line.text.orEmpty(),
@@ -65,7 +65,8 @@ class MoonshineSpeechToText @Inject constructor(
                     )
                 }
 
-                is ai.moonshine.voice.TranscriptEvent.LineCompleted -> {
+                is TranscriptEvent.LineCompleted -> {
+                    android.util.Log.d(TAG, "STT FINAL: " + event.line.text.orEmpty())
                     trySend(
                         TranscriptionChunk(
                             text = event.line.text.orEmpty(),
@@ -75,7 +76,8 @@ class MoonshineSpeechToText @Inject constructor(
                     )
                 }
 
-                is ai.moonshine.voice.TranscriptEvent.Error -> {
+                is TranscriptEvent.Error -> {
+                    android.util.Log.e(TAG, "STT error", event.cause)
                     close(event.cause)
                 }
             }
@@ -84,8 +86,10 @@ class MoonshineSpeechToText @Inject constructor(
         transcriber.addListener(listener)
 
         try {
+            android.util.Log.d(TAG, "STT stream starting")
             transcriber.startStream(streamHandle)
 
+            var frameCount = 0
             audio.collect { frame ->
                 val samples = pcm16ToFloat(frame.data)
                 if (samples.isNotEmpty()) {
@@ -94,11 +98,18 @@ class MoonshineSpeechToText @Inject constructor(
                         samples,
                         SAMPLE_RATE_HZ
                     )
+                    frameCount++
+                    if (frameCount == 1) {
+                        android.util.Log.d(TAG, "STT received first audio frame: samples=" + samples.size)
+                    }
                 }
             }
+
+            android.util.Log.d(TAG, "STT audio ended after " + frameCount + " frames")
         } catch (t: Throwable) {
             close(t)
         } finally {
+            android.util.Log.d(TAG, "Stopping STT stream")
             runCatching {
                 transcriber.stopStream(streamHandle)
             }.onFailure { stopError ->
@@ -107,8 +118,12 @@ class MoonshineSpeechToText @Inject constructor(
                 }
             }
 
-            runCatching { transcriber.removeListener(listener) }
-            runCatching { transcriber.freeStream(streamHandle) }
+            runCatching {
+                transcriber.removeListener(listener)
+            }
+            runCatching {
+                transcriber.freeStream(streamHandle)
+            }
             close()
         }
 
@@ -117,13 +132,13 @@ class MoonshineSpeechToText @Inject constructor(
 
     fun close() {
         loadMutex.tryLock().let { locked ->
-            if (!locked) return
-
-            try {
-                runCatching { cachedTranscriber?.close() }
-                cachedTranscriber = null
-            } finally {
-                loadMutex.unlock()
+            if (locked) {
+                try {
+                    runCatching { cachedTranscriber?.close() }
+                    cachedTranscriber = null
+                } finally {
+                    loadMutex.unlock()
+                }
             }
         }
     }
@@ -131,24 +146,7 @@ class MoonshineSpeechToText @Inject constructor(
     private suspend fun loadTranscriber(): Transcriber =
         loadMutex.withLock {
             cachedTranscriber ?: run {
-                val modelDir = withContext(Dispatchers.IO) {
-                    context.filesDir.resolve("moonshine/stt-tiny-en").apply {
-                        mkdirs()
-                    }
-                }
-
-                // Supported Moonshine model acquisition path. The first English
-                // transcription downloads only the requested Tiny Streaming
-                // model; subsequent launches reuse the files already on disk.
-                AssetDownloader().ensureModelPresent(
-                    modelDir,
-                    ModelSpec.stt(
-                        LANGUAGE_CODE,
-                        JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING,
-                        false
-                    ),
-                    null
-                )
+                val modelDir = modelStore.ensureBundledModelAvailable()
 
                 Transcriber().also {
                     it.setUpdateInterval(UPDATE_INTERVAL_SECONDS)
@@ -182,6 +180,7 @@ class MoonshineSpeechToText @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "MoonshineSpeechToText"
         private const val LANGUAGE_CODE = "en"
         private const val SAMPLE_RATE_HZ = 16_000
         private const val PCM16_BYTES_PER_SAMPLE = 2
