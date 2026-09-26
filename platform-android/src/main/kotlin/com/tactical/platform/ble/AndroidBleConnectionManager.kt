@@ -22,6 +22,7 @@ import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.api.ble.BleConnectionManager
 import com.tactical.platform.api.ble.BleDiagnostics
 import com.tactical.platform.api.ble.BleLinkState
+import com.tactical.platform.api.ble.SquadRequest
 import com.tactical.platform.radio.BleConnectionRegistry
 import com.tactical.platform.radio.BleRadioTransport
 import kotlinx.coroutines.CompletableDeferred
@@ -34,6 +35,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -43,7 +45,8 @@ import java.util.concurrent.ConcurrentHashMap
 class AndroidBleConnectionManager(
     private val context: Context,
     private val registry: BleConnectionRegistry,
-    private val localDeviceId: String
+    private val localDeviceId: String,
+    private val localCallsignProvider: () -> String
 ) : BleConnectionManager, BleConnectionRegistry.ConnectionListener {
 
     private val states = ConcurrentHashMap<String, MutableStateFlow<BleLinkState>>()
@@ -51,6 +54,42 @@ class AndroidBleConnectionManager(
     private val gattClients = ConcurrentHashMap<String, BluetoothGatt>()
     private val rssiStates = ConcurrentHashMap<String, MutableStateFlow<Int?>>()
     private val rssiJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    private val pendingSquadRequestsById = ConcurrentHashMap<String, SquadRequest>()
+    private val _pendingSquadRequests = MutableStateFlow<List<SquadRequest>>(emptyList())
+
+    private val controlIncomingListener: (String, ByteArray) -> Unit = { address, data ->
+        handleControlMessage(address, data)
+    }
+
+    private val controlSender: (String, ByteArray) -> Boolean = { address, data ->
+        val gatt = gattClients[address]
+        val characteristic = gatt
+            ?.getService(BleRadioTransport.GATT_SERVICE_UUID)
+            ?.getCharacteristic(BleRadioTransport.PACKET_CHARACTERISTIC_UUID)
+
+        if (characteristic == null) {
+            false
+        } else {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    gatt.writeCharacteristic(
+                        characteristic,
+                        data,
+                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    ) == BluetoothStatusCodes.SUCCESS
+                } else {
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    characteristic.value = data
+                    gatt.writeCharacteristic(characteristic)
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    override fun pendingSquadRequests(): StateFlow<List<SquadRequest>> =
+        _pendingSquadRequests.asStateFlow()
     private val reconnectScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val prefs by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -90,6 +129,8 @@ class AndroidBleConnectionManager(
 
     init {
         registry.addConnectionListener(this)
+        registry.addControlIncomingListener(controlIncomingListener)
+        registry.addControlSender(controlSender)
 
         // Startup GATT can race with the peer's GATT server initialization.
         // Retry quietly every 10 seconds; established sessions are left alone.
