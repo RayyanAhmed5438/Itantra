@@ -210,7 +210,7 @@ fun MessagesScreen(
             } else {
                 TextButton(onClick = { enterSelection() }) {
                     Text(
-                        "SELECT",
+                        LocalUiStrings.current.text(UiTextKey.SELECT),
                         color = SquadBlueGlow,
                         fontWeight = FontWeight.Bold
                     )
@@ -400,7 +400,7 @@ fun MessagesScreen(
             onDismissRequest = { showDeleteConfirmation = false },
             title = {
                 Text(
-                    "Delete messages?",
+                    LocalUiStrings.current.text(UiTextKey.DELETE_MESSAGES),
                     color = Color.White
                 )
             },
