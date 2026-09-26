@@ -6,5 +6,7 @@ object ProtocolConstants {
     const val DEFAULT_TTL = 5
     const val MAX_HOPS = 10
     const val BEACON_INTERVAL_MS = 2000L
-    const val MAX_PACKET_SIZE = 1024
+    // Mesh packets may be fragmented over BLE. Keep the protocol envelope
+    // bounded, but large enough for long multilingual voice transcriptions.
+    const val MAX_PACKET_SIZE = 8192
 }
