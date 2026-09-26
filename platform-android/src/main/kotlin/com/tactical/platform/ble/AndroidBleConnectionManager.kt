@@ -149,6 +149,12 @@ class AndroidBleConnectionManager(
                 }.getOrNull()
 
                 if (adapter?.isEnabled == true) {
+                    // Retry any unanswered squad request at a controlled
+                    // cadence instead of requiring the user to spam ADD TO
+                    // SQUAD. Accepted/rejected requests are removed from this
+                    // map by handleControlMessage().
+                    retryPendingSquadRequests()
+
                     squadDeviceIds().forEach { id ->
                         runCatching { reconnectWithRoleStagger(id) }
                     }
@@ -186,8 +192,22 @@ class AndroidBleConnectionManager(
         }
 
         // Record the outstanding request before transmitting it so an
-        // extremely fast ACCEPT/REJECT cannot race this bookkeeping.
-        outgoingSquadRequestAddresses[appId] = resolvedAddress
+        // extremely fast ACCEPT/REJECT cannot race this bookkeeping. Duplicate
+        // taps while the request is pending become a no-op; the background
+        // retry loop handles transient delivery loss.
+        val existingRequestAddress =
+            outgoingSquadRequestAddresses.putIfAbsent(appId, resolvedAddress)
+        if (existingRequestAddress != null) {
+            if (existingRequestAddress != resolvedAddress) {
+                outgoingSquadRequestAddresses[appId] = resolvedAddress
+            } else {
+                android.util.Log.d(
+                    TAG,
+                    "Squad request already pending for " + appId
+                )
+                return TacticalResult.Success(Unit)
+            }
+        }
 
         delay(100L)
         val sent = registry.sendControl(
