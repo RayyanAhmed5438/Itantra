@@ -2,6 +2,7 @@ package com.tactical.platform.api.ble
 
 import com.tactical.domain.result.TacticalResult
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * BLE physical-link management plus app-level squad membership.
@@ -11,8 +12,14 @@ import kotlinx.coroutines.flow.Flow
  * Bluetooth bonding/pairing.
  */
 interface BleConnectionManager {
-    /** Add an iTantra peer to this device's application-level squad. */
+    /** Send an application-level squad request; membership changes only after approval. */
     suspend fun addToSquad(deviceAddress: String): TacticalResult<Unit>
+
+    /** Requests waiting for local user approval. */
+    fun pendingSquadRequests(): StateFlow<List<SquadRequest>>
+
+    /** Approve or reject an incoming squad request. */
+    suspend fun respondToSquadRequest(deviceId: String, approve: Boolean): TacticalResult<Unit>
 
     /** Remove an iTantra peer from the application-level squad. */
     suspend fun removeFromSquad(deviceAddress: String)
@@ -37,6 +44,11 @@ interface BleConnectionManager {
 
     fun diagnostics(): Flow<BleDiagnostics>
 }
+
+data class SquadRequest(
+    val deviceId: String,
+    val callsign: String
+)
 
 data class BleDiagnostics(
     val advertisingOk: Boolean,
