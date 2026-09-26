@@ -60,6 +60,8 @@ private val OUTGOING_LANGUAGES = listOf(
 fun SettingsScreen(
     selectedLanguageCode: String,
     languageLoadingCode: String?,
+    uiLanguageCode: String,
+    onUiLanguageSelected: (String) -> Unit,
     onLanguageSelected: (String) -> Unit,
     ttsPlaybackMode: com.tactical.platform.speech.mms.MmsTtsPlaybackMode,
     onTtsPlaybackModeSelected: (com.tactical.platform.speech.mms.MmsTtsPlaybackMode) -> Unit,
