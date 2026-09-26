@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var showSettings by remember { mutableStateOf(false) }
+                val squadTheme = !showSettings && selectedTab == 1
 
                 Scaffold(
                         topBar = {
@@ -118,7 +119,11 @@ class MainActivity : ComponentActivity() {
                                                 Modifier.width(6.dp)
                                             )
                                             Surface(
-                                                color = Color(0xFF3A1414),
+                                                color = if (squadTheme) {
+                                                    com.tactical.app.ui.theme.SquadBlueSurface
+                                                } else {
+                                                    Color(0xFF3A1414)
+                                                },
                                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
                                             ) {
                                                 Text(
@@ -147,7 +152,11 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = RedTacticalBackground,
+                                    containerColor = if (squadTheme) {
+                                        com.tactical.app.ui.theme.SquadBlueBackground
+                                    } else {
+                                        RedTacticalBackground
+                                    },
                                     titleContentColor = Color.White
                                 )
                             )
@@ -157,11 +166,16 @@ class MainActivity : ComponentActivity() {
                                 AppBottomNavigation(
                                     selectedTab = selectedTab,
                                     unreadMessageCount = state.unreadMessageCount,
-                                    onTabSelected = { tab -> selectedTab = tab }
+                                    onTabSelected = { tab -> selectedTab = tab },
+                                    squadTheme = squadTheme
                                 )
                             }
                         },
-                        containerColor = RedTacticalBackground
+                        containerColor = if (squadTheme) {
+                            com.tactical.app.ui.theme.SquadBlueBackground
+                        } else {
+                            RedTacticalBackground
+                        }
                     ) { padding ->
                         Box(
                             Modifier
@@ -188,6 +202,7 @@ class MainActivity : ComponentActivity() {
                                 1 -> SquadScreen(
                                     uiState = state,
                                     onRefresh = viewModel::forceDiscovery,
+                                    onLanguageSelected = viewModel::setSelectedLanguage,
                                     onPttToggle = {
                                         viewModel.setPttEnabled(!state.pttEnabled)
                                     },
