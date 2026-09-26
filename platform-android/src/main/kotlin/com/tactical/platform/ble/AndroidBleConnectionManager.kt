@@ -389,8 +389,32 @@ class AndroidBleConnectionManager(
         return try {
             val callback = object : BluetoothGattCallback() {
 
+                private var serviceDiscoveryStarted = false
+
                 private fun isCurrentGatt(gatt: BluetoothGatt): Boolean =
                     pending[resolvedAddress] === completion || gattClients[resolvedAddress] === gatt
+
+                private fun startServiceDiscovery(gatt: BluetoothGatt) {
+                    if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
+                    serviceDiscoveryStarted = true
+                    android.util.Log.d(
+                        TAG,
+                        "GATT connected, discovering services for " + resolvedAddress
+                    )
+
+                    val started = try {
+                        gatt.discoverServices()
+                    } catch (_: Exception) {
+                        false
+                    }
+
+                    if (!started) {
+                        failConnection(
+                            gatt,
+                            "GATT service discovery could not start"
+                        )
+                    }
+                }
 
                 override fun onConnectionStateChange(
                     gatt: BluetoothGatt,
@@ -407,30 +431,6 @@ class AndroidBleConnectionManager(
                     ) {
                         setState(resolvedAddress, BleLinkState.CONNECTING)
 
-                        var serviceDiscoveryStarted = false
-
-                        fun startServiceDiscovery() {
-                            if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
-                            serviceDiscoveryStarted = true
-                            android.util.Log.d(
-                                TAG,
-                                "GATT connected, discovering services for " + resolvedAddress
-                            )
-
-                            val started = try {
-                                gatt.discoverServices()
-                            } catch (_: Exception) {
-                                false
-                            }
-
-                            if (!started) {
-                                failConnection(
-                                    gatt,
-                                    "GATT service discovery could not start"
-                                )
-                            }
-                        }
-
                         android.util.Log.d(
                             TAG,
                             "GATT connected, requesting MTU $DESIRED_MTU for " + resolvedAddress
@@ -443,7 +443,7 @@ class AndroidBleConnectionManager(
                         }
 
                         if (!mtuRequestStarted) {
-                            startServiceDiscovery()
+                            startServiceDiscovery(gatt)
                         } else {
                             // Some OEM stacks accept requestMtu() but fail to
                             // deliver the callback. Never block the connection
@@ -682,6 +682,8 @@ class AndroidBleConnectionManager(
                                     ", status=" + status
                             )
                         }
+
+                        startServiceDiscovery(gatt)
                     }
                 }
             }
