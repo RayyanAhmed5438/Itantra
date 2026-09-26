@@ -97,7 +97,9 @@ class BleConnectionRegistry {
         if (inboundDevices.remove(device.address) != null) {
             connectionListeners.forEach { it.onInboundDisconnected(device) }
         }
-        negotiatedMtu.remove(device.address)
+        if (!outboundGatts.containsKey(device.address)) {
+            negotiatedMtu.remove(device.address)
+        }
     }
 
     fun registerOutboundConnection(gatt: BluetoothGatt) {
@@ -106,7 +108,9 @@ class BleConnectionRegistry {
 
     fun unregisterOutboundConnection(address: String) {
         outboundGatts.remove(address)
-        negotiatedMtu.remove(address)
+        if (!inboundDevices.containsKey(address)) {
+            negotiatedMtu.remove(address)
+        }
     }
 
     fun onMtuNegotiated(address: String, mtu: Int) {
