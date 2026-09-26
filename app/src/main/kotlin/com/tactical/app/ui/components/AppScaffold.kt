@@ -72,7 +72,7 @@ fun AppBottomNavigation(
                 }
             },
             label = { Text("MESSAGES") },
-            colors = navigationColors()
+            colors = navigationColors(squadTheme)
         )
     }
 }
