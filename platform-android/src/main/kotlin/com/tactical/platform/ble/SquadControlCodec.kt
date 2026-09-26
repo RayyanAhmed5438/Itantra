@@ -18,7 +18,6 @@ internal object SquadControlCodec {
     private const val TYPE_ACCEPT: Byte = 3
     private const val TYPE_REJECT: Byte = 4
     private const val TYPE_REMOVE: Byte = 5
-    private const val TYPE_SQUAD_MEMBER: Byte = 6
 
     private const val FRAME_BYTES = 20
     private const val HEADER_BYTES = 4
@@ -34,7 +33,6 @@ internal object SquadControlCodec {
             val accepted: Boolean
         ) : Message
         data class Remove(override val deviceId: String) : Message
-        data class SquadMember(override val deviceId: String) : Message
     }
 
     fun hello(deviceId: String): ByteArray =
@@ -48,9 +46,6 @@ internal object SquadControlCodec {
 
     fun remove(deviceId: String): ByteArray =
         encode(TYPE_REMOVE, deviceId)
-
-    fun squadMember(deviceId: String): ByteArray =
-        encode(TYPE_SQUAD_MEMBER, deviceId)
 
     fun decode(bytes: ByteArray): Message? {
         if (bytes.size != FRAME_BYTES) return null
@@ -66,7 +61,6 @@ internal object SquadControlCodec {
                 TYPE_ACCEPT -> Message.Response(readUuid(buffer), true)
                 TYPE_REJECT -> Message.Response(readUuid(buffer), false)
                 TYPE_REMOVE -> Message.Remove(readUuid(buffer))
-                TYPE_SQUAD_MEMBER -> Message.SquadMember(readUuid(buffer))
                 else -> null
             }
         }.getOrNull()
