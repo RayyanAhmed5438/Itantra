@@ -366,16 +366,13 @@ class MainViewModel @Inject constructor(
                         if (observedPeerIds.add(peer.deviceAddress)) {
                             observePeerState(peer.deviceAddress)
                         }
+                    }
 
-                        // Nearby devices remain AVAILABLE until the user sends
-                        // an application-level squad request. Squad members are
-                        // reconnected automatically by AndroidBleConnectionManager.
                     val squadIds = bleConnectionManager.squadDeviceIds()
                     val squadById = state.squadPeers.associateBy { it.deviceAddress }
                     val currentSquad = squadIds.mapNotNull { id ->
                         peers.firstOrNull { it.deviceAddress == id } ?: squadById[id]
                     }
-
                     state.copy(
                         squadPeers = currentSquad,
                         availablePeers = peers.filter { it.deviceAddress !in squadIds }
