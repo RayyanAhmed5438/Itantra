@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import com.tactical.platform.speech.SpeechLanguagePreferences
+import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.platform.speech.mms.MmsTtsModelStore
@@ -29,23 +30,42 @@ class TacticalApplication : Application() {
     @Inject
     lateinit var ttsModelStore: MmsTtsModelStore
 
-    private val ttsPreloadScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Inject
+    lateinit var routingSpeechToText: RoutingSpeechToText
+
+    private val speechPreloadScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         cleanupSpeechExtractionCache()
         ttsModelStore.cleanupUnbundledModels()
         createNotificationChannels()
-        preloadSelectedTtsLanguage()
+        preloadSpeechModels()
     }
 
-    private fun preloadSelectedTtsLanguage() {
-        val language = MmsTtsLanguage.fromIsoCode(
-            speechLanguagePreferences.selectedLanguageCode
-        ) ?: return
+    /**
+     * Speech startup order matters for PTT responsiveness: preload the
+     * currently selected STT backend first, then preload TTS.
+     *
+     * Only one STT backend is kept live at a time; the selected language is
+     * resolved from the persisted outgoing-language preference.
+     */
+    private fun preloadSpeechModels() {
+        speechPreloadScope.launch {
+            runCatching {
+                routingSpeechToText.preloadSelectedLanguage()
+            }.onFailure { error ->
+                android.util.Log.w(
+                    "TacticalApplication",
+                    "STT preload failed: " + (error.message ?: error.javaClass.simpleName)
+                )
+            }
 
-        ttsPreloadScope.launch {
+            val language = MmsTtsLanguage.fromIsoCode(
+                speechLanguagePreferences.selectedLanguageCode
+            ) ?: return@launch
+
             runCatching {
                 ttsEngineProvider.get().preload(language)
             }.onFailure { error ->
