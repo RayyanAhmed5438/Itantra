@@ -182,7 +182,7 @@ private fun EmergencySosButton(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Send alert with your location and critical message",
+            text = LocalUiStrings.current.text(UiTextKey.SEND_ALERT),
             color = Color.White.copy(alpha = 0.88f),
             fontSize = 10.sp,
             lineHeight = 12.sp,
@@ -357,9 +357,9 @@ private fun EmptyDevicesState(isScanning: Boolean) {
             Spacer(Modifier.height(10.dp))
             Text(
                 text = if (isScanning) {
-                    "Looking for nearby iTantra devices"
+                    LocalUiStrings.current.text(UiTextKey.LOOKING_NEARBY)
                 } else {
-                    "No devices found yet"
+                    LocalUiStrings.current.text(UiTextKey.NO_DEVICES)
                 },
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
