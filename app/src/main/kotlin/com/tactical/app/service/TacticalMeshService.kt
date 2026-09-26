@@ -204,27 +204,11 @@ class TacticalMeshService : Service() {
         discoveryConnectionJob = serviceScope.launch {
             try {
                 discoveryService.start()
-
-                // Every nearby iTantra device may establish a GATT session
-                // without Android Bluetooth bonding. To avoid two phones
-                // initiating the same link simultaneously, the device with
-                // the lexicographically smaller stable iTantra ID initiates.
-                discoveryService.peers().collect { devices ->
-                    devices.forEach { peer ->
-                        val peerId = peer.id.value
-                        if (
-                            peerId.isNotBlank() &&
-                            peerId != identityStore.deviceIdValue &&
-                            identityStore.deviceIdValue < peerId
-                        ) {
-                            launch {
-                                runCatching {
-                                    bleConnectionManager.connect(peerId)
-                                }
-                            }
-                        }
-                    }
-                }
+                // Keep the foreground service's discovery alive even when the
+                // Activity is not running. Physical GATT reconnection is handled
+                // only for saved squad members by BleConnectionManager.
+                (discoveryService as? com.tactical.engine.discovery.service.DefaultDiscoveryService)
+                    ?.startDiscovery()
             } catch (e: SecurityException) {
                 android.util.Log.e(
                     "TacticalMeshService",
