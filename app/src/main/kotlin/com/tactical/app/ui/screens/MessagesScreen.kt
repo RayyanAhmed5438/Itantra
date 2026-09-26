@@ -24,6 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.tactical.app.ui.ChatMessageUi
 import com.tactical.app.ui.MainUiState
 import com.tactical.app.ui.components.EmergencyAlertDialog
@@ -43,6 +47,16 @@ fun MessagesScreen(
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+
+    // Refresh relative timestamps while this screen is visible.
+    var currentTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTimeMs = System.currentTimeMillis()
+            delay(15_000L)
+        }
+    }
+
 
     // The Messages destination is only composed while it is visible, so
     // entering this screen (and receiving a new message while it stays open)
@@ -125,7 +139,7 @@ fun MessagesScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(RedTacticalBackground)
+            .background(SquadBlueBackground)
             .padding(20.dp)
             .imePadding()
             .navigationBarsPadding()
@@ -162,7 +176,7 @@ fun MessagesScreen(
                         } else {
                             "SELECT ALL"
                         },
-                        color = RedTacticalPrimaryBright,
+                        color = SquadBlueGlow,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -193,7 +207,7 @@ fun MessagesScreen(
                 TextButton(onClick = { enterSelection() }) {
                     Text(
                         "SELECT",
-                        color = RedTacticalPrimaryBright,
+                        color = SquadBlueGlow,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -204,8 +218,12 @@ fun MessagesScreen(
 
         TabRow(
             selectedTabIndex = selectedTab,
-            containerColor = RedTacticalBackground,
-            contentColor = Color.White
+            containerColor = SquadBlueBackground,
+            contentColor = Color.White,
+            divider = { HorizontalDivider(color = SquadBlueBorder) },
+            indicator = {
+                TabRowDefaults.SecondaryIndicator(color = SquadBluePrimary)
+            }
         ) {
             Tab(
                 selected = selectedTab == 0,
@@ -215,7 +233,7 @@ fun MessagesScreen(
                 },
                 text = {
                     Text(
-                        "CHAT",
+                        "CHAT / PPT MODE",
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
@@ -229,7 +247,7 @@ fun MessagesScreen(
                 },
                 text = {
                     Text(
-                        "CALL",
+                        "CALL MODE",
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
@@ -266,6 +284,7 @@ fun MessagesScreen(
             ) { _, message ->
                 MessageRow(
                     message = message,
+                    currentTimeMs = currentTimeMs,
                     isSent = message.sender == "YOU",
                     isSelectionMode = selectionMode,
                     isSelected = messageStorageKey(message) in selectedKeys,
@@ -300,12 +319,12 @@ fun MessagesScreen(
                     singleLine = false,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = RedTacticalSurface,
-                        unfocusedContainerColor = RedTacticalSurface,
+                        focusedContainerColor = SquadBlueSurface,
+                        unfocusedContainerColor = SquadBlueSurface,
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
-                        focusedBorderColor = RedTacticalPrimary,
-                        unfocusedBorderColor = RedTacticalSurfaceBorder
+                        focusedBorderColor = SquadBluePrimary,
+                        unfocusedBorderColor = SquadBlueBorder
                     ),
                     shape = RoundedCornerShape(14.dp)
                 )
@@ -324,7 +343,7 @@ fun MessagesScreen(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
                         tint = if (input.isNotBlank()) {
-                            RedTacticalPrimaryBright
+                            SquadBlueGlow
                         } else {
                             RedTacticalTextSecondary
                         }
@@ -378,7 +397,7 @@ fun MessagesScreen(
                 ) {
                     Text(
                         "DELETE",
-                        color = RedTacticalPrimaryBright,
+                        color = SquadBlueGlow,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -393,8 +412,24 @@ fun MessagesScreen(
                     )
                 }
             },
-            containerColor = RedTacticalSurface
+            containerColor = SquadBlueSurface
         )
+    }
+}
+
+private fun formatLiveMessageTimestamp(
+    message: ChatMessageUi,
+    nowMs: Long
+): String {
+    val timestamp = message.timestampEpochMs
+    if (timestamp <= 0L) return message.timestampText
+
+    val ageMs = (nowMs - timestamp).coerceAtLeast(0L)
+
+    return when {
+        ageMs < 60_000L -> "Just now"
+        ageMs < 3_600_000L -> "${ageMs / 60_000L} min ago"
+        else -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
     }
 }
 
@@ -408,6 +443,7 @@ private fun messageStorageKey(message: ChatMessageUi): String =
 @Composable
 private fun MessageRow(
     message: ChatMessageUi,
+    currentTimeMs: Long,
     isSent: Boolean,
     isSelectionMode: Boolean,
     isSelected: Boolean,
@@ -418,7 +454,7 @@ private fun MessageRow(
         isSelected -> RedTacticalPrimaryBright
         message.isAlert -> RedTacticalPrimaryBright
         message.isVoice -> RedTacticalVoiceOrange
-        else -> RedTacticalStatusGreen
+        else -> SquadBlueBorder
     }
 
     if (message.isAlert) {
@@ -427,7 +463,7 @@ private fun MessageRow(
                 containerColor = if (isSelected) {
                     Color(0xFF3A1414)
                 } else {
-                    RedTacticalSurface
+                    SquadBlueSurface
                 }
             ),
             shape = RoundedCornerShape(12.dp),
@@ -458,7 +494,7 @@ private fun MessageRow(
                         fontSize = 13.sp
                     )
                     Text(
-                        message.timestampText,
+                        formatLiveMessageTimestamp(message, currentTimeMs),
                         color = RedTacticalTextSecondary,
                         fontSize = 10.sp
                     )
@@ -507,7 +543,7 @@ private fun MessageRow(
                 containerColor = if (isSelected) {
                     Color(0xFF3A1414)
                 } else {
-                    RedTacticalSurface
+                    SquadBlueSurface
                 }
             ),
             shape = RoundedCornerShape(
@@ -557,7 +593,7 @@ private fun MessageRow(
                     }
 
                     Text(
-                        message.timestampText,
+                        formatLiveMessageTimestamp(message, currentTimeMs),
                         color = RedTacticalTextSecondary,
                         fontSize = 10.sp
                     )
@@ -611,16 +647,16 @@ private fun SelectionIndicator(
             .border(
                 width = 2.dp,
                 color = if (isSelected) {
-                    RedTacticalPrimaryBright
+                    SquadBlueGlow
                 } else {
-                    RedTacticalSurfaceBorder
+                    SquadBlueBorder
                 },
                 shape = RoundedCornerShape(50)
             )
             .then(
                 if (isSelected) {
                     Modifier.background(
-                        RedTacticalPrimaryBright,
+                        SquadBluePrimary,
                         RoundedCornerShape(50)
                     )
                 } else {
