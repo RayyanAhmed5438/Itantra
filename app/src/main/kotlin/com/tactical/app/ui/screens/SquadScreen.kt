@@ -584,7 +584,7 @@ fun SquadScreen(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "Continuous STT • sentence-by-sentence transmission",
+                                LocalUiStrings.current.text(UiTextKey.CALL_MODE_VOICE),
                                 color = Color(0xFF8EA8C0),
                                 fontSize = 10.sp
                             )
@@ -900,9 +900,9 @@ fun PeerCard(
                     Spacer(Modifier.height(3.dp))
                     Text(
                         if (peer.isConnected) {
-                            "Connected • " + peer.distanceText
+                            LocalUiStrings.current.text(UiTextKey.CONNECTED_DOT) + peer.distanceText
                         } else {
-                            "In squad • " + peer.distanceText
+                            LocalUiStrings.current.text(UiTextKey.IN_SQUAD_DOT) + peer.distanceText
                         },
                         color = if (peer.isConnected) {
                             RedTacticalStatusGreen
