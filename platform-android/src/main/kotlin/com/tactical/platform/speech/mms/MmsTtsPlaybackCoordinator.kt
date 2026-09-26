@@ -1,64 +1,66 @@
 package com.tactical.platform.speech.mms
 
-import kotlinx.coroutines.CompletableDeferred
+import com.tactical.domain.audio.AudioFrame
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Controls playback of incoming voice-message TTS without changing BLE or
- * message ordering.
+ * Coordinates incoming voice-message TTS.
  *
- * The queue stores only language/text playback jobs, not synthesized audio.
- * This keeps queued one-by-one messages from accumulating large audio buffers
- * in memory.
+ * Synthesis is always performed through the single shared MmsTtsEngine, which
+ * already serializes model inference. The coordinator pipelines that
+ * synthesis ahead of playback:
  *
- * In OVERLAPPING mode, each queued job is synthesized (the TTS engine still
- * serializes model inference) and its resulting AudioTrack may play while
- * another message is playing.
+ *   message 1: synthesize -> play
+ *   message 2:          synthesize -> wait/play
  *
- * In ONE_BY_ONE mode, a new job waits until all currently active playback
- * jobs have finished, then synthesizes and plays exactly one message.
+ * In ONE_BY_ONE mode, synthesized frames are played strictly in receive order.
+ * In OVERLAPPING mode, each synthesized frame starts playback immediately, so
+ * multiple AudioTracks may overlap.
  *
- * Changing modes never interrupts an AudioTrack that is already playing.
- * Messages received after the change follow the newly selected mode.
+ * Only a small number of synthesized frames are buffered at once, preventing
+ * a burst of long messages from consuming unbounded RAM. Mode changes never
+ * interrupt a currently playing AudioTrack; messages that have not started
+ * playback yet follow the mode active when they are dispatched.
  */
 @Singleton
-class MmsTtsPlaybackCoordinator @Inject constructor() {
+class MmsTtsPlaybackCoordinator @Inject constructor(
+    private val ttsEngine: MmsTtsEngine
+) {
 
-    private val queue = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+    private data class Request(
+        val language: MmsTtsLanguage,
+        val text: String
+    )
+
+    private data class Synthesized(
+        val frame: AudioFrame,
+        val sampleRate: Int
+    )
+
+    private val requestQueue = Channel<Request>(Channel.UNLIMITED)
+
+    // Keep a small RAM buffer so the next message can be synthesized while the
+    // current message is playing, without allowing unlimited audio accumulation.
+    private val synthesizedQueue = Channel<Synthesized>(SYNTHESIZED_BUFFER_CAPACITY)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    private val stateMutex = Mutex()
-    private var activePlaybacks = 0
-    private var idleSignal = CompletableDeferred<Unit>().also { it.complete(Unit) }
 
     @Volatile
     private var playbackMode = MmsTtsPlaybackMode.OVERLAPPING
 
     init {
         scope.launch {
-            for (job in queue) {
-                if (playbackMode == MmsTtsPlaybackMode.ONE_BY_ONE) {
-                    awaitIdle()
-                    runJobSafely(job)
-                } else {
-                    beginPlayback()
-                    scope.launch {
-                        try {
-                            runJobSafely(job)
-                        } finally {
-                            endPlayback()
-                        }
-                    }
-                }
-            }
+            synthesizeLoop()
+        }
+
+        scope.launch {
+            playbackLoop()
         }
     }
 
@@ -68,38 +70,64 @@ class MmsTtsPlaybackCoordinator @Inject constructor() {
 
     fun currentMode(): MmsTtsPlaybackMode = playbackMode
 
-    fun enqueue(job: suspend () -> Unit) {
-        queue.trySend(job)
+    fun enqueue(
+        language: MmsTtsLanguage,
+        text: String
+    ) {
+        requestQueue.trySend(
+            Request(
+                language = language,
+                text = text
+            )
+        )
     }
 
-    private suspend fun awaitIdle() {
-        val signal = stateMutex.withLock {
-            if (activePlaybacks == 0) null else idleSignal
-        }
-        signal?.await()
-    }
+    private suspend fun synthesizeLoop() {
+        for (request in requestQueue) {
+            try {
+                val (frame, result) = ttsEngine.synthesize(
+                    request.language,
+                    request.text
+                )
 
-    private suspend fun beginPlayback() {
-        stateMutex.withLock {
-            if (activePlaybacks == 0) {
-                idleSignal = CompletableDeferred()
+                synthesizedQueue.send(
+                    Synthesized(
+                        frame = frame,
+                        sampleRate = result.sampleRate
+                    )
+                )
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                android.util.Log.w(
+                    TAG,
+                    "Incoming voice-message synthesis failed: " +
+                        (error.message ?: error.javaClass.simpleName)
+                )
             }
-            activePlaybacks++
         }
     }
 
-    private suspend fun endPlayback() {
-        stateMutex.withLock {
-            activePlaybacks--
-            if (activePlaybacks == 0 && !idleSignal.isCompleted) {
-                idleSignal.complete(Unit)
+    private suspend fun playbackLoop() {
+        for (synthesized in synthesizedQueue) {
+            if (playbackMode == MmsTtsPlaybackMode.ONE_BY_ONE) {
+                runPlaybackSafely(synthesized)
+            } else {
+                // Do not wait for an earlier AudioTrack in overlapping mode.
+                // Each synthesized message gets its own playback task.
+                scope.launch {
+                    runPlaybackSafely(synthesized)
+                }
             }
         }
     }
 
-    private suspend fun runJobSafely(job: suspend () -> Unit) {
+    private suspend fun runPlaybackSafely(synthesized: Synthesized) {
         try {
-            job()
+            ttsEngine.play(
+                synthesized.frame,
+                synthesized.sampleRate
+            )
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -113,5 +141,6 @@ class MmsTtsPlaybackCoordinator @Inject constructor() {
 
     companion object {
         private const val TAG = "MmsTtsPlayback"
+        private const val SYNTHESIZED_BUFFER_CAPACITY = 2
     }
 }
