@@ -1,5 +1,7 @@
 package com.tactical.app.ui.screens
 
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -154,7 +156,7 @@ fun MessagesScreen(
                 text = if (selectionMode) {
                     "${selectedKeys.size} SELECTED"
                 } else {
-                    "MESSAGES"
+                    LocalUiStrings.current.text(UiTextKey.MESSAGES)
                 },
                 color = Color.White,
                 fontSize = 22.sp,
@@ -174,9 +176,9 @@ fun MessagesScreen(
                                     messageStorageKey(it) in selectedKeys
                                 }
                         ) {
-                            "CLEAR"
+                            LocalUiStrings.current.text(UiTextKey.CLEAR)
                         } else {
-                            "SELECT ALL"
+                            LocalUiStrings.current.text(UiTextKey.SELECT_ALL)
                         },
                         color = SquadBlueGlow,
                         fontSize = 10.sp,
@@ -190,7 +192,7 @@ fun MessagesScreen(
                 ) {
                     Icon(
                         Icons.Default.Delete,
-                        contentDescription = "Delete selected messages",
+                        contentDescription = LocalUiStrings.current.text(UiTextKey.DELETE_SELECTED),
                         tint = if (selectedKeys.isNotEmpty()) {
                             SquadBlueGlow
                         } else {
@@ -201,7 +203,7 @@ fun MessagesScreen(
                 IconButton(onClick = ::exitSelection) {
                     Icon(
                         Icons.Default.Close,
-                        contentDescription = "Cancel selection",
+                        contentDescription = LocalUiStrings.current.text(UiTextKey.CANCEL_SELECTION),
                         tint = Color.White
                     )
                 }
@@ -250,7 +252,7 @@ fun MessagesScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "CHAT / PPT MODE",
+                    LocalUiStrings.current.text(UiTextKey.CHAT_PPT_MODE),
                     color = if (selectedTab == 0) Color.White else RedTacticalTextSecondary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp
@@ -272,7 +274,7 @@ fun MessagesScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "CALL MODE",
+                    LocalUiStrings.current.text(UiTextKey.CALL_MODE),
                     color = if (selectedTab == 1) Color.White else RedTacticalTextSecondary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp
@@ -292,7 +294,7 @@ fun MessagesScreen(
             if (conversationMessages.isEmpty()) {
                 item {
                     Text(
-                        "No messages",
+                        LocalUiStrings.current.text(UiTextKey.NO_MESSAGES),
                         color = RedTacticalTextSecondary,
                         fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
@@ -310,7 +312,7 @@ fun MessagesScreen(
                 MessageRow(
                     message = message,
                     currentTimeMs = currentTimeMs,
-                    isSent = message.sender == "YOU",
+                    isSent = message.sender == LocalUiStrings.current.text(UiTextKey.YOU),
                     isSelectionMode = selectionMode,
                     isSelected = messageStorageKey(message) in selectedKeys,
                     onClick = {
@@ -338,7 +340,7 @@ fun MessagesScreen(
                     value = input,
                     onValueChange = { input = it },
                     placeholder = {
-                        Text("Write message…", color = RedTacticalTextSecondary)
+                        Text(LocalUiStrings.current.text(UiTextKey.WRITE_MESSAGE), color = RedTacticalTextSecondary)
                     },
                     modifier = Modifier.weight(1f),
                     singleLine = false,
@@ -366,7 +368,7 @@ fun MessagesScreen(
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
+                        contentDescription = LocalUiStrings.current.text(UiTextKey.SEND),
                         tint = if (input.isNotBlank()) {
                             SquadBlueGlow
                         } else {
@@ -421,7 +423,7 @@ fun MessagesScreen(
                     }
                 ) {
                     Text(
-                        "DELETE",
+                        LocalUiStrings.current.text(UiTextKey.DELETE),
                         color = SquadBlueGlow,
                         fontWeight = FontWeight.Bold
                     )
@@ -432,7 +434,7 @@ fun MessagesScreen(
                     onClick = { showDeleteConfirmation = false }
                 ) {
                     Text(
-                        "CANCEL",
+                        LocalUiStrings.current.text(UiTextKey.CANCEL),
                         color = Color.White
                     )
                 }
@@ -452,7 +454,7 @@ private fun formatLiveMessageTimestamp(
     val ageMs = (nowMs - timestamp).coerceAtLeast(0L)
 
     return when {
-        ageMs < 60_000L -> "Just now"
+        ageMs < 60_000L -> LocalUiStrings.current.text(UiTextKey.JUST_NOW)
         ageMs < 3_600_000L -> "${ageMs / 60_000L} min ago"
         else -> SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
     }
@@ -537,7 +539,7 @@ private fun MessageRow(
                 Spacer(Modifier.height(5.dp))
 
                 Text(
-                    "EMERGENCY • TAP FOR DETAILS",
+                    LocalUiStrings.current.text(UiTextKey.EMERGENCY_TAP_DETAILS),
                     color = RedTacticalPrimaryBright,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
