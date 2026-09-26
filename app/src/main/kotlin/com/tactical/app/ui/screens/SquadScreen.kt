@@ -644,7 +644,8 @@ fun SquadScreen(
                     onRemove = {
                         onRemoveFromSquad(peer.deviceAddress)
                         removeArmedDeviceId = null
-                    }
+                    },
+                    onDismissRemove = { removeArmedDeviceId = null }
                 )
             }
         }
@@ -676,7 +677,8 @@ fun SquadScreen(
                     onRemove = {
                         onRemoveFromSquad(peer.deviceAddress)
                         removeArmedDeviceId = null
-                    }
+                    },
+                    onDismissRemove = { removeArmedDeviceId = null }
                 )
             }
         }
@@ -750,76 +752,114 @@ fun PeerCard(
     peer: PeerNodeUi,
     removeArmed: Boolean = false,
     onLongPress: () -> Unit = {},
-    onRemove: () -> Unit = {}
+    onRemove: () -> Unit = {},
+    onDismissRemove: () -> Unit = {}
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(peer.deviceAddress) {
-                detectTapGestures(
-                    onLongPress = { onLongPress() }
-                )
-            }
-            .then(
-                if (peer.isConnected) {
-                    Modifier.border(
-                        width = 1.5.dp,
-                        color = RedTacticalStatusGreen,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                } else {
-                    Modifier
-                }
-            )
+    Box(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Card(
+            colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
-                .padding(14.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(RedTacticalBackground)
-            ) {
-                Icon(Icons.Default.Person, contentDescription = peer.callsign, tint = Color.White, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(peer.callsign, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    if (peer.isConnected) "Connected • " + peer.distanceText else "In squad • " + peer.distanceText,
-                    color = if (peer.isConnected) RedTacticalStatusGreen else RedTacticalTextSecondary,
-                    fontSize = 11.sp
-                )
-            }
-            if (removeArmed) {
-                TextButton(
-                    onClick = onRemove,
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                ) {
-                    Text(
-                        "REMOVE FROM SQUAD",
-                        color = RedTacticalPrimaryBright,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.3.sp
+                .fillMaxWidth()
+                .pointerInput(peer.deviceAddress) {
+                    detectTapGestures(
+                        onLongPress = { onLongPress() }
                     )
                 }
-            } else {
+                .then(
+                    if (peer.isConnected) {
+                        Modifier.border(
+                            width = 1.5.dp,
+                            color = RedTacticalStatusGreen,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(14.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(RedTacticalBackground)
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = peer.callsign,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        peer.callsign,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        if (peer.isConnected) {
+                            "Connected • " + peer.distanceText
+                        } else {
+                            "In squad • " + peer.distanceText
+                        },
+                        color = if (peer.isConnected) {
+                            RedTacticalStatusGreen
+                        } else {
+                            RedTacticalTextSecondary
+                        },
+                        fontSize = 11.sp
+                    )
+                }
                 Icon(
                     Icons.Default.SignalCellularAlt,
                     contentDescription = "Signal",
-                    tint = if (peer.isConnected) RedTacticalStatusGreen else RedTacticalTextSecondary,
+                    tint = if (peer.isConnected) {
+                        RedTacticalStatusGreen
+                    } else {
+                        RedTacticalTextSecondary
+                    },
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+
+        DropdownMenu(
+            expanded = removeArmed,
+            onDismissRequest = onDismissRemove,
+            modifier = Modifier.widthIn(min = 170.dp),
+            containerColor = RedTacticalSurface,
+            shape = RoundedCornerShape(10.dp),
+            shadowElevation = 8.dp
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        "REMOVE FROM SQUAD",
+                        color = RedTacticalPrimaryBright,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.4.sp
+                    )
+                },
+                onClick = onRemove,
+                contentPadding = PaddingValues(
+                    horizontal = 14.dp,
+                    vertical = 4.dp
+                )
+            )
         }
     }
 }
