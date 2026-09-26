@@ -36,11 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
-import com.tactical.app.ui.theme.SquadBlueBackground
-import com.tactical.app.ui.theme.SquadBluePrimary
-import com.tactical.app.ui.theme.SquadBlueGlow
-import com.tactical.app.ui.theme.SquadBlueSurface
-import com.tactical.app.ui.theme.SquadBlueBorder
 import com.tactical.app.ui.theme.RedTacticalTextSecondary
 import com.tactical.app.ui.theme.SquadBlueBackground
 import com.tactical.app.ui.theme.SquadBlueBorder
@@ -158,12 +153,6 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(6.dp))
 
-        Text(
-            "Language used for your push-to-talk transmissions.",
-            color = RedTacticalTextSecondary,
-            fontSize = 12.sp
-        )
-
         Spacer(Modifier.height(16.dp))
 
         Column(
@@ -251,12 +240,6 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(18.dp))
-
-        Text(
-            "Incoming voice messages are handled independently. The sender's language flag is carried in the packet, so Hindi and English can be received regardless of your selected outgoing language.",
-            color = RedTacticalTextSecondary,
-            fontSize = 11.sp
-        )
 
         Spacer(Modifier.height(24.dp))
 
