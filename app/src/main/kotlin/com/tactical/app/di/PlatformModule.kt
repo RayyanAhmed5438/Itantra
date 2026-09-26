@@ -94,8 +94,7 @@ object PlatformModule {
         AndroidBleConnectionManager(
             context = context,
             registry = registry,
-            localDeviceId = identityStore.deviceIdValue,
-            localCallsignProvider = identityStore::callsign
+            localDeviceId = identityStore.deviceIdValue
         )
 
     @Provides
