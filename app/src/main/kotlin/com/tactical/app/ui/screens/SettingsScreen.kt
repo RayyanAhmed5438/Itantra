@@ -19,6 +19,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,12 +36,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
-import com.tactical.app.ui.theme.RedTacticalBackground
-import com.tactical.app.ui.theme.RedTacticalPrimary
-import com.tactical.app.ui.theme.RedTacticalPrimaryBright
-import com.tactical.app.ui.theme.RedTacticalSurface
-import com.tactical.app.ui.theme.RedTacticalSurfaceBorder
+import com.tactical.app.ui.theme.SquadBlueBackground
+import com.tactical.app.ui.theme.SquadBluePrimary
+import com.tactical.app.ui.theme.SquadBlueGlow
+import com.tactical.app.ui.theme.SquadBlueSurface
+import com.tactical.app.ui.theme.SquadBlueBorder
 import com.tactical.app.ui.theme.RedTacticalTextSecondary
+import com.tactical.app.ui.theme.SquadBlueBackground
+import com.tactical.app.ui.theme.SquadBlueBorder
+import com.tactical.app.ui.theme.SquadBlueGlow
+import com.tactical.app.ui.theme.SquadBluePrimary
+import com.tactical.app.ui.theme.SquadBlueSurface
 
 private data class LanguageOption(
     val code: String,
@@ -75,7 +81,7 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .background(RedTacticalBackground)
+            .background(SquadBlueBackground)
             .padding(20.dp)
     ) {
         Text(
@@ -107,23 +113,23 @@ fun SettingsScreen(
             label = { Text("Username") },
             supportingText = {
                 Text(
-                    usernameError ?: "Maximum 5 UTF-8 bytes for the existing BLE callsign field.",
+                    usernameError ?: "Maximum 7 UTF-8 bytes for the BLE callsign field.",
                     color = if (usernameError != null) {
-                        RedTacticalPrimary
+                        SquadBluePrimary
                     } else {
                         RedTacticalTextSecondary
                     }
                 )
             },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = RedTacticalSurface,
-                unfocusedContainerColor = RedTacticalSurface,
+                focusedContainerColor = SquadBlueSurface,
+                unfocusedContainerColor = SquadBlueSurface,
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedLabelColor = RedTacticalPrimary,
+                focusedLabelColor = SquadBluePrimary,
                 unfocusedLabelColor = RedTacticalTextSecondary,
-                focusedBorderColor = RedTacticalPrimary,
-                unfocusedBorderColor = RedTacticalSurfaceBorder
+                focusedBorderColor = SquadBluePrimary,
+                unfocusedBorderColor = SquadBlueBorder
             )
         )
 
@@ -134,7 +140,7 @@ fun SettingsScreen(
                 usernameError = onUsernameSave(usernameInput)
             },
             colors = ButtonDefaults.buttonColors(
-                containerColor = RedTacticalPrimary
+                containerColor = SquadBluePrimary
             )
         ) {
             Text("SAVE USERNAME", fontWeight = FontWeight.Bold)
@@ -143,7 +149,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(24.dp))
 
         Text(
-            "VOICE LANGUAGE",
+            "UI LANGUAGE",
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -170,7 +176,7 @@ fun SettingsScreen(
 
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = RedTacticalSurface
+                        containerColor = SquadBlueSurface
                     ),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
@@ -178,9 +184,9 @@ fun SettingsScreen(
                         .border(
                             width = 1.dp,
                             color = if (selected) {
-                                RedTacticalPrimary
+                                SquadBluePrimary
                             } else {
-                                RedTacticalSurfaceBorder
+                                SquadBlueBorder
                             },
                             shape = RoundedCornerShape(14.dp)
                         )
@@ -197,12 +203,16 @@ fun SettingsScreen(
                         if (loading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
-                                color = RedTacticalPrimaryBright,
+                                color = SquadBlueGlow,
                                 strokeWidth = 2.dp
                             )
                         } else {
                             RadioButton(
                                 selected = selected,
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = SquadBluePrimary,
+                                    unselectedColor = RedTacticalTextSecondary
+                                ),
                                 onClick = {
                                     if (!switching && !selected) {
                                         onLanguageSelected(language.code)
@@ -228,7 +238,7 @@ fun SettingsScreen(
                             Text(
                                 if (loading) "Loading voice models…" else language.name,
                                 color = if (loading) {
-                                    RedTacticalPrimaryBright
+                                    SquadBlueGlow
                                 } else {
                                     RedTacticalTextSecondary
                                 },
@@ -289,7 +299,7 @@ fun SettingsScreen(
 
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = RedTacticalSurface
+                        containerColor = SquadBlueSurface
                     ),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
@@ -297,9 +307,9 @@ fun SettingsScreen(
                         .border(
                             width = 1.dp,
                             color = if (selected) {
-                                RedTacticalPrimary
+                                SquadBluePrimary
                             } else {
-                                RedTacticalSurfaceBorder
+                                SquadBlueBorder
                             },
                             shape = RoundedCornerShape(14.dp)
                         )
@@ -313,6 +323,10 @@ fun SettingsScreen(
                     ) {
                         RadioButton(
                             selected = selected,
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = SquadBluePrimary,
+                                unselectedColor = RedTacticalTextSecondary
+                            ),
                             onClick = { onTtsPlaybackModeSelected(mode) }
                         )
 
