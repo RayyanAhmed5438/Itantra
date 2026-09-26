@@ -466,6 +466,11 @@ class MainViewModel @Inject constructor(
             runCatching { bleConnectionManager.addToSquad(deviceAddress) }
         }
     }
+    fun respondToSquadRequest(deviceId: String, approve: Boolean) {
+        viewModelScope.launch {
+            runCatching { bleConnectionManager.respondToSquadRequest(deviceId, approve) }
+        }
+    }
     fun removePeerFromSquad(deviceAddress: String) {
         viewModelScope.launch {
             bleConnectionManager.removeFromSquad(deviceAddress)
