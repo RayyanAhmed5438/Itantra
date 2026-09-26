@@ -149,12 +149,7 @@ class AndroidBleConnectionManager(
                 }.getOrNull()
 
                 if (adapter?.isEnabled == true) {
-                    // Retry any unanswered squad request at a controlled
-                    // cadence instead of requiring the user to spam ADD TO
-                    // SQUAD. Accepted/rejected requests are removed from this
-                    // map by handleControlMessage().
                     retryPendingSquadRequests()
-
                     squadDeviceIds().forEach { id ->
                         runCatching { reconnectWithRoleStagger(id) }
                     }
@@ -191,26 +186,19 @@ class AndroidBleConnectionManager(
             return TacticalResult.Failure("Could not reach $appId: ${connection.error}")
         }
 
-        // Record the outstanding request before transmitting it so an
-        // extremely fast ACCEPT/REJECT cannot race this bookkeeping. Duplicate
-        // taps while the request is pending become a no-op; the background
-        // retry loop handles transient delivery loss.
-        val existingRequestAddress =
+        // A duplicate tap while this request is already pending is a no-op.
+        val previousAddress =
             outgoingSquadRequestAddresses.putIfAbsent(appId, resolvedAddress)
-        if (existingRequestAddress != null) {
-            if (existingRequestAddress != resolvedAddress) {
+        if (previousAddress != null) {
+            if (previousAddress != resolvedAddress) {
                 outgoingSquadRequestAddresses[appId] = resolvedAddress
             } else {
-                android.util.Log.d(
-                    TAG,
-                    "Squad request already pending for " + appId
-                )
                 return TacticalResult.Success(Unit)
             }
         }
 
         delay(100L)
-        val sent = registry.sendControl(
+        val sent = sendControlWithRetry(
             resolvedAddress,
             SquadControlCodec.request(localDeviceId)
         )
@@ -220,8 +208,18 @@ class AndroidBleConnectionManager(
         }
 
         setState(resolvedAddress, BleLinkState.CONNECTED)
-        android.util.Log.d(TAG, "Squad request sent to $appId (no Android pairing)")
         return TacticalResult.Success(Unit)
+    }
+
+    private suspend fun sendControlWithRetry(
+        address: String,
+        data: ByteArray
+    ): Boolean {
+        repeat(3) { attempt ->
+            if (registry.sendControl(address, data)) return true
+            if (attempt < 2) delay(150L)
+        }
+        return false
     }
 
     override suspend fun removeFromSquad(deviceAddress: String) {
@@ -275,7 +273,7 @@ class AndroidBleConnectionManager(
             }
         }
 
-        val sent = registry.sendControl(
+        val sent = sendControlWithRetry(
             knownAddress,
             SquadControlCodec.response(localDeviceId, approve)
         )
@@ -286,7 +284,6 @@ class AndroidBleConnectionManager(
         if (approve) {
             rememberSquadMember(request.deviceId, knownAddress)
             setState(knownAddress, BleLinkState.CONNECTED)
-            propagateSquadMembership(request.deviceId, knownAddress)
         } else {
             setState(knownAddress, BleLinkState.AVAILABLE)
         }
@@ -389,32 +386,8 @@ class AndroidBleConnectionManager(
         return try {
             val callback = object : BluetoothGattCallback() {
 
-                private var serviceDiscoveryStarted = false
-
                 private fun isCurrentGatt(gatt: BluetoothGatt): Boolean =
                     pending[resolvedAddress] === completion || gattClients[resolvedAddress] === gatt
-
-                private fun startServiceDiscovery(gatt: BluetoothGatt) {
-                    if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
-                    serviceDiscoveryStarted = true
-                    android.util.Log.d(
-                        TAG,
-                        "GATT connected, discovering services for " + resolvedAddress
-                    )
-
-                    val started = try {
-                        gatt.discoverServices()
-                    } catch (_: Exception) {
-                        false
-                    }
-
-                    if (!started) {
-                        failConnection(
-                            gatt,
-                            "GATT service discovery could not start"
-                        )
-                    }
-                }
 
                 override fun onConnectionStateChange(
                     gatt: BluetoothGatt,
@@ -433,8 +406,27 @@ class AndroidBleConnectionManager(
 
                         android.util.Log.d(
                             TAG,
-                            "GATT connected, requesting MTU $DESIRED_MTU for " + resolvedAddress
+                            "GATT connected, requesting MTU " + DESIRED_MTU +
+                                " for " + resolvedAddress
                         )
+
+                        fun startServiceDiscovery() {
+                            android.util.Log.d(
+                                TAG,
+                                "GATT connected, discovering services for " + resolvedAddress
+                            )
+                            val started = try {
+                                gatt.discoverServices()
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (!started) {
+                                failConnection(
+                                    gatt,
+                                    "GATT service discovery could not start"
+                                )
+                            }
+                        }
 
                         val mtuRequestStarted = try {
                             gatt.requestMtu(DESIRED_MTU)
@@ -443,11 +435,8 @@ class AndroidBleConnectionManager(
                         }
 
                         if (!mtuRequestStarted) {
-                            startServiceDiscovery(gatt)
+                            startServiceDiscovery()
                         } else {
-                            // Some OEM stacks accept requestMtu() but fail to
-                            // deliver the callback. Never block the connection
-                            // attempt forever waiting for a negotiation event.
                             reconnectScope.launch {
                                 delay(MTU_NEGOTIATION_FALLBACK_MS)
                                 startServiceDiscovery()
@@ -668,22 +657,12 @@ class AndroidBleConnectionManager(
                     mtu: Int,
                     status: Int
                 ) {
-                    if (gattClients[resolvedAddress] === gatt || pending[resolvedAddress] === completion) {
+                    if (gattClients[resolvedAddress] === gatt ||
+                        pending[resolvedAddress] === completion
+                    ) {
                         if (status == BluetoothGatt.GATT_SUCCESS) {
                             registry.onMtuNegotiated(resolvedAddress, mtu)
-                            android.util.Log.d(
-                                TAG,
-                                "MTU negotiated for " + resolvedAddress + ": " + mtu
-                            )
-                        } else {
-                            android.util.Log.w(
-                                TAG,
-                                "MTU negotiation failed for " + resolvedAddress +
-                                    ", status=" + status
-                            )
                         }
-
-                        startServiceDiscovery(gatt)
                     }
                 }
             }
@@ -730,25 +709,17 @@ class AndroidBleConnectionManager(
                 } else {
                     BleLinkState.AVAILABLE
                 })
-
-                // Once a squad peer reconnects, give it the current roster.
-                // This repairs hub-and-spoke topologies after app/process
-                // recreation and makes new members converge to a full mesh.
-                if (message.deviceId in squadDeviceIds()) {
-                    syncSquadRosterTo(address)
-                }
             }
 
             is SquadControlCodec.Message.Request -> {
                 if (message.deviceId == localDeviceId) return
                 rememberAddress(message.deviceId, address)
                 if (message.deviceId in squadDeviceIds()) {
-                    registry.sendControl(
+                    sendControlWithRetry(
                         address,
                         SquadControlCodec.response(localDeviceId, true)
                     )
                     setState(address, BleLinkState.CONNECTED)
-                    syncSquadRosterTo(address)
                 } else {
                     synchronized(pendingSquadRequestsById) {
                         pendingSquadRequestsById[message.deviceId] =
@@ -768,57 +739,10 @@ class AndroidBleConnectionManager(
                 if (message.accepted) {
                     rememberSquadMember(message.deviceId, address)
                     setState(address, BleLinkState.CONNECTED)
-                    propagateSquadMembership(message.deviceId, address)
                 } else {
                     setState(address, BleLinkState.AVAILABLE)
                 }
                 outgoingSquadRequestAddresses.remove(message.deviceId)
-            }
-
-            is SquadControlCodec.Message.SquadMember -> {
-                if (message.deviceId == localDeviceId) return
-
-                val sourceId = applicationIdForAddress(address)
-                if (sourceId == null || sourceId !in squadDeviceIds()) {
-                    android.util.Log.d(
-                        TAG,
-                        "Ignoring untrusted squad roster update from " + address
-                    )
-                    return
-                }
-
-                val wasAlreadyMember = message.deviceId in squadDeviceIds()
-                val memberAddress = resolveAddress(message.deviceId)
-
-                if (memberAddress != null) {
-                    rememberSquadMember(message.deviceId, memberAddress)
-                } else {
-                    // Keep the stable ID even if the peer has not appeared in
-                    // the latest scan yet. The background reconnect loop will
-                    // connect once discovery resolves its BLE address.
-                    rememberSquadMemberId(message.deviceId)
-                }
-
-                if (!wasAlreadyMember) {
-                    android.util.Log.d(
-                        TAG,
-                        "Learned squad member " + message.deviceId +
-                            " from " + sourceId
-                    )
-                    memberAddress?.let { setState(it, BleLinkState.AVAILABLE) }
-
-                    reconnectScope.launch {
-                        runCatching { reconnectWithRoleStagger(message.deviceId) }
-                    }
-
-                    // Propagate newly learned membership through the local
-                    // squad. Membership changes converge without requiring a
-                    // second manual ADD TO SQUAD action.
-                    propagateSquadMemberToPeers(
-                        message.deviceId,
-                        excludeAddress = address
-                    )
-                }
             }
 
             is SquadControlCodec.Message.Remove -> {
@@ -884,7 +808,7 @@ class AndroidBleConnectionManager(
                 val result = connect(peerId)
                 if (result is TacticalResult.Success) {
                     val currentAddress = resolveAddress(peerId) ?: knownAddress
-                    if (registry.sendControl(
+                    if (sendControlWithRetry(
                             currentAddress,
                             SquadControlCodec.request(localDeviceId)
                         )
@@ -1033,64 +957,6 @@ class AndroidBleConnectionManager(
         emptyCycles = 0
     }
 
-    /**
-     * Pushes the current squad roster to a newly accepted/reconnected peer and
-     * tells the other local squad peers about the new member. A single fixed
-     * 20-byte control frame is used per member so this remains compatible with
-     * the default BLE ATT payload.
-     */
-    private fun propagateSquadMembership(
-        memberId: String,
-        memberAddress: String
-    ) {
-        syncSquadRosterTo(memberAddress)
-        propagateSquadMemberToPeers(memberId, excludeAddress = memberAddress)
-    }
-
-    private fun syncSquadRosterTo(targetAddress: String) {
-        squadDeviceIds()
-            .asSequence()
-            .filter { it != localDeviceId }
-            .distinct()
-            .forEach { memberId ->
-                registry.sendControl(
-                    targetAddress,
-                    SquadControlCodec.squadMember(memberId)
-                )
-            }
-    }
-
-    private fun propagateSquadMemberToPeers(
-        memberId: String,
-        excludeAddress: String? = null
-    ) {
-        squadDeviceIds()
-            .asSequence()
-            .filter { it != localDeviceId && it != memberId }
-            .distinct()
-            .forEach { peerId ->
-                val peerAddress = resolveAddress(peerId) ?: return@forEach
-                if (peerAddress == excludeAddress) return@forEach
-                if (hasDirectConnection(peerAddress)) {
-                    registry.sendControl(
-                        peerAddress,
-                        SquadControlCodec.squadMember(memberId)
-                    )
-                }
-            }
-    }
-
-    private fun rememberSquadMemberId(appId: String) {
-        if (appId.isBlank() || appId == localDeviceId) return
-        val ids = squadDeviceIds().toMutableSet()
-        if (!ids.add(appId)) return
-
-        prefs.edit()
-            .putStringSet(SQUAD_IDS_KEY, ids)
-            .remove(LEGACY_PAIRED_IDS_KEY)
-            .apply()
-    }
-
     private fun rememberAddress(appId: String, address: String) {
         prefs.edit()
             .putString(PREF_ADDRESS_PREFIX + appId, address)
@@ -1116,17 +982,14 @@ class AndroidBleConnectionManager(
     }
 
     private fun resolveAddress(identifier: String): String? {
-        val memoryAddress = BlePeerAddressRegistry.addressFor(identifier)
-        if (memoryAddress != null) return memoryAddress
+        val memory = BlePeerAddressRegistry.addressFor(identifier)
+        if (memory != null) return memory
 
-        val persistedAddress = prefs.getString(PREF_ADDRESS_PREFIX + identifier, null)
-        if (persistedAddress != null && !isBluetoothAddress(identifier)) {
-            // Rehydrate the process-local registry after app/process recreation.
-            // The mesh transport resolves targeted squad traffic through this
-            // registry, so a persisted GATT mapping must be restored here too.
-            BlePeerAddressRegistry.remember(identifier, persistedAddress)
+        val persisted = prefs.getString(PREF_ADDRESS_PREFIX + identifier, null)
+        if (persisted != null && !isBluetoothAddress(identifier)) {
+            BlePeerAddressRegistry.remember(identifier, persisted)
         }
-        return persistedAddress
+        return persisted
     }
 
     private fun applicationIdForAddress(address: String): String? {
