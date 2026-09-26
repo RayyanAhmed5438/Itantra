@@ -573,20 +573,26 @@ private fun MessageRow(
 
                 Spacer(Modifier.height(4.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        message.statusText,
-                        color = borderColor,
-                        fontSize = 9.sp
-                    )
+                if (message.statusText.isNotBlank() || isSelectionMode) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (message.statusText.isNotBlank()) {
+                            Text(
+                                message.statusText,
+                                color = borderColor,
+                                fontSize = 9.sp
+                            )
+                        }
 
-                    if (isSelectionMode) {
-                        Spacer(Modifier.width(8.dp))
-                        SelectionIndicator(isSelected = isSelected)
+                        if (isSelectionMode) {
+                            if (message.statusText.isNotBlank()) {
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            SelectionIndicator(isSelected = isSelected)
+                        }
                     }
                 }
             }
