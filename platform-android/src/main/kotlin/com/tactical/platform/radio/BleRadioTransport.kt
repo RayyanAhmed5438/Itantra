@@ -21,10 +21,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.shareIn
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class BleRadioTransport(
     private val context: Context,
@@ -40,6 +45,7 @@ class BleRadioTransport(
         get() = bluetoothManager.adapter
     private var gattServer: BluetoothGattServer? = null
     private val reassembler = BleFragmentReassembler()
+    private val outboundWriteLocks = ConcurrentHashMap<String, Mutex>()
 
     private val sharedIncoming: Flow<RawPacket> by lazy {
         rawIncoming().shareIn(scope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), replay = 0)
@@ -473,36 +479,68 @@ class BleRadioTransport(
         characteristic: BluetoothGattCharacteristic,
         value: ByteArray
     ): Boolean {
-        repeat(3) {
-            if (gatt.writeChunk(characteristic, value)) return true
-            delay(20L)
+        val address = gatt.device.address
+        val lock = outboundWriteLocks.getOrPut(address) { Mutex() }
+
+        return lock.withLock {
+            repeat(3) { attempt ->
+                val completion = CompletableDeferred<Boolean>()
+                if (!connectionRegistry.registerOutboundWriteWaiter(address, completion)) {
+                    delay(25L)
+                    return@repeat
+                }
+
+                val started = try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        gatt.writeCharacteristic(
+                            characteristic,
+                            value,
+                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        ) == BluetoothStatusCodes.SUCCESS
+                    } else {
+                        @Suppress("DEPRECATION")
+                        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                        @Suppress("DEPRECATION")
+                        characteristic.value = value
+                        @Suppress("DEPRECATION")
+                        gatt.writeCharacteristic(characteristic)
+                    }
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (!started) {
+                    connectionRegistry.cancelOutboundWriteWaiter(address, completion)
+                    delay(25L)
+                    return@repeat
+                }
+
+                val completed = withTimeoutOrNull(1500L) {
+                    completion.await()
+                } ?: false
+
+                connectionRegistry.cancelOutboundWriteWaiter(address, completion)
+
+                if (completed) {
+                    return@withLock true
+                }
+
+                if (attempt < 2) {
+                    delay(40L)
+                }
+            }
+
+            android.util.Log.w(
+                TAG,
+                "BLE fragment write failed after retries for " + address +
+                    ", bytes=" + value.size
+            )
+            false
         }
-        return false
     }
 
     /** Writes without response; the server characteristic explicitly supports
      * this mode, avoiding the response-operation bottleneck for fragments. */
-    private fun BluetoothGatt.writeChunk(
-        characteristic: BluetoothGattCharacteristic,
-        value: ByteArray
-    ): Boolean = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            writeCharacteristic(
-                characteristic,
-                value,
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            ) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            @Suppress("DEPRECATION")
-            characteristic.value = value
-            @Suppress("DEPRECATION")
-            writeCharacteristic(characteristic)
-        }
-    } catch (_: SecurityException) {
-        false
-    }
     companion object {
         private const val TAG = "BleRadioTransport"
         val GATT_SERVICE_UUID: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
