@@ -46,6 +46,7 @@ class BleRadioTransport(
     private var gattServer: BluetoothGattServer? = null
     private val reassembler = BleFragmentReassembler()
     private val outboundWriteLocks = ConcurrentHashMap<String, Mutex>()
+    private val notificationLocks = ConcurrentHashMap<String, Mutex>()
 
     private val sharedIncoming: Flow<RawPacket> by lazy {
         rawIncoming().shareIn(scope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), replay = 0)
@@ -154,6 +155,11 @@ class BleRadioTransport(
                 device: BluetoothDevice,
                 status: Int
             ) {
+                val success = status == BluetoothGatt.GATT_SUCCESS
+                connectionRegistry.completeNotification(
+                    device.address,
+                    success
+                )
                 android.util.Log.d(
                     TAG,
                     "Notification sent to " + device.address + ", status=" + status
@@ -408,11 +414,12 @@ class BleRadioTransport(
                 val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(device.address))
                 var peerOk = true
                 for (chunk in chunks) {
-                    val notified = try {
-                        server.notifyChanged(device, serverCharacteristic, chunk)
-                    } catch (e: SecurityException) {
-                        false
-                    }
+                    val notified = notifyChunkWithRetry(
+                        server,
+                        device,
+                        serverCharacteristic,
+                        chunk
+                    )
                     if (!notified) {
                         peerOk = false
                         break
@@ -453,23 +460,79 @@ class BleRadioTransport(
             true // Legacy BLUETOOTH permission (API <31) is install-time granted, not runtime-gated.
         }
 
-    /** Notifies using the API 33+ overload (value passed directly, avoids
-     *  the deprecated characteristic.value mutation) when available. */
-    private fun BluetoothGattServer.notifyChanged(
+    /**
+     * Sends one server notification and waits for Android's
+     * onNotificationSent() callback before allowing the next fragment.
+     * This prevents long fragmented packets from overrunning the GATT
+     * notification queue on slower/OEM Bluetooth stacks.
+     */
+    private suspend fun notifyChunkWithRetry(
+        server: BluetoothGattServer,
         device: BluetoothDevice,
         characteristic: BluetoothGattCharacteristic,
         value: ByteArray
-    ): Boolean = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notifyCharacteristicChanged(device, characteristic, false, value) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            characteristic.value = value
-            @Suppress("DEPRECATION")
-            notifyCharacteristicChanged(device, characteristic, false)
+    ): Boolean {
+        val address = device.address
+        val lock = notificationLocks.getOrPut(address) { Mutex() }
+
+        return lock.withLock {
+            repeat(3) { attempt ->
+                val completion = CompletableDeferred<Boolean>()
+                if (!connectionRegistry.registerNotificationWaiter(address, completion)) {
+                    delay(25L)
+                    return@repeat
+                }
+
+                val started = try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        server.notifyCharacteristicChanged(
+                            device,
+                            characteristic,
+                            false,
+                            value
+                        ) == BluetoothStatusCodes.SUCCESS
+                    } else {
+                        @Suppress("DEPRECATION")
+                        characteristic.value = value
+                        @Suppress("DEPRECATION")
+                        server.notifyCharacteristicChanged(
+                            device,
+                            characteristic,
+                            false
+                        )
+                    }
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (!started) {
+                    connectionRegistry.cancelNotificationWaiter(address, completion)
+                    delay(25L)
+                    return@repeat
+                }
+
+                val completed = withTimeoutOrNull(3000L) {
+                    completion.await()
+                } ?: false
+
+                connectionRegistry.cancelNotificationWaiter(address, completion)
+
+                if (completed) {
+                    return@withLock true
+                }
+
+                if (attempt < 2) {
+                    delay(50L)
+                }
+            }
+
+            android.util.Log.w(
+                TAG,
+                "BLE notification failed after retries for " + address +
+                    ", bytes=" + value.size
+            )
+            false
         }
-    } catch (e: SecurityException) {
-        false
     }
 
     /** Tries a few times because Android may briefly reject a GATT
