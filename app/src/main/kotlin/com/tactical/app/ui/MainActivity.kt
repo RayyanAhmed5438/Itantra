@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.tactical.app.service.TacticalMeshService
 import com.tactical.app.ui.components.AppBottomNavigation
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import com.tactical.app.ui.components.EmergencyRecordingDialog
 import com.tactical.app.ui.screens.DevicesScreen
 import com.tactical.app.ui.screens.MessagesScreen
@@ -78,7 +80,7 @@ class MainActivity : ComponentActivity() {
             ensureWirelessEnabled()
             ensureVoiceModeIfPermissionGranted()
         } else {
-            wirelessWarning.value = "Bluetooth / microphone permissions are required."
+            wirelessWarning.value = ui.text(UiTextKey.BLUETOOTH_MIC_PERMISSIONS)
         }
     }
 
@@ -91,6 +93,7 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var showSettings by remember { mutableStateOf(false) }
                 val blueTheme = true
+                val ui = com.tactical.app.ui.i18n.UiStrings.forCode(state.uiLanguageCode)
 
                 Scaffold(
                         topBar = {
@@ -100,7 +103,7 @@ class MainActivity : ComponentActivity() {
                                         IconButton(onClick = { showSettings = false }) {
                                             Icon(
                                                 Icons.Default.ArrowBack,
-                                                contentDescription = "Back",
+                                                contentDescription = ui.text(UiTextKey.BACK),
                                                 tint = Color.White
                                             )
                                         }
@@ -111,7 +114,7 @@ class MainActivity : ComponentActivity() {
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = if (showSettings) "Settings" else "Itantra",
+                                            text = if (showSettings) ui.text(UiTextKey.SETTINGS) else "Itantra",
                                             color = Color.White
                                         )
                                         if (!showSettings && !blueTheme) {
@@ -141,7 +144,7 @@ class MainActivity : ComponentActivity() {
                                         IconButton(onClick = { showSettings = true }) {
                                             Icon(
                                                 Icons.Default.Settings,
-                                                contentDescription = "Settings",
+                                                contentDescription = ui.text(UiTextKey.SETTINGS),
                                                 tint = Color.White
                                             )
                                         }
@@ -181,6 +184,8 @@ class MainActivity : ComponentActivity() {
                             if (showSettings) {
                                 SettingsScreen(
                                     selectedLanguageCode = state.selectedLanguageCode,
+                                    uiLanguageCode = state.uiLanguageCode,
+                                    onUiLanguageSelected = viewModel::setUiLanguage,
                                     languageLoadingCode = state.languageLoadingCode,
                                     onLanguageSelected = viewModel::setSelectedLanguage,
                                     ttsPlaybackMode = state.ttsPlaybackMode,
@@ -292,9 +297,9 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             Text(
                                                 if (isResponding) {
-                                                    "SENDING..."
+                                                    ui.text(UiTextKey.SENDING)
                                                 } else {
-                                                    "APPROVE"
+                                                    ui.text(UiTextKey.APPROVE)
                                                 }
                                             )
                                         }
@@ -309,7 +314,7 @@ class MainActivity : ComponentActivity() {
                                             },
                                             enabled = !isResponding
                                         ) {
-                                            Text("REJECT")
+                                            Text(ui.text(UiTextKey.REJECT))
                                         }
                                     }
                                 )
@@ -392,7 +397,7 @@ class MainActivity : ComponentActivity() {
         wirelessWarning.value = if (bluetoothOn) {
             null
         } else {
-            "Bluetooth is off. Turn it on."
+            ui.text(UiTextKey.BLUETOOTH_OFF)
         }
 
         if (bluetoothOn) {
