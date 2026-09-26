@@ -1,7 +1,6 @@
 package com.tactical.platform.speech.mms
 
 import com.tactical.domain.audio.AudioFrame
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -9,6 +8,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,14 +22,13 @@ import javax.inject.Singleton
  *   message 1: synthesize -> play
  *   message 2:          synthesize -> wait/play
  *
- * In ONE_BY_ONE mode, all synthesized frames are played strictly in receive
- * order.
+ * In ONE_BY_ONE mode, all received voices share a single playback lane.
  *
- * In OVERLAPPING mode, voices from different senders may play concurrently,
- * but messages from the same sender are always serialized. This prevents one
- * device's long voice message from overlapping that same device's next,
- * shorter message while still allowing simultaneous voices from different
- * devices.
+ * In OVERLAPPING mode, each sender gets its own playback lane. Voices from
+ * different senders may play concurrently, but messages from the same sender
+ * are always serialized. This prevents one device's long voice message from
+ * overlapping that same device's next, shorter message while still allowing
+ * simultaneous voices from different devices.
  *
  * Only a small number of synthesized frames are buffered at once, preventing
  * a burst of long messages from consuming unbounded RAM. Mode changes never
@@ -62,10 +61,14 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val playbackStateMutex = Mutex()
-    private var activePlaybacks = 0
-    private val activeSenders = mutableMapOf<String, CompletableDeferred<Unit>>()
-    private var idleSignal = CompletableDeferred<Unit>().also { it.complete(Unit) }
+    // Each sender owns an independent playback lane. This is what allows
+    // different devices to overlap while preventing messages from the same
+    // device from ever playing simultaneously.
+    private val senderLanes = ConcurrentHashMap<String, Channel<Synthesized>>()
+
+    // Used only by ONE_BY_ONE mode. OVERLAPPING mode never takes this mutex,
+    // so different sender lanes can actually play at the same time.
+    private val oneByOnePlaybackMutex = Mutex()
 
     @Volatile
     private var playbackMode = MmsTtsPlaybackMode.OVERLAPPING
@@ -130,69 +133,31 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
     private suspend fun playbackLoop() {
         for (synthesized in synthesizedQueue) {
             if (playbackMode == MmsTtsPlaybackMode.ONE_BY_ONE) {
-                // ONE_BY_ONE is global: no sender can start while any other
-                // received voice message is still playing.
-                awaitIdle()
-                beginPlayback(synthesized.senderId)
-
-                try {
+                // The single playback lane is used only in ONE_BY_ONE mode.
+                // This keeps all received voices sequential.
+                oneByOnePlaybackMutex.withLock {
                     runPlaybackSafely(synthesized)
-                } finally {
-                    endPlayback(synthesized.senderId)
                 }
             } else {
-                // OVERLAPPING only permits overlap between different senders.
-                // Messages from the same sender always wait for that sender's
-                // current playback to finish.
-                awaitSenderIdle(synthesized.senderId)
-                beginPlayback(synthesized.senderId)
+                // In OVERLAPPING mode, dispatch the message to its sender's
+                // dedicated lane. The playback loop stays free to dispatch
+                // another sender immediately, while the same sender's lane
+                // remains strictly sequential.
+                senderLane(synthesized.senderId).send(synthesized)
+            }
+        }
+    }
 
+    private fun senderLane(senderId: String): Channel<Synthesized> =
+        senderLanes.computeIfAbsent(senderId) {
+            Channel<Synthesized>(Channel.UNLIMITED).also { lane ->
                 scope.launch {
-                    try {
+                    for (synthesized in lane) {
                         runPlaybackSafely(synthesized)
-                    } finally {
-                        endPlayback(synthesized.senderId)
                     }
                 }
             }
         }
-    }
-
-    private suspend fun awaitIdle() {
-        val signal = playbackStateMutex.withLock {
-            if (activePlaybacks == 0) null else idleSignal
-        }
-        signal?.await()
-    }
-
-    private suspend fun awaitSenderIdle(senderId: String) {
-        val signal = playbackStateMutex.withLock {
-            activeSenders[senderId]
-        }
-        signal?.await()
-    }
-
-    private suspend fun beginPlayback(senderId: String) {
-        playbackStateMutex.withLock {
-            if (activePlaybacks == 0) {
-                idleSignal = CompletableDeferred()
-            }
-            activePlaybacks++
-            activeSenders[senderId] = CompletableDeferred()
-        }
-    }
-
-    private suspend fun endPlayback(senderId: String) {
-        playbackStateMutex.withLock {
-            activePlaybacks--
-            activeSenders.remove(senderId)?.let { signal ->
-                if (!signal.isCompleted) signal.complete(Unit)
-            }
-            if (activePlaybacks == 0 && !idleSignal.isCompleted) {
-                idleSignal.complete(Unit)
-            }
-        }
-    }
 
     private suspend fun runPlaybackSafely(synthesized: Synthesized) {
         try {
