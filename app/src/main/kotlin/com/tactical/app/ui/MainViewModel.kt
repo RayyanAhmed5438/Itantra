@@ -506,9 +506,14 @@ class MainViewModel @Inject constructor(
                             peer
                         }
 
+                    val updatedPeers = (state.squadPeers + state.availablePeers)
+                        .map(::updatePeer)
+                        .distinctBy { it.deviceAddress }
+                    val squadIds = bleConnectionManager.squadDeviceIds()
+
                     state.copy(
-                        squadPeers = state.squadPeers.map(::updatePeer),
-                        availablePeers = state.availablePeers.map(::updatePeer)
+                        squadPeers = updatedPeers.filter { it.deviceAddress in squadIds },
+                        availablePeers = updatedPeers.filter { it.deviceAddress !in squadIds }
                     )
                 }
             }
