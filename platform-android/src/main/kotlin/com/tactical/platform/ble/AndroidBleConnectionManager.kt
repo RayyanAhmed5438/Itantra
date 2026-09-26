@@ -692,11 +692,26 @@ class AndroidBleConnectionManager(
     override fun rssi(deviceAddress: String): Flow<Int?> =
         rssiState(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
 
-    override fun connectedSquadDeviceIds(): Set<String> =
-        squadDeviceIds().filter { id ->
-            val address = resolveAddress(id)
-            address != null && hasDirectConnection(address)
+    override fun connectedSquadDeviceIds(): Set<String> {
+        val squadIds = squadDeviceIds()
+        val connectedAddresses = registry.allConnectedAddresses()
+
+        return squadIds.filter { id ->
+            // Fast path: the current app-id -> address mapping points at a
+            // live GATT session.
+            val mappedAddress = resolveAddress(id)
+            if (mappedAddress != null && mappedAddress in connectedAddresses) {
+                return@filter true
+            }
+
+            // Robust path: Android may expose a different BLE address for the
+            // same peer over time. Check the reverse app-id mapping for every
+            // currently live inbound/outbound GATT address as well.
+            connectedAddresses.any { address ->
+                applicationIdForAddress(address) == id
+            }
         }.toSet()
+    }
 
     override fun squadDeviceIds(): Set<String> {
         val current = prefs.getStringSet(SQUAD_IDS_KEY, null)
