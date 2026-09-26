@@ -185,10 +185,7 @@ class AndroidBleConnectionManager(
         delay(100L)
         val sent = registry.sendControl(
             resolvedAddress,
-            SquadControlCodec.request(
-                localDeviceId,
-                localCallsignProvider()
-            )
+            SquadControlCodec.request(localDeviceId)
         )
         if (!sent) {
             return TacticalResult.Failure("GATT link is up but squad request could not be sent")
@@ -498,10 +495,7 @@ class AndroidBleConnectionManager(
                         )
                         registry.sendControl(
                             resolvedAddress,
-                            SquadControlCodec.hello(
-                                localDeviceId,
-                                localCallsignProvider()
-                            )
+                            SquadControlCodec.hello(localDeviceId)
                         )
                         if (pending.remove(resolvedAddress, completion)) {
                             completion.complete(TacticalResult.Success(Unit))
@@ -640,7 +634,11 @@ class AndroidBleConnectionManager(
                     setState(address, BleLinkState.CONNECTED)
                 } else {
                     pendingSquadRequestsById[message.deviceId] =
-                        SquadRequest(message.deviceId, message.callsign)
+                        SquadRequest(
+                            message.deviceId,
+                            BlePeerAddressRegistry.callsignFor(message.deviceId)
+                                ?: message.deviceId.take(8)
+                        )
                     _pendingSquadRequests.value = pendingSquadRequestsById.values
                         .sortedBy { it.callsign.lowercase() }
                 }
