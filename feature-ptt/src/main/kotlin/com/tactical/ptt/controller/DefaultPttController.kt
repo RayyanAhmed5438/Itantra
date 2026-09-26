@@ -124,8 +124,21 @@ class DefaultPttController(
                     // job without cancelling a large fragmented transmission.
                     transmissionJob?.cancel()
                     transmissionJob = scope.launch {
-                        transmit(session, finalChunk)
-                        _state.update { it.copy(sessionState = SessionState.IDLE) }
+                        try {
+                            transmit(session, finalChunk)
+                        } catch (t: Throwable) {
+                            if (t is CancellationException) throw t
+                            _state.update {
+                                it.copy(
+                                    lastResult = TacticalResult.Failure(
+                                        t.message ?: t.javaClass.simpleName
+                                    )
+                                )
+                            }
+                            hapticFeedback.onTransmitFailed()
+                        } finally {
+                            _state.update { it.copy(sessionState = SessionState.IDLE) }
+                        }
                     }
                 } else {
                     _state.update { it.copy(sessionState = SessionState.IDLE) }
