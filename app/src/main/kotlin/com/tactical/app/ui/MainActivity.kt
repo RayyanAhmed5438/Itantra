@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -226,6 +228,30 @@ class MainActivity : ComponentActivity() {
                                     error = state.emergencyError,
                                     onSend = viewModel::sendEmergency,
                                     onCancel = viewModel::cancelEmergency
+                                )
+                            }
+
+                            state.pendingSquadRequest?.let { request ->
+                                AlertDialog(
+                                    onDismissRequest = { },
+                                    title = { Text("SQUAD REQUEST") },
+                                    text = {
+                                        Text(request.callsign + " wants to add you to their squad.")
+                                    },
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            viewModel.respondToSquadRequest(request.deviceId, true)
+                                        }) {
+                                            Text("APPROVE")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = {
+                                            viewModel.respondToSquadRequest(request.deviceId, false)
+                                        }) {
+                                            Text("REJECT")
+                                        }
+                                    }
                                 )
                             }
                         }
