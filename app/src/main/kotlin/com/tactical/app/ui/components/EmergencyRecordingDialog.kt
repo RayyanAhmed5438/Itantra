@@ -1,5 +1,7 @@
 package com.tactical.app.ui.components
 
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +67,7 @@ fun EmergencyRecordingDialog(
                 modifier = Modifier.padding(20.dp)
             ) {
                 Text(
-                    text = "EMERGENCY ALERT",
+                    text = LocalUiStrings.current.text(UiTextKey.EMERGENCY_ALERT),
                     color = RedTacticalPrimaryBright,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -75,7 +77,7 @@ fun EmergencyRecordingDialog(
                 Spacer(Modifier.height(5.dp))
 
                 Text(
-                    text = "Recording started automatically.",
+                    text = LocalUiStrings.current.text(UiTextKey.RECORDING_STARTED),
                     color = RedTacticalTextSecondary,
                     fontSize = 11.sp
                 )
@@ -102,7 +104,7 @@ fun EmergencyRecordingDialog(
 
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = if (isRecording) "LISTENING…" else "READY TO SEND",
+                            text = if (isRecording) LocalUiStrings.current.text(UiTextKey.LISTENING) else LocalUiStrings.current.text(UiTextKey.READY_TO_SEND),
                             color = if (isRecording) RedTacticalPrimaryBright else Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -110,7 +112,7 @@ fun EmergencyRecordingDialog(
                         Spacer(Modifier.height(3.dp))
                         Text(
                             text = if (transcription.isBlank()) {
-                                "Speak your emergency message."
+                                LocalUiStrings.current.text(UiTextKey.SPEAK_EMERGENCY)
                             } else {
                                 transcription
                             },
@@ -133,7 +135,7 @@ fun EmergencyRecordingDialog(
                 Spacer(Modifier.height(18.dp))
 
                 Text(
-                    text = "The alert will be broadcast to nearby connected devices.",
+                    text = LocalUiStrings.current.text(UiTextKey.ALERT_BROADCAST),
                     color = RedTacticalTextSecondary,
                     fontSize = 10.sp
                 )
@@ -153,7 +155,7 @@ fun EmergencyRecordingDialog(
                             contentColor = Color.White
                         )
                     ) {
-                        Text("CANCEL", fontWeight = FontWeight.Bold)
+                        Text(LocalUiStrings.current.text(UiTextKey.CANCEL), fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -173,7 +175,7 @@ fun EmergencyRecordingDialog(
                         )
                         Spacer(Modifier.size(6.dp))
                         Text(
-                            if (isSending) "SENDING…" else "SEND",
+                            if (isSending) "SENDING…" else LocalUiStrings.current.text(UiTextKey.SEND),
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
@@ -182,7 +184,7 @@ fun EmergencyRecordingDialog(
                 if (!isRecording && error == null && transcription.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Transcript ready",
+                        text = LocalUiStrings.current.text(UiTextKey.TRANSCRIPT_READY),
                         color = RedTacticalStatusGreen,
                         fontSize = 10.sp
                     )
