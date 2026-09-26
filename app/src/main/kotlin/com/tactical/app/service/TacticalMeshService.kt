@@ -172,12 +172,10 @@ class TacticalMeshService : Service() {
                         if (isNewMessage && isVoiceMessage) {
                             val language = MmsTtsLanguage.fromIsoCode(packet.languageCode)
                             if (language != null) {
-                                mmsTtsPlaybackCoordinator.enqueue {
-                                    mmsTtsEngine.synthesizeAndPlay(
-                                        language,
-                                        packet.text
-                                    )
-                                }
+                                mmsTtsPlaybackCoordinator.enqueue(
+                                    language = language,
+                                    text = packet.text
+                                )
                             }
                         }
                     }
