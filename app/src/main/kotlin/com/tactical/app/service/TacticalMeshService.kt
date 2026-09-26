@@ -18,6 +18,7 @@ import com.tactical.engine.discovery.service.DiscoveryService
 import com.tactical.engine.mesh.service.MeshService
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
+import com.tactical.platform.speech.mms.MmsTtsPlaybackCoordinator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +62,9 @@ class TacticalMeshService : Service() {
 
     @Inject
     lateinit var mmsTtsEngine: MmsTtsEngine
+
+    @Inject
+    lateinit var mmsTtsPlaybackCoordinator: MmsTtsPlaybackCoordinator
 
     private val serviceScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -166,21 +170,13 @@ class TacticalMeshService : Service() {
                         }
 
                         if (isNewMessage && isVoiceMessage) {
-                            serviceScope.launch {
-                                val language = MmsTtsLanguage.fromIsoCode(packet.languageCode)
-                                if (language != null) {
-                                    runCatching {
-                                        mmsTtsEngine.synthesizeAndPlay(
-                                            language,
-                                            packet.text
-                                        )
-                                    }.onFailure { error ->
-                                        android.util.Log.w(
-                                            "TacticalMeshService",
-                                            "Automatic voice-message TTS playback failed: " +
-                                                (error.message ?: error.javaClass.simpleName)
-                                        )
-                                    }
+                            val language = MmsTtsLanguage.fromIsoCode(packet.languageCode)
+                            if (language != null) {
+                                mmsTtsPlaybackCoordinator.enqueue {
+                                    mmsTtsEngine.synthesizeAndPlay(
+                                        language,
+                                        packet.text
+                                    )
                                 }
                             }
                         }
