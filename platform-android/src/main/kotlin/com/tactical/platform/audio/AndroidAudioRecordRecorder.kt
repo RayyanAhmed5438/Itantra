@@ -3,6 +3,8 @@ package com.tactical.platform.audio
 import android.annotation.SuppressLint
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import android.os.Process
 import com.tactical.domain.audio.AudioConfig
 import com.tactical.domain.audio.AudioFrame
@@ -42,8 +44,14 @@ class AndroidAudioRecordRecorder : AudioRecorder {
             config.frameSizeInBytes
         )
 
+        val primaryAudioSource = if (config.voiceCommunication) {
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        } else {
+            MediaRecorder.AudioSource.MIC
+        }
+
         val audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            primaryAudioSource,
             config.sampleRate,
             AudioRecordConfigMapper.toChannelConfig(config),
             AudioRecordConfigMapper.toAudioFormatEncoding(config),
@@ -53,7 +61,36 @@ class AndroidAudioRecordRecorder : AudioRecorder {
         if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
             isRecording.set(false)
             audioRecord.release()
-            throw IllegalStateException("AudioRecord failed to initialize for config: $config")
+            throw IllegalStateException(
+                "AudioRecord failed to initialize for config: $config"
+            )
+        }
+
+        // Call Mode uses the communication audio source so Android can route
+        // the capture through the device's voice-communication processing.
+        // Explicit AEC/NS activation is best-effort because OEM support varies.
+        val echoCanceler = if (config.voiceCommunication &&
+            AcousticEchoCanceler.isAvailable()
+        ) {
+            runCatching {
+                AcousticEchoCanceler.create(audioRecord.audioSessionId)?.also {
+                    it.enabled = true
+                }
+            }.getOrNull()
+        } else {
+            null
+        }
+
+        val noiseSuppressor = if (config.voiceCommunication &&
+            NoiseSuppressor.isAvailable()
+        ) {
+            runCatching {
+                NoiseSuppressor.create(audioRecord.audioSessionId)?.also {
+                    it.enabled = true
+                }
+            }.getOrNull()
+        } else {
+            null
         }
 
         audioRecord.startRecording()
@@ -73,6 +110,8 @@ class AndroidAudioRecordRecorder : AudioRecorder {
                     trySend(frame)
                 }
             } finally {
+                runCatching { echoCanceler?.release() }
+                runCatching { noiseSuppressor?.release() }
                 audioRecord.stop()
                 audioRecord.release()
                 close()
