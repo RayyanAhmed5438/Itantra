@@ -565,6 +565,9 @@ class MainViewModel @Inject constructor(
 
             speechLanguagePreferences.setSelectedLanguageCode(languageCode)
             routingSpeechToText.onSelectedLanguageChanged(languageCode)
+            // Warm the newly selected STT backend immediately so the next PTT
+            // press does not pay the native model-load cost.
+            runCatching { routingSpeechToText.preloadSelectedLanguage() }
 
             _uiState.update {
                 it.copy(
