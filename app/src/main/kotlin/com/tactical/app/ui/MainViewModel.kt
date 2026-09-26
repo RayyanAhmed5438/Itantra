@@ -494,7 +494,7 @@ class MainViewModel @Inject constructor(
                 _uiState.update { it.copy(isScanning = true) }
                 delay(SINGLE_SCAN_WINDOW_MS)
             } catch (_: Exception) {
-                // Keep the 10-second loop alive after an individual radio failure.
+                // A single scan failure should not affect later manual scans.
             } finally {
                 (discoveryService as? DefaultDiscoveryService)?.stopDiscovery()
                 _uiState.update { it.copy(isScanning = false) }
