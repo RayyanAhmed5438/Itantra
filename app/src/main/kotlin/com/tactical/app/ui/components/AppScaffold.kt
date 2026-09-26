@@ -41,10 +41,20 @@ fun AppHeader(deviceCount: Int, modifier: Modifier = Modifier, onSettingsClick: 
 }
 
 @Composable
-fun AppBottomNavigation(selectedTab: Int, unreadMessageCount: Int = 0, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
-    NavigationBar(modifier = modifier, containerColor = RedTacticalSurface, tonalElevation = 8.dp) {
-        NavigationBarItem(selected = selectedTab == 0, onClick = { onTabSelected(0) }, icon = { Icon(Icons.Default.Devices, "Devices") }, label = { Text("DEVICES") }, colors = navigationColors())
-        NavigationBarItem(selected = selectedTab == 1, onClick = { onTabSelected(1) }, icon = { Icon(Icons.Default.People, "Squad") }, label = { Text("SQUAD") }, colors = navigationColors())
+fun AppBottomNavigation(
+    selectedTab: Int,
+    unreadMessageCount: Int = 0,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    squadTheme: Boolean = false
+) {
+    NavigationBar(
+        modifier = modifier,
+        containerColor = if (squadTheme) SquadBlueSurface else RedTacticalSurface,
+        tonalElevation = 8.dp
+    ) {
+        NavigationBarItem(selected = selectedTab == 0, onClick = { onTabSelected(0) }, icon = { Icon(Icons.Default.Devices, "Devices") }, label = { Text("DEVICES") }, colors = navigationColors(squadTheme))
+        NavigationBarItem(selected = selectedTab == 1, onClick = { onTabSelected(1) }, icon = { Icon(Icons.Default.People, "Squad") }, label = { Text("SQUAD") }, colors = navigationColors(squadTheme))
         NavigationBarItem(
             selected = selectedTab == 2,
             onClick = { onTabSelected(2) },
@@ -68,10 +78,10 @@ fun AppBottomNavigation(selectedTab: Int, unreadMessageCount: Int = 0, onTabSele
 }
 
 @Composable
-private fun navigationColors() = NavigationBarItemDefaults.colors(
-    selectedIconColor = RedTacticalPrimaryBright,
-    selectedTextColor = RedTacticalPrimaryBright,
-    unselectedIconColor = RedTacticalTextSecondary,
-    unselectedTextColor = RedTacticalTextSecondary,
-    indicatorColor = RedTacticalDarkBorder
+private fun navigationColors(squadTheme: Boolean) = NavigationBarItemDefaults.colors(
+    selectedIconColor = if (squadTheme) SquadBlueGlow else RedTacticalPrimaryBright,
+    selectedTextColor = if (squadTheme) SquadBlueGlow else RedTacticalPrimaryBright,
+    unselectedIconColor = if (squadTheme) Color(0xFF8EA8C0) else RedTacticalTextSecondary,
+    unselectedTextColor = if (squadTheme) Color(0xFF8EA8C0) else RedTacticalTextSecondary,
+    indicatorColor = if (squadTheme) Color(0xFF123E63) else RedTacticalDarkBorder
 )
