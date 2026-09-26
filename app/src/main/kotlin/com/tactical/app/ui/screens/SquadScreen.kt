@@ -137,7 +137,7 @@ fun SquadScreen(
                         )
                     ) {
                         Text(
-                            if (uiState.pttEnabled) LocalUiStrings.current.text(UiTextKey.PTT) else LocalUiStrings.current.text(UiTextKey.CALL),
+                            if (uiState.pttEnabled) LocalUiStrings.current.text(UiTextKey.SWITCH_TO_CALL_MODE) else LocalUiStrings.current.text(UiTextKey.SWITCH_TO_PTT_MODE),
                             color = Color.White,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
