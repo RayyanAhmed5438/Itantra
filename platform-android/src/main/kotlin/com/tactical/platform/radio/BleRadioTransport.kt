@@ -86,16 +86,20 @@ class BleRadioTransport(
                 value: ByteArray
             ) {
                 if (characteristic.uuid == PACKET_CHARACTERISTIC_UUID) {
-                    android.util.Log.d(TAG, "Incoming BLE write from " + device.address + ", bytes=" + value.size)
-                    reassembler.onFragmentReceived(device.address, value)?.let { complete ->
-                        android.util.Log.d(TAG, "Incoming BLE packet reassembled from " + device.address + ", bytes=" + complete.size)
-                        trySend(
-                            RawPacket(
-                                data = complete,
-                                rssi = connectionRegistry.lastKnownRssi(device) ?: UNKNOWN_RSSI,
-                                timestamp = System.currentTimeMillis()
+                    if (SquadControlCodec.decode(value) != null) {
+                        connectionRegistry.dispatchControlIncoming(device.address, value)
+                    } else {
+                        android.util.Log.d(TAG, "Incoming BLE write from " + device.address + ", bytes=" + value.size)
+                        reassembler.onFragmentReceived(device.address, value)?.let { complete ->
+                            android.util.Log.d(TAG, "Incoming BLE packet reassembled from " + device.address + ", bytes=" + complete.size)
+                            trySend(
+                                RawPacket(
+                                    data = complete,
+                                    rssi = connectionRegistry.lastKnownRssi(device) ?: UNKNOWN_RSSI,
+                                    timestamp = System.currentTimeMillis()
+                                )
                             )
-                        )
+                        }
                     }
                 }
                 if (responseNeeded) {
@@ -288,8 +292,61 @@ class BleRadioTransport(
         }
         connectionRegistry.addRawIncomingListener(clientFragmentListener)
 
+        val controlSender: (String, ByteArray) -> Boolean = controlSender@{ address, data ->
+            val outbound = connectionRegistry.outboundGatt(address)
+            if (outbound != null) {
+                val characteristic = outbound
+                    .getService(GATT_SERVICE_UUID)
+                    ?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
+                if (characteristic != null) {
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            return@controlSender outbound.writeCharacteristic(
+                                characteristic,
+                                data,
+                                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                            ) == BluetoothStatusCodes.SUCCESS
+                        }
+                        @Suppress("DEPRECATION")
+                        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                        @Suppress("DEPRECATION")
+                        characteristic.value = data
+                        @Suppress("DEPRECATION")
+                        return@controlSender outbound.writeCharacteristic(characteristic)
+                    } catch (_: Exception) {
+                        return@controlSender false
+                    }
+                }
+            }
+
+            val inbound = connectionRegistry.inboundDevice(address)
+            val server = gattServer
+            val characteristic = server
+                ?.getService(GATT_SERVICE_UUID)
+                ?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
+            if (inbound != null && server != null && characteristic != null) {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        server.notifyCharacteristicChanged(inbound, characteristic, false, data) ==
+                            BluetoothStatusCodes.SUCCESS
+                    } else {
+                        @Suppress("DEPRECATION")
+                        characteristic.value = data
+                        @Suppress("DEPRECATION")
+                        server.notifyCharacteristicChanged(inbound, characteristic, false)
+                    }
+                } catch (_: Exception) {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        connectionRegistry.addControlSender(controlSender)
+
         awaitClose {
             connectionRegistry.removeRawIncomingListener(clientFragmentListener)
+            connectionRegistry.removeControlSender(controlSender)
             runCatching { context.unregisterReceiver(adapterReceiver) }
             closeGattServer()
         }
