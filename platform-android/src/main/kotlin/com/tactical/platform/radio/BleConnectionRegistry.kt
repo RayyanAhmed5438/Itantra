@@ -2,6 +2,7 @@ package com.tactical.platform.radio
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
+import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -18,6 +19,8 @@ class BleConnectionRegistry {
     private val negotiatedMtu = ConcurrentHashMap<String, Int>()
     private val rssiByAddress = ConcurrentHashMap<String, Int>()
     private val transferIdCounter = AtomicInteger(0)
+    private val outboundWriteWaiters =
+        ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
     // Default is the un-negotiated BLE minimum (23 total, 3 reserved for
     // ATT header) — used until onMtuChanged reports a real negotiated value.
@@ -122,6 +125,23 @@ class BleConnectionRegistry {
 
     fun outboundGatt(address: String): BluetoothGatt? = outboundGatts[address]
     fun inboundDevice(address: String): BluetoothDevice? = inboundDevices[address]
+
+    fun registerOutboundWriteWaiter(
+        address: String,
+        waiter: CompletableDeferred<Boolean>
+    ): Boolean =
+        outboundWriteWaiters.putIfAbsent(address, waiter) == null
+
+    fun completeOutboundWrite(address: String, success: Boolean) {
+        outboundWriteWaiters.remove(address)?.complete(success)
+    }
+
+    fun cancelOutboundWriteWaiter(
+        address: String,
+        waiter: CompletableDeferred<Boolean>
+    ) {
+        outboundWriteWaiters.remove(address, waiter)
+    }
 
     fun nextTransferId(): Int = transferIdCounter.getAndIncrement()
 }
