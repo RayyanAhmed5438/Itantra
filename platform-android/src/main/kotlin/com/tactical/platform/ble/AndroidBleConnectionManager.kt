@@ -185,16 +185,20 @@ class AndroidBleConnectionManager(
             return TacticalResult.Failure("Could not reach $appId: ${connection.error}")
         }
 
+        // Record the outstanding request before transmitting it so an
+        // extremely fast ACCEPT/REJECT cannot race this bookkeeping.
+        outgoingSquadRequestAddresses[appId] = resolvedAddress
+
         delay(100L)
         val sent = registry.sendControl(
             resolvedAddress,
             SquadControlCodec.request(localDeviceId)
         )
         if (!sent) {
+            outgoingSquadRequestAddresses.remove(appId)
             return TacticalResult.Failure("GATT link is up but squad request could not be sent")
         }
 
-        outgoingSquadRequestAddresses[appId] = resolvedAddress
         setState(resolvedAddress, BleLinkState.CONNECTED)
         android.util.Log.d(TAG, "Squad request sent to $appId (no Android pairing)")
         return TacticalResult.Success(Unit)
