@@ -18,6 +18,12 @@ interface BleConnectionManager {
     /** Requests waiting for local user approval. */
     fun pendingSquadRequests(): StateFlow<List<SquadRequest>>
 
+    /** Announce the local callsign over currently connected squad links. */
+    suspend fun announceLocalCallsign(callsign: String)
+
+    /** Emits callsign changes received from connected squad peers. */
+    fun peerIdentityUpdates(): Flow<PeerIdentityUpdate>
+
     /** Approve or reject an incoming squad request. */
     suspend fun respondToSquadRequest(deviceId: String, approve: Boolean): TacticalResult<Unit>
 
@@ -47,6 +53,11 @@ interface BleConnectionManager {
 
     fun diagnostics(): Flow<BleDiagnostics>
 }
+
+data class PeerIdentityUpdate(
+    val deviceId: String,
+    val callsign: String
+)
 
 data class SquadRequest(
     val deviceId: String,
