@@ -265,7 +265,7 @@ class MainActivity : ComponentActivity() {
                                                 "SQUAD REQUEST 1/" +
                                                     state.pendingSquadRequestCount
                                             } else {
-                                                "SQUAD REQUEST"
+                                                ui.text(UiTextKey.SQUAD_REQUEST)
                                             }
                                         )
                                     },
@@ -273,7 +273,7 @@ class MainActivity : ComponentActivity() {
                                         androidx.compose.foundation.layout.Column {
                                             Text(
                                                 request.callsign +
-                                                    " wants to add you to their squad."
+                                                    " " + ui.text(UiTextKey.WANTS_TO_ADD)
                                             )
                                             state.squadRequestError?.let { error ->
                                                 androidx.compose.foundation.layout.Spacer(
