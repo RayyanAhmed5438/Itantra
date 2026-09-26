@@ -434,23 +434,16 @@ class MainViewModel @Inject constructor(
             )
         }
 
-        if (connectedIds.isEmpty() && _uiState.value.pttContinuousSession) {
+        if (connectedIds.isEmpty() && !_uiState.value.pttEnabled) {
+            // Never leave continuous CALL mode running without a live squad
+            // GATT session. Return to normal PTT so microphone capture and
+            // voice transmission cannot run disconnected.
             viewModelScope.launch {
-                runCatching { pttController.stopContinuous() }
+                if (_uiState.value.pttContinuousSession) {
+                    runCatching { pttController.stopContinuous() }
+                }
                 pttModePreferences.setPttEnabled(true)
                 _uiState.update { it.copy(pttEnabled = true) }
-            }
-        } else if (
-            connectedIds.isNotEmpty() &&
-            !_uiState.value.pttEnabled &&
-            !_uiState.value.pttContinuousSession &&
-            _uiState.value.pttSessionState == SessionState.IDLE
-        ) {
-            // CALL mode may remain selected while a peer is temporarily
-            // disconnected. Start microphone capture only after a real squad
-            // GATT session is available again.
-            viewModelScope.launch {
-                runCatching { pttController.startContinuous() }
             }
         }
     }
