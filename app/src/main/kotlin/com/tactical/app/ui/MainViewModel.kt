@@ -127,7 +127,10 @@ data class MainUiState(
     val emergencySending: Boolean = false,
     val emergencyTranscription: String = "",
     val emergencyError: String? = null,
-    val pendingSquadRequest: SquadRequest? = null
+    val pendingSquadRequest: SquadRequest? = null,
+    val pendingSquadRequestCount: Int = 0,
+    val respondingSquadRequestId: String? = null,
+    val squadRequestError: String? = null
 )
 
 @HiltViewModel
@@ -309,7 +312,13 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             bleConnectionManager.pendingSquadRequests().collect { requests ->
-                _uiState.update { it.copy(pendingSquadRequest = requests.firstOrNull()) }
+                _uiState.update {
+                    it.copy(
+                        pendingSquadRequest = requests.firstOrNull(),
+                        pendingSquadRequestCount = requests.size,
+                        squadRequestError = null
+                    )
+                }
             }
         }
 
@@ -508,8 +517,31 @@ class MainViewModel @Inject constructor(
         }
     }
     fun respondToSquadRequest(deviceId: String, approve: Boolean) {
+        if (_uiState.value.respondingSquadRequestId != null) return
+
+        _uiState.update {
+            it.copy(
+                respondingSquadRequestId = deviceId,
+                squadRequestError = null
+            )
+        }
+
         viewModelScope.launch {
-            runCatching { bleConnectionManager.respondToSquadRequest(deviceId, approve) }
+            val result = runCatching {
+                bleConnectionManager.respondToSquadRequest(deviceId, approve)
+            }.getOrElse {
+                TacticalResult.Failure(it.message ?: it.javaClass.simpleName)
+            }
+
+            _uiState.update {
+                it.copy(
+                    respondingSquadRequestId = null,
+                    squadRequestError = when (result) {
+                        is TacticalResult.Success -> null
+                        is TacticalResult.Failure -> result.error
+                    }
+                )
+            }
         }
     }
     fun removePeerFromSquad(deviceAddress: String) {
