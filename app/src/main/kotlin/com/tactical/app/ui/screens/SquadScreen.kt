@@ -784,7 +784,136 @@ fun SquadScreen(
         }
 
     }
+    if (languagePickerVisible) {
+        Dialog(
+            onDismissRequest = { languagePickerVisible = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.92f),
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFFF7FAFE)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "Select Language",
+                        color = Color(0xFF10243A),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        "Indian languages",
+                        color = Color(0xFF54708C),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    SQUAD_LANGUAGE_OPTIONS
+                        .filter { it.code != "en" }
+                        .forEach { option ->
+                            SquadLanguageRow(
+                                option = option,
+                                selected = pendingLanguageCode == option.code,
+                                onSelect = { pendingLanguageCode = option.code }
+                            )
+                        }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        "Other",
+                        color = Color(0xFF54708C),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    SquadLanguageRow(
+                        option = SQUAD_LANGUAGE_OPTIONS.first { it.code == "en" },
+                        selected = pendingLanguageCode == "en",
+                        onSelect = { pendingLanguageCode = "en" }
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            languagePickerVisible = false
+                            onLanguageSelected(pendingLanguageCode)
+                        },
+                        enabled = SQUAD_LANGUAGE_OPTIONS.any {
+                            it.code == pendingLanguageCode && it.available
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("CONFIRM", fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
+        }
+    }
 }
+
+private data class SquadLanguageOption(
+    val code: String,
+    val name: String,
+    val nativeName: String,
+    val available: Boolean
+)
+
+private val SQUAD_LANGUAGE_OPTIONS = listOf(
+    SquadLanguageOption("hi", "Hindi", "हिन्दी", true),
+    SquadLanguageOption("gu", "Gujarati", "ગુજરાતી", false),
+    SquadLanguageOption("mr", "Marathi", "मराठी", false),
+    SquadLanguageOption("kn", "Kannada", "ಕನ್ನಡ", false),
+    SquadLanguageOption("ml", "Malayalam", "മലയാളം", false),
+    SquadLanguageOption("ta", "Tamil", "தமிழ்", false),
+    SquadLanguageOption("te", "Telugu", "తెలుగు", false),
+    SquadLanguageOption("or", "Odia", "ଓଡ଼ିଆ", false),
+    SquadLanguageOption("bn", "Bengali", "বাংলা", false),
+    SquadLanguageOption("en", "English", "English", true)
+)
+
+@Composable
+private fun SquadLanguageRow(
+    option: SquadLanguageOption,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = option.available, onClick = onSelect)
+            .padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                option.nativeName,
+                color = if (option.available) Color(0xFF10243A) else Color(0xFFA4B2BF),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                option.name,
+                color = if (option.available) Color(0xFF54708C) else Color(0xFFB3BEC8),
+                fontSize = 10.sp
+            )
+        }
+
+        RadioButton(
+            selected = selected,
+            onClick = onSelect,
+            enabled = option.available
+        )
+    }
+}
+
 
 private fun formatPttTimestamp(epochMs: Long): String =
     if (epochMs > 0L) {
@@ -830,21 +959,15 @@ private fun SectionDividerLabel(label: String) {
 
 @Composable
 private fun EmptySquadSection(message: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(
-            text = message,
-            color = Color(0xFF8EA8C0),
-            fontSize = 12.sp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            textAlign = TextAlign.Center
-        )
-    }
+    Text(
+        text = message,
+        color = Color(0xFF8EA8C0),
+        fontSize = 12.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 14.dp),
+        textAlign = TextAlign.Center
+    )
 }
 
 @Composable
@@ -856,42 +979,36 @@ fun PeerCard(
     onDismissRemove: () -> Unit = {}
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .pointerInput(peer.deviceAddress) {
-                    detectTapGestures(
-                        onLongPress = { onLongPress() }
-                    )
-                }
-                .then(
-                    if (peer.isConnected) {
-                        Modifier.border(
-                            width = 1.5.dp,
-                            color = RedTacticalStatusGreen,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    } else {
-                        Modifier
-                    }
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(peer.deviceAddress) {
+                detectTapGestures(
+                    onLongPress = { onLongPress() }
                 )
-        ) {
+            }
+    ) {
+        Column(Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
-                    .padding(14.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
-                        .background(SquadBlueBackground)
+                        .background(SquadBlueSurfaceRaised)
+                        .border(
+                            1.dp,
+                            if (peer.isConnected) {
+                                SquadBlueGlow.copy(alpha = 0.75f)
+                            } else {
+                                SquadBlueBorder
+                            },
+                            CircleShape
+                        )
                 ) {
                     Icon(
                         Icons.Default.Person,
@@ -900,7 +1017,9 @@ fun PeerCard(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+
                 Spacer(Modifier.width(12.dp))
+
                 Column(Modifier.weight(1f)) {
                     Text(
                         peer.callsign,
@@ -923,6 +1042,7 @@ fun PeerCard(
                         fontSize = 11.sp
                     )
                 }
+
                 Icon(
                     Icons.Default.SignalCellularAlt,
                     contentDescription = "Signal",
@@ -934,13 +1054,19 @@ fun PeerCard(
                     modifier = Modifier.size(20.dp)
                 )
             }
+
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth(),
+                color = SquadBlueBorder.copy(alpha = 0.75f),
+                thickness = 1.dp
+            )
         }
 
         DropdownMenu(
             expanded = removeArmed,
             onDismissRequest = onDismissRemove,
             modifier = Modifier.widthIn(min = 170.dp),
-            containerColor = SquadBlueSurface,
+            containerColor = SquadBlueSurfaceRaised,
             shape = RoundedCornerShape(10.dp),
             shadowElevation = 8.dp
         ) {
@@ -948,7 +1074,7 @@ fun PeerCard(
                 text = {
                     Text(
                         "REMOVE FROM SQUAD",
-                        color = RedTacticalPrimaryBright,
+                        color = SquadHoldRedGlow,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 0.4.sp
