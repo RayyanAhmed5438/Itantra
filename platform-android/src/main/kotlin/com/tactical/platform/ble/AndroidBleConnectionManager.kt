@@ -143,7 +143,7 @@ class AndroidBleConnectionManager(
 
                 if (adapter?.isEnabled == true) {
                     squadDeviceIds().forEach { id ->
-                        runCatching { reconnectSquadMember(id) }
+                        runCatching { reconnectWithRoleStagger(id) }
                     }
                 }
 
