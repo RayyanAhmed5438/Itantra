@@ -48,6 +48,7 @@ fun SquadScreen(
     onPttCancel: () -> Unit,
     onEmergencyPress: () -> Unit,
     onEmergencyRelease: () -> Unit,
+    onRemoveFromSquad: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val connectedPeers = uiState.squadPeers.filter { it.isConnected }
@@ -633,7 +634,7 @@ fun SquadScreen(
                 connectedPeers,
                 key = { "connected_" + it.deviceAddress }
             ) { peer ->
-                PeerCard(peer)
+                PeerCard(peer, onRemoveFromSquad)
             }
         }
 
@@ -726,12 +727,22 @@ private fun EmptySquadSection(message: String) {
 }
 
 @Composable
-fun PeerCard(peer: PeerNodeUi) {
+fun PeerCard(
+    peer: PeerNodeUi,
+    onRemoveFromSquad: (String) -> Unit = {}
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .pointerInput(peer.deviceAddress) {
+                detectTapGestures(
+                    onLongPress = {
+                        onRemoveFromSquad(peer.deviceAddress)
+                    }
+                )
+            }
             .then(
                 if (peer.isConnected) {
                     Modifier.border(
