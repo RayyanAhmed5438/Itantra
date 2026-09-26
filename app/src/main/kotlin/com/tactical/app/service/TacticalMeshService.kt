@@ -169,6 +169,7 @@ class TacticalMeshService : Service() {
                             val language = MmsTtsLanguage.fromIsoCode(packet.languageCode)
                             if (language != null) {
                                 mmsTtsPlaybackCoordinator.enqueue(
+                                    senderId = packet.sender.value,
                                     language = language,
                                     text = packet.text
                                 )
