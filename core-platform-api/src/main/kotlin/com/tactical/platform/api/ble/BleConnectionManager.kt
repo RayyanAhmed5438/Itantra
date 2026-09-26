@@ -42,6 +42,9 @@ interface BleConnectionManager {
     /** Returns stable iTantra IDs currently selected for the local squad. */
     fun squadDeviceIds(): Set<String>
 
+    /** Returns squad members with an active inbound or outbound GATT session. */
+    fun connectedSquadDeviceIds(): Set<String>
+
     fun diagnostics(): Flow<BleDiagnostics>
 }
 
