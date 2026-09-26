@@ -522,15 +522,17 @@ class AndroidBleConnectionManager(
                     if (gattClients[resolvedAddress] === gatt &&
                         characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
                     ) {
+                        val value = characteristic.value
+                        if (SquadControlCodec.decode(value) != null) {
+                            registry.dispatchControlIncoming(resolvedAddress, value)
+                            return
+                        }
                         android.util.Log.d(
                             TAG,
                             "Incoming BLE notification from " + resolvedAddress +
-                                ", bytes=" + characteristic.value.size
+                                ", bytes=" + value.size
                         )
-                        registry.dispatchRawIncoming(
-                            resolvedAddress,
-                            characteristic.value
-                        )
+                        registry.dispatchRawIncoming(resolvedAddress, value)
                     }
                 }
 
