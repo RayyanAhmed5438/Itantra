@@ -259,7 +259,7 @@ fun SettingsScreen(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                if (loading) "Loading voice models…" else language.name,
+                                if (loading) LocalUiStrings.current.text(UiTextKey.LOADING) else language.name,
                                 color = if (loading) {
                                     SquadBlueGlow
                                 } else {
