@@ -18,6 +18,17 @@ val RedTacticalStatusGreen = Color(0xFF4CAF50)
 val RedTacticalStatusYellow = Color(0xFFFFC107)
 val RedTacticalVoiceOrange = Color(0xFFFF9800)
 
+val SquadBlueBackground = Color(0xFF061A31)
+val SquadBlueSurface = Color(0xFF0B2A4A)
+val SquadBlueSurfaceRaised = Color(0xFF10385D)
+val SquadBlueBorder = Color(0xFF1E527D)
+val SquadBluePrimary = Color(0xFF008CFF)
+val SquadBlueGlow = Color(0xFF19BFFF)
+val SquadHoldRed = Color(0xFFFF3656)
+val SquadHoldRedGlow = Color(0xFFFF4B68)
+val SquadTransmitOrange = Color(0xFFFF9800)
+val SquadTransmitGlow = Color(0xFFFFA62B)
+
 private val DarkColorScheme = darkColorScheme(
     primary = RedTacticalPrimary,
     onPrimary = Color.White,
