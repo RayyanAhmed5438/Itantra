@@ -193,7 +193,9 @@ class MainActivity : ComponentActivity() {
                                     0 -> DevicesScreen(
                                         uiState = state,
                                         onScan = viewModel::forceDiscovery,
-                                        onAddToSquad = viewModel::addPeerToSquad
+                                        onAddToSquad = viewModel::addPeerToSquad,
+                                        onEmergencyPress = viewModel::startEmergencyHold,
+                                        onEmergencyRelease = viewModel::releaseEmergencyHold
                                     )
                                 1 -> SquadScreen(
                                     uiState = state,
@@ -205,8 +207,6 @@ class MainActivity : ComponentActivity() {
                                     onPttPress = viewModel::pressPtt,
                                     onPttRelease = viewModel::releasePtt,
                                     onPttCancel = viewModel::cancelPtt,
-                                    onEmergencyPress = viewModel::startEmergencyHold,
-                                    onEmergencyRelease = viewModel::releaseEmergencyHold,
                                     onRemoveFromSquad = viewModel::removePeerFromSquad
                                 )
                                     2 -> MessagesScreen(
