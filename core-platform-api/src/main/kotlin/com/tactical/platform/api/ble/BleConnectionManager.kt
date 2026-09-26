@@ -7,9 +7,9 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * BLE physical-link management plus app-level squad membership.
  *
- * Discovery may call connect() automatically. Squad membership is an
- * application decision and is deliberately independent from Android
- * Bluetooth bonding/pairing.
+ * Discovery reports nearby devices only. Physical GATT connections are
+ * established automatically for approved squad members; squad membership
+ * is an application decision and is independent from Android bonding/pairing.
  */
 interface BleConnectionManager {
     /** Send an application-level squad request; membership changes only after approval. */
