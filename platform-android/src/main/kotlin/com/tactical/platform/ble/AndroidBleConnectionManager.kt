@@ -266,6 +266,7 @@ class AndroidBleConnectionManager(
         if (approve) {
             rememberSquadMember(request.deviceId, knownAddress)
             setState(knownAddress, BleLinkState.CONNECTED)
+            propagateSquadMembership(request.deviceId, knownAddress)
         } else {
             setState(knownAddress, BleLinkState.AVAILABLE)
         }
@@ -385,22 +386,52 @@ class AndroidBleConnectionManager(
                         status == BluetoothGatt.GATT_SUCCESS
                     ) {
                         setState(resolvedAddress, BleLinkState.CONNECTING)
+
+                        var serviceDiscoveryStarted = false
+
+                        fun startServiceDiscovery() {
+                            if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
+                            serviceDiscoveryStarted = true
+                            android.util.Log.d(
+                                TAG,
+                                "GATT connected, discovering services for " + resolvedAddress
+                            )
+
+                            val started = try {
+                                gatt.discoverServices()
+                            } catch (_: Exception) {
+                                false
+                            }
+
+                            if (!started) {
+                                failConnection(
+                                    gatt,
+                                    "GATT service discovery could not start"
+                                )
+                            }
+                        }
+
                         android.util.Log.d(
                             TAG,
-                            "GATT connected, discovering services for " + resolvedAddress
+                            "GATT connected, requesting MTU $DESIRED_MTU for " + resolvedAddress
                         )
 
-                        val started = try {
-                            gatt.discoverServices()
+                        val mtuRequestStarted = try {
+                            gatt.requestMtu(DESIRED_MTU)
                         } catch (_: Exception) {
                             false
                         }
 
-                        if (!started) {
-                            failConnection(
-                                gatt,
-                                "GATT service discovery could not start"
-                            )
+                        if (!mtuRequestStarted) {
+                            startServiceDiscovery()
+                        } else {
+                            // Some OEM stacks accept requestMtu() but fail to
+                            // deliver the callback. Never block the connection
+                            // attempt forever waiting for a negotiation event.
+                            reconnectScope.launch {
+                                delay(MTU_NEGOTIATION_FALLBACK_MS)
+                                startServiceDiscovery()
+                            }
                         }
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                         gattClients.remove(resolvedAddress, gatt)
@@ -617,10 +648,20 @@ class AndroidBleConnectionManager(
                     mtu: Int,
                     status: Int
                 ) {
-                    if (status == BluetoothGatt.GATT_SUCCESS &&
-                        (gattClients[resolvedAddress] === gatt || pending[resolvedAddress] === completion)
-                    ) {
-                        registry.onMtuNegotiated(resolvedAddress, mtu)
+                    if (gattClients[resolvedAddress] === gatt || pending[resolvedAddress] === completion) {
+                        if (status == BluetoothGatt.GATT_SUCCESS) {
+                            registry.onMtuNegotiated(resolvedAddress, mtu)
+                            android.util.Log.d(
+                                TAG,
+                                "MTU negotiated for " + resolvedAddress + ": " + mtu
+                            )
+                        } else {
+                            android.util.Log.w(
+                                TAG,
+                                "MTU negotiation failed for " + resolvedAddress +
+                                    ", status=" + status
+                            )
+                        }
                     }
                 }
             }
@@ -667,6 +708,13 @@ class AndroidBleConnectionManager(
                 } else {
                     BleLinkState.AVAILABLE
                 })
+
+                // Once a squad peer reconnects, give it the current roster.
+                // This repairs hub-and-spoke topologies after app/process
+                // recreation and makes new members converge to a full mesh.
+                if (message.deviceId in squadDeviceIds()) {
+                    syncSquadRosterTo(address)
+                }
             }
 
             is SquadControlCodec.Message.Request -> {
@@ -678,6 +726,7 @@ class AndroidBleConnectionManager(
                         SquadControlCodec.response(localDeviceId, true)
                     )
                     setState(address, BleLinkState.CONNECTED)
+                    syncSquadRosterTo(address)
                 } else {
                     synchronized(pendingSquadRequestsById) {
                         pendingSquadRequestsById[message.deviceId] =
@@ -697,10 +746,57 @@ class AndroidBleConnectionManager(
                 if (message.accepted) {
                     rememberSquadMember(message.deviceId, address)
                     setState(address, BleLinkState.CONNECTED)
+                    propagateSquadMembership(message.deviceId, address)
                 } else {
                     setState(address, BleLinkState.AVAILABLE)
                 }
                 outgoingSquadRequestAddresses.remove(message.deviceId)
+            }
+
+            is SquadControlCodec.Message.SquadMember -> {
+                if (message.deviceId == localDeviceId) return
+
+                val sourceId = applicationIdForAddress(address)
+                if (sourceId == null || sourceId !in squadDeviceIds()) {
+                    android.util.Log.d(
+                        TAG,
+                        "Ignoring untrusted squad roster update from " + address
+                    )
+                    return
+                }
+
+                val wasAlreadyMember = message.deviceId in squadDeviceIds()
+                val memberAddress = resolveAddress(message.deviceId)
+
+                if (memberAddress != null) {
+                    rememberSquadMember(message.deviceId, memberAddress)
+                } else {
+                    // Keep the stable ID even if the peer has not appeared in
+                    // the latest scan yet. The background reconnect loop will
+                    // connect once discovery resolves its BLE address.
+                    rememberSquadMemberId(message.deviceId)
+                }
+
+                if (!wasAlreadyMember) {
+                    android.util.Log.d(
+                        TAG,
+                        "Learned squad member " + message.deviceId +
+                            " from " + sourceId
+                    )
+                    memberAddress?.let { setState(it, BleLinkState.AVAILABLE) }
+
+                    reconnectScope.launch {
+                        runCatching { reconnectWithRoleStagger(message.deviceId) }
+                    }
+
+                    // Propagate newly learned membership through the local
+                    // squad. Membership changes converge without requiring a
+                    // second manual ADD TO SQUAD action.
+                    propagateSquadMemberToPeers(
+                        message.deviceId,
+                        excludeAddress = address
+                    )
+                }
             }
 
             is SquadControlCodec.Message.Remove -> {
@@ -915,6 +1011,64 @@ class AndroidBleConnectionManager(
         emptyCycles = 0
     }
 
+    /**
+     * Pushes the current squad roster to a newly accepted/reconnected peer and
+     * tells the other local squad peers about the new member. A single fixed
+     * 20-byte control frame is used per member so this remains compatible with
+     * the default BLE ATT payload.
+     */
+    private fun propagateSquadMembership(
+        memberId: String,
+        memberAddress: String
+    ) {
+        syncSquadRosterTo(memberAddress)
+        propagateSquadMemberToPeers(memberId, excludeAddress = memberAddress)
+    }
+
+    private fun syncSquadRosterTo(targetAddress: String) {
+        squadDeviceIds()
+            .asSequence()
+            .filter { it != localDeviceId }
+            .distinct()
+            .forEach { memberId ->
+                registry.sendControl(
+                    targetAddress,
+                    SquadControlCodec.squadMember(memberId)
+                )
+            }
+    }
+
+    private fun propagateSquadMemberToPeers(
+        memberId: String,
+        excludeAddress: String? = null
+    ) {
+        squadDeviceIds()
+            .asSequence()
+            .filter { it != localDeviceId && it != memberId }
+            .distinct()
+            .forEach { peerId ->
+                val peerAddress = resolveAddress(peerId) ?: return@forEach
+                if (peerAddress == excludeAddress) return@forEach
+                if (hasDirectConnection(peerAddress)) {
+                    registry.sendControl(
+                        peerAddress,
+                        SquadControlCodec.squadMember(memberId)
+                    )
+                }
+            }
+    }
+
+    private fun rememberSquadMemberId(appId: String) {
+        if (appId.isBlank() || appId == localDeviceId) return
+        val ids = squadDeviceIds().toMutableSet()
+        if (!ids.add(appId)) return
+
+        prefs.edit()
+            .putStringSet(SQUAD_IDS_KEY, ids)
+            .remove(LEGACY_PAIRED_IDS_KEY)
+            .apply()
+    }
+
     private fun rememberAddress(appId: String, address: String) {
         prefs.edit()
             .putString(PREF_ADDRESS_PREFIX + appId, address)
@@ -940,8 +1094,17 @@ class AndroidBleConnectionManager(
     }
 
     private fun resolveAddress(identifier: String): String? {
-        return BlePeerAddressRegistry.addressFor(identifier)
-            ?: prefs.getString(PREF_ADDRESS_PREFIX + identifier, null)
+        val memoryAddress = BlePeerAddressRegistry.addressFor(identifier)
+        if (memoryAddress != null) return memoryAddress
+
+        val persistedAddress = prefs.getString(PREF_ADDRESS_PREFIX + identifier, null)
+        if (persistedAddress != null && !isBluetoothAddress(identifier)) {
+            // Rehydrate the process-local registry after app/process recreation.
+            // The mesh transport resolves targeted squad traffic through this
+            // registry, so a persisted GATT mapping must be restored here too.
+            BlePeerAddressRegistry.remember(identifier, persistedAddress)
+        }
+        return persistedAddress
     }
 
     private fun applicationIdForAddress(address: String): String? {
@@ -1031,6 +1194,8 @@ class AndroidBleConnectionManager(
         private const val SQUAD_IDS_KEY = "squad_device_ids"
         private const val LEGACY_PAIRED_IDS_KEY = "paired_device_ids"
         private const val PREF_ADDRESS_PREFIX = "address_"
+        private const val DESIRED_MTU = 247
+        private const val MTU_NEGOTIATION_FALLBACK_MS = 2000L
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 }
