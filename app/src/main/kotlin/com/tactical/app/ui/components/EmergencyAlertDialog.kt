@@ -1,5 +1,7 @@
 package com.tactical.app.ui.components
 
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -55,7 +57,7 @@ fun EmergencyAlertDialog(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "EMERGENCY ALERT",
+                            text = LocalUiStrings.current.text(UiTextKey.EMERGENCY_ALERT),
                             color = Color.White,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -66,7 +68,7 @@ fun EmergencyAlertDialog(
                     IconButton(onClick = onAcknowledge) {
                         Icon(
                             Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = LocalUiStrings.current.text(UiTextKey.CLOSE),
                             tint = RedTacticalTextSecondary
                         )
                     }
@@ -79,7 +81,7 @@ fun EmergencyAlertDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "FROM: " + alertData.sender,
+                        text = LocalUiStrings.current.text(UiTextKey.FROM) + alertData.sender,
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -97,14 +99,14 @@ fun EmergencyAlertDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InfoPill("SEVERITY: " + alertData.severity)
-                    InfoPill("LANG: " + alertData.languageCode.uppercase())
+                    InfoPill(LocalUiStrings.current.text(UiTextKey.SEVERITY) + alertData.severity)
+                    InfoPill(LocalUiStrings.current.text(UiTextKey.LANG) + alertData.languageCode.uppercase())
                 }
 
                 Spacer(Modifier.height(14.dp))
 
                 Text(
-                    text = "MESSAGE",
+                    text = LocalUiStrings.current.text(UiTextKey.MESSAGE),
                     color = RedTacticalTextSecondary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -133,7 +135,7 @@ fun EmergencyAlertDialog(
                 Spacer(Modifier.height(14.dp))
 
                 Text(
-                    text = "LOCATION",
+                    text = LocalUiStrings.current.text(UiTextKey.LOCATION),
                     color = RedTacticalTextSecondary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -162,7 +164,7 @@ fun EmergencyAlertDialog(
                             )
                             Column {
                                 Text(
-                                    text = "Location attached",
+                                    text = LocalUiStrings.current.text(UiTextKey.LOCATION_ATTACHED),
                                     color = Color.White,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
@@ -181,7 +183,7 @@ fun EmergencyAlertDialog(
                                 alertData.locationAccuracyMeters?.let { accuracy ->
                                     Spacer(Modifier.height(3.dp))
                                     Text(
-                                        text = "Accuracy: " + accuracy.toInt() + " m",
+                                        text = LocalUiStrings.current.text(UiTextKey.ACCURACY) + accuracy.toInt() + " m",
                                         color = RedTacticalTextSecondary,
                                         fontSize = 10.sp
                                     )
@@ -190,7 +192,7 @@ fun EmergencyAlertDialog(
                         }
                     } else {
                         Text(
-                            text = "No location attached to this alert.",
+                            text = LocalUiStrings.current.text(UiTextKey.NO_LOCATION),
                             color = RedTacticalTextSecondary,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(14.dp)
@@ -210,7 +212,7 @@ fun EmergencyAlertDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "CLOSE",
+                        text = LocalUiStrings.current.text(UiTextKey.CLOSE),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.sp,
