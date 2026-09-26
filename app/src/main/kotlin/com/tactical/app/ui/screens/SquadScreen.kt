@@ -119,12 +119,6 @@ fun SquadScreen(
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.sp
                     )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "${connectedPeers.size} CONNECTED • ${squadOfflinePeers.size} IN SQUAD",
-                        color = RedTacticalTextSecondary,
-                        fontSize = 11.sp
-                    )
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -625,7 +619,7 @@ fun SquadScreen(
         }
 
         item {
-            SectionDividerLabel("CONNECTED DEVICES")
+            SectionDividerLabel("${connectedPeers.size} CONNECTED DEVICES")
         }
 
         if (connectedPeers.isEmpty()) {
@@ -652,7 +646,7 @@ fun SquadScreen(
 
         item {
             Spacer(Modifier.height(2.dp))
-            SectionDividerLabel("SQUAD MEMBERS")
+            SectionDividerLabel("OFFLINE MEMBERS (${squadOfflinePeers.size})")
         }
 
         if (squadOfflinePeers.isEmpty()) {
