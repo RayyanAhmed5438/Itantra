@@ -236,7 +236,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            ""+ LocalUiStrings.current.text(UiTextKey.OVERLAPPING_NOTE) +"",
+            LocalUiStrings.current.text(UiTextKey.OVERLAPPING_NOTE),
             color = RedTacticalTextSecondary,
             fontSize = 11.sp
         )
