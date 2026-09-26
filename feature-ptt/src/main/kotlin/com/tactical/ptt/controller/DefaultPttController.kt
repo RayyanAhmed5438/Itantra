@@ -40,6 +40,7 @@ class DefaultPttController(
     override fun state(): StateFlow<PttState> = _state.asStateFlow()
 
     private var sessionJob: Job? = null
+    private var transmissionJob: Job? = null
     private var currentSession: PttSession? = null
 
     override suspend fun press(isVox: Boolean) {
@@ -117,8 +118,15 @@ class DefaultPttController(
                             sessionState = SessionState.TRANSMITTING
                         )
                     }
-                    transmit(session, finalChunk)
-                    _state.update { it.copy(sessionState = SessionState.IDLE) }
+
+                    // Do not keep BLE transmission inside the transcription
+                    // job. release() is allowed to stop/cancel the recording
+                    // job without cancelling a large fragmented transmission.
+                    transmissionJob?.cancel()
+                    transmissionJob = scope.launch {
+                        transmit(session, finalChunk)
+                        _state.update { it.copy(sessionState = SessionState.IDLE) }
+                    }
                 } else {
                     _state.update { it.copy(sessionState = SessionState.IDLE) }
                 }
@@ -291,6 +299,8 @@ class DefaultPttController(
         audioRecorder.stop()
         sessionJob?.cancel()
         sessionJob = null
+        transmissionJob?.cancel()
+        transmissionJob = null
         currentSession = null
         _state.update {
             it.copy(
@@ -309,13 +319,17 @@ class DefaultPttController(
 
         val job = sessionJob
         if (job != null) {
+            // Only the recording/transcription coroutine is subject to the
+            // short release grace period. A transmission already handed to
+            // transmissionJob is intentionally allowed to finish.
             withTimeoutOrNull(releaseGraceMs) { job.join() }
-            job.cancel()
-            sessionJob = null
-            if (_state.value.sessionState != SessionState.TRANSMITTING) {
-                _state.update { it.copy(sessionState = SessionState.IDLE) }
+            if (job.isActive) {
+                job.cancel()
             }
-        } else {
+            sessionJob = null
+        }
+
+        if (_state.value.sessionState != SessionState.TRANSMITTING) {
             _state.update { it.copy(sessionState = SessionState.IDLE) }
         }
     }
