@@ -120,7 +120,7 @@ class AndroidBleConnectionManager(
                 reconnectScope.launch {
                     delay(1500L)
                     squadDeviceIds().forEach { id ->
-                        runCatching { reconnectSquadMember(id) }
+                        runCatching { reconnectWithRoleStagger(id) }
                     }
                 }
             }
@@ -492,6 +492,13 @@ class AndroidBleConnectionManager(
                             TAG,
                             "GATT ready for " + resolvedAddress
                         )
+                        registry.sendControl(
+                            resolvedAddress,
+                            SquadControlCodec.hello(
+                                localDeviceId,
+                                localCallsignProvider()
+                            )
+                        )
                         if (pending.remove(resolvedAddress, completion)) {
                             completion.complete(TacticalResult.Success(Unit))
                         }
@@ -531,6 +538,12 @@ class AndroidBleConnectionManager(
                     if (gattClients[resolvedAddress] === gatt &&
                         characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
                     ) {
+                        val control = SquadControlCodec.decode(value)
+                        if (control != null) {
+                            registry.dispatchControlIncoming(resolvedAddress, value)
+                            return
+                        }
+
                         android.util.Log.d(
                             TAG,
                             "Incoming BLE notification from " + resolvedAddress +
@@ -598,6 +611,58 @@ class AndroidBleConnectionManager(
         }
     }
 
+    private fun handleControlMessage(address: String, data: ByteArray) {
+        when (val message = SquadControlCodec.decode(data)) {
+            is SquadControlCodec.Message.Hello -> {
+                if (message.deviceId == localDeviceId) return
+                rememberAddress(message.deviceId, address)
+                setState(address, if (hasDirectConnection(address)) {
+                    BleLinkState.CONNECTED
+                } else {
+                    BleLinkState.AVAILABLE
+                })
+            }
+
+            is SquadControlCodec.Message.Request -> {
+                if (message.deviceId == localDeviceId) return
+                rememberAddress(message.deviceId, address)
+                if (message.deviceId in squadDeviceIds()) {
+                    registry.sendControl(
+                        address,
+                        SquadControlCodec.response(localDeviceId, true)
+                    )
+                    setState(address, BleLinkState.CONNECTED)
+                } else {
+                    pendingSquadRequestsById[message.deviceId] =
+                        SquadRequest(message.deviceId, message.callsign)
+                    _pendingSquadRequests.value = pendingSquadRequestsById.values
+                        .sortedBy { it.callsign.lowercase() }
+                }
+            }
+
+            is SquadControlCodec.Message.Response -> {
+                rememberAddress(message.deviceId, address)
+                if (message.accepted) {
+                    rememberSquadMember(message.deviceId, address)
+                    setState(address, BleLinkState.CONNECTED)
+                } else {
+                    setState(address, BleLinkState.AVAILABLE)
+                }
+            }
+
+            is SquadControlCodec.Message.Remove -> {
+                if (message.deviceId == localDeviceId) return
+                forgetSquadMember(message.deviceId)
+                pendingSquadRequestsById.remove(message.deviceId)
+                _pendingSquadRequests.value = pendingSquadRequestsById.values
+                    .sortedBy { it.callsign.lowercase() }
+                setState(address, BleLinkState.AVAILABLE)
+                android.util.Log.d(TAG, "Remote squad removal received from " + message.deviceId)
+            }
+
+            null -> Unit
+        }
+    }
     override suspend fun disconnect(deviceAddress: String) {
         val resolvedAddress = resolveAddress(deviceAddress) ?: deviceAddress
         gattClients.remove(resolvedAddress)?.let {
@@ -639,6 +704,16 @@ class AndroidBleConnectionManager(
         return legacy
     }
 
+    private suspend fun reconnectWithRoleStagger(deviceAddress: String) {
+        val resolved = resolveAddress(deviceAddress)
+        val peerId = if (resolved != null) {
+            BlePeerAddressRegistry.applicationIdFor(resolved) ?: deviceAddress
+        } else {
+            deviceAddress
+        }
+        if (localDeviceId > peerId) delay(1500L)
+        runCatching { reconnectSquadMember(peerId) }
+    }
     override suspend fun reconnectSquadMember(deviceAddress: String): TacticalResult<Unit> {
         val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
         if (adapter == null || !adapter.isEnabled) {
