@@ -180,7 +180,11 @@ class DefaultPttController(
         }
         hapticFeedback.onPress()
 
-        val frames = audioRecorder.start(audioConfig)
+        // Call Mode uses Android's voice-communication capture profile so
+        // incoming TTS is less likely to feed back into the microphone.
+        val frames = audioRecorder.start(
+            audioConfig.copy(voiceCommunication = true)
+        )
 
         sessionJob = scope.launch {
             val sendQueue = Channel<PttTransmission>(Channel.UNLIMITED)
