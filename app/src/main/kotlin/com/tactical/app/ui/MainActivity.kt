@@ -114,16 +114,12 @@ class MainActivity : ComponentActivity() {
                                             text = if (showSettings) "Settings" else "Itantra",
                                             color = Color.White
                                         )
-                                        if (!showSettings) {
+                                        if (!showSettings && !squadTheme) {
                                             androidx.compose.foundation.layout.Spacer(
                                                 Modifier.width(6.dp)
                                             )
                                             Surface(
-                                                color = if (squadTheme) {
-                                                    com.tactical.app.ui.theme.SquadBlueSurface
-                                                } else {
-                                                    Color(0xFF3A1414)
-                                                },
+                                                color = Color(0xFF3A1414),
                                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
                                             ) {
                                                 Text(
