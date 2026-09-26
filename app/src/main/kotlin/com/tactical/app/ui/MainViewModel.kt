@@ -314,6 +314,10 @@ class MainViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            refreshSquadConnectionStates()
+        }
+
+        viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->
                     val existing = (state.availablePeers + state.squadPeers)
@@ -385,7 +389,8 @@ class MainViewModel @Inject constructor(
             try {
                 while (true) {
                     try {
-                        delay(5000L)
+                        delay(1000L)
+                        refreshSquadConnectionStates()
                         if (scanLoopJob == null || scanLoopJob?.isCancelled == true) {
                             startDiscovery()
                         }
@@ -400,6 +405,40 @@ class MainViewModel @Inject constructor(
                 }
             } catch (_: CancellationException) {
                 // Normal ViewModel cancellation.
+            }
+        }
+    }
+
+    /**
+     * Reconciles the UI's connection flags against the BLE registry. This is
+     * the source of truth even when an inbound and outbound GATT callback race.
+     */
+    private fun refreshSquadConnectionStates() {
+        val connectedIds = bleConnectionManager.connectedSquadDeviceIds()
+        _uiState.update { state ->
+            fun updatePeer(peer: PeerNodeUi): PeerNodeUi =
+                peer.copy(
+                    isConnected = peer.deviceAddress in connectedIds,
+                    bleState = if (peer.deviceAddress in connectedIds) {
+                        BleLinkState.CONNECTED
+                    } else if (peer.bleState == BleLinkState.CONNECTED) {
+                        BleLinkState.DISCONNECTED
+                    } else {
+                        peer.bleState
+                    }
+                )
+
+            state.copy(
+                squadPeers = state.squadPeers.map(::updatePeer),
+                availablePeers = state.availablePeers.map(::updatePeer)
+            )
+        }
+
+        if (connectedIds.isEmpty() && _uiState.value.pttContinuousSession) {
+            viewModelScope.launch {
+                runCatching { pttController.stopContinuous() }
+                pttModePreferences.setPttEnabled(true)
+                _uiState.update { it.copy(pttEnabled = true) }
             }
         }
     }
@@ -598,6 +637,10 @@ class MainViewModel @Inject constructor(
             return
         }
 
+        if (!enabled && bleConnectionManager.connectedSquadDeviceIds().isEmpty()) {
+            return
+        }
+
         pttModePreferences.setPttEnabled(enabled)
         _uiState.update { it.copy(pttEnabled = enabled) }
 
@@ -614,7 +657,7 @@ class MainViewModel @Inject constructor(
      * Starts continuous voice mode after microphone permission is available.
      */
     fun ensureVoiceMode() {
-        if (!_uiState.value.pttEnabled) {
+        if (!_uiState.value.pttEnabled && bleConnectionManager.connectedSquadDeviceIds().isNotEmpty()) {
             viewModelScope.launch {
                 runCatching { pttController.startContinuous() }
             }
