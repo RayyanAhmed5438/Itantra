@@ -317,6 +317,33 @@ class MainViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            bleConnectionManager.peerIdentityUpdates().collect { update ->
+                localAppDataStore.loadPairedDevices()
+                    .firstOrNull { it.deviceId == update.deviceId }
+                    ?.let { stored ->
+                        localAppDataStore.savePairedDevice(
+                            stored.copy(callsign = update.callsign)
+                        )
+                    }
+
+                _uiState.update { state ->
+                    state.copy(
+                        squadPeers = state.squadPeers.map { peer ->
+                            if (peer.deviceAddress == update.deviceId) {
+                                peer.copy(callsign = update.callsign)
+                            } else peer
+                        },
+                        availablePeers = state.availablePeers.map { peer ->
+                            if (peer.deviceAddress == update.deviceId) {
+                                peer.copy(callsign = update.callsign)
+                            } else peer
+                        }
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
             bleConnectionManager.pendingSquadRequests().collect { requests ->
                 _uiState.update {
                     it.copy(
@@ -792,18 +819,16 @@ class MainViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(username = cleaned)
                 }
-                // Discovery reads the callsign from DeviceIdentityStore when
-                // advertising, so refresh the local presence after a save.
                 viewModelScope.launch {
                     runCatching { discoveryService.stop() }
                     runCatching { discoveryService.start() }
+                    runCatching { bleConnectionManager.announceLocalCallsign(cleaned) }
                 }
                 null
             },
             onFailure = { it.message ?: "Could not save username." }
         )
     }
-
 
 
     fun startEmergencyHold() {
