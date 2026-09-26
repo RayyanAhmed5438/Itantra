@@ -525,6 +525,11 @@ class MainViewModel @Inject constructor(
     fun respondToSquadRequest(deviceId: String, approve: Boolean) {
         if (_uiState.value.respondingSquadRequestId != null) return
 
+        // Keep the display data from the request itself. Approval can succeed
+        // over GATT even when the requester has not appeared in discovery yet.
+        val request = _uiState.value.pendingSquadRequest
+            ?.takeIf { it.deviceId == deviceId }
+
         _uiState.update {
             it.copy(
                 respondingSquadRequestId = deviceId,
@@ -537,6 +542,26 @@ class MainViewModel @Inject constructor(
                 bleConnectionManager.respondToSquadRequest(deviceId, approve)
             }.getOrElse {
                 TacticalResult.Failure(it.message ?: it.javaClass.simpleName)
+            }
+
+            if (result is TacticalResult.Success && approve && request != null) {
+                localAppDataStore.savePairedDevice(
+                    StoredPairedDevice(
+                        deviceId = request.deviceId,
+                        callsign = request.callsign,
+                        lastSeenEpochMs = System.currentTimeMillis(),
+                        rssi = 0,
+                        linkText = "CONNECTED"
+                    )
+                )
+
+                if (observedPeerIds.add(request.deviceId)) {
+                    observePeerState(request.deviceId)
+                }
+
+                // The requester may not be in the discovery catalog yet, so
+                // rebuild the squad list from persistent local peer data too.
+                refreshSquadPeers()
             }
 
             _uiState.update {
@@ -560,14 +585,32 @@ class MainViewModel @Inject constructor(
 
     private fun refreshSquadPeers() {
         val squadIds = bleConnectionManager.squadDeviceIds()
+        val storedById = localAppDataStore
+            .loadPairedDevices()
+            .associateBy { it.deviceId }
+
         _uiState.update { state ->
             val knownById = (state.availablePeers + state.squadPeers)
                 .associateBy { it.deviceAddress }
-            val squad = squadIds.mapNotNull { id -> knownById[id] }
+
+            val allKnown = buildList {
+                addAll(knownById.values)
+                storedById.values.forEach { stored ->
+                    if (knownById[stored.deviceId] == null) {
+                        add(storedPeerToUi(stored))
+                    }
+                }
+            }.distinctBy { it.deviceAddress }
+
+            val squad = squadIds.mapNotNull { id ->
+                allKnown.firstOrNull { it.deviceAddress == id }
+            }
+
             state.copy(
                 squadPeers = squad,
-                availablePeers = knownById.values
-                    .filter { it.deviceAddress !in squadIds }
+                availablePeers = allKnown.filter {
+                    it.deviceAddress !in squadIds
+                }
             )
         }
     }
