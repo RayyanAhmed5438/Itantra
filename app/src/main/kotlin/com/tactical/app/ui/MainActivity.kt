@@ -172,6 +172,8 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     selectedLanguageCode = state.selectedLanguageCode,
                                     onLanguageSelected = viewModel::setSelectedLanguage,
+                                    ttsPlaybackMode = state.ttsPlaybackMode,
+                                    onTtsPlaybackModeSelected = viewModel::setTtsPlaybackMode,
                                     username = state.username,
                                     onUsernameSave = viewModel::setUsername
                                 )
