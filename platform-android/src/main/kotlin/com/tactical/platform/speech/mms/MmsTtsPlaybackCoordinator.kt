@@ -3,7 +3,6 @@ package com.tactical.platform.speech.mms
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -99,15 +98,17 @@ class MmsTtsPlaybackCoordinator @Inject constructor() {
     }
 
     private suspend fun runJobSafely(job: suspend () -> Unit) {
-        runCatching { job() }
-            .onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
-                android.util.Log.w(
-                    TAG,
-                    "Incoming voice-message playback failed: " +
-                        (error.message ?: error.javaClass.simpleName)
-                )
-            }
+        try {
+            job()
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            android.util.Log.w(
+                TAG,
+                "Incoming voice-message playback failed: " +
+                    (error.message ?: error.javaClass.simpleName)
+            )
+        }
     }
 
     companion object {
