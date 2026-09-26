@@ -47,27 +47,20 @@ class PeriodicBeaconEmitter(
                 throw e
             } finally {
                 running.set(false)
-
-                // A callsign change restarts the emitter by cancelling this
-                // coroutine and immediately starting a replacement one.
-                // The cancelled coroutine can still reach this finally block
-                // after the replacement has already started advertising.
-                // Only the currently registered job may stop the advertiser;
-                // an old job must never tear down the new advertisement.
-                if (job === coroutineContext[Job]) {
-                    try {
-                        bleAdvertiser.stopAdvertising()
-                    } catch (_: Exception) {
-                        // Nothing else to do during shutdown.
-                    }
+                try {
+                    bleAdvertiser.stopAdvertising()
+                } catch (_: Exception) {
+                    // Nothing else to do during shutdown.
                 }
             }
         }
     }
 
-    override fun stop() {
-        job?.cancel()
+    override suspend fun stop() {
+        val currentJob = job ?: return
         job = null
+        currentJob.cancel()
+        currentJob.join()
     }
 
     private suspend fun emitBeacon() {
