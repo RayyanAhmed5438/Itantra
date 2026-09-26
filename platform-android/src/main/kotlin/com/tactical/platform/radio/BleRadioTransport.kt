@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import android.os.Build
 import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.ble.BlePeerAddressRegistry
@@ -94,12 +96,34 @@ class BleRadioTransport(
                 value: ByteArray
             ) {
                 if (characteristic.uuid == PACKET_CHARACTERISTIC_UUID) {
-                    if (SquadControlCodec.decode(value) != null) {
+                    val acknowledgementTransferId =
+                        BleFragmenter.acknowledgementTransferId(value)
+
+                    if (acknowledgementTransferId != null) {
+                        connectionRegistry.completeTransferAck(
+                            device.address,
+                            acknowledgementTransferId
+                        )
+                    } else if (SquadControlCodec.decode(value) != null) {
                         connectionRegistry.dispatchControlIncoming(device.address, value)
                     } else {
-                        android.util.Log.d(TAG, "Incoming BLE write from " + device.address + ", bytes=" + value.size)
+                        android.util.Log.d(
+                            TAG,
+                            "Incoming BLE write from " + device.address +
+                                ", bytes=" + value.size
+                        )
+                        val transferId = BleFragmenter.transferIdOf(value)
                         reassembler.onFragmentReceived(device.address, value)?.let { complete ->
-                            android.util.Log.d(TAG, "Incoming BLE packet reassembled from " + device.address + ", bytes=" + complete.size)
+                            android.util.Log.d(
+                                TAG,
+                                "Incoming BLE packet reassembled from " +
+                                    device.address + ", bytes=" + complete.size
+                            )
+                            transferId?.let { id ->
+                                scope.launch {
+                                    sendAcknowledgement(device.address, id)
+                                }
+                            }
                             trySend(
                                 RawPacket(
                                     data = complete,
@@ -292,8 +316,25 @@ class BleRadioTransport(
             }
         }
 
-        val clientFragmentListener: (String, ByteArray) -> Unit = { address, fragment ->
+        val clientFragmentListener: (String, ByteArray) -> Unit = clientFragmentListener@{ address, fragment ->
+            val acknowledgementTransferId =
+                BleFragmenter.acknowledgementTransferId(fragment)
+
+            if (acknowledgementTransferId != null) {
+                connectionRegistry.completeTransferAck(
+                    address,
+                    acknowledgementTransferId
+                )
+                return@clientFragmentListener
+            }
+
+            val transferId = BleFragmenter.transferIdOf(fragment)
             reassembler.onFragmentReceived(address, fragment)?.let { complete ->
+                transferId?.let { id ->
+                    scope.launch {
+                        sendAcknowledgement(address, id)
+                    }
+                }
                 trySend(
                     RawPacket(
                         data = complete,
@@ -367,90 +408,267 @@ class BleRadioTransport(
 
     override suspend fun broadcast(raw: RawPacket): TacticalResult<Unit> {
         if (!hasBluetoothConnectPermission()) {
-            return TacticalResult.Failure("Missing BLUETOOTH_CONNECT — request it via PermissionGateway before calling broadcast()")
+            return TacticalResult.Failure(
+                "Missing BLUETOOTH_CONNECT — request it via PermissionGateway before calling broadcast()"
+            )
         }
 
-        // Android bonding/pairing is deliberately irrelevant to iTantra.
-        // null targetDeviceIds means mesh/emergency broadcast to every connected
-        // iTantra GATT peer. A non-null set is a direct application-level
-        // delivery list; an empty set means nobody is selected.
-        val targetAddresses = raw.targetDeviceIds?.mapNotNull {
-            BlePeerAddressRegistry.addressFor(it)
-        }?.toSet()
+        // Targeted local text is successful only when every requested squad
+        // target completes an end-to-end transfer. Un-targeted mesh/emergency
+        // flooding can succeed as soon as one bearer takes the packet.
+        val requestedTargetIds = raw.targetDeviceIds
+            ?.distinct()
+            .orEmpty()
 
-        val inboundDevices = connectionRegistry.inboundConnectedDevices()
-            .filter { device ->
-                targetAddresses == null || device.address in targetAddresses
+        val targetAddresses = raw.targetDeviceIds
+            ?.mapNotNull { BlePeerAddressRegistry.addressFor(it) }
+            ?.distinct()
+            .orEmpty()
+
+        val unresolvedTargetIds = if (raw.targetDeviceIds != null) {
+            requestedTargetIds.filter {
+                BlePeerAddressRegistry.addressFor(it) == null
             }
-        val outboundGatts = connectionRegistry.outboundConnectedGatts()
-            .filter { gatt ->
-                targetAddresses == null || gatt.device.address in targetAddresses
-            }
+        } else {
+            emptyList()
+        }
+
+        val connectedAddresses = connectionRegistry.allConnectedAddresses()
+        val peerAddresses = if (raw.targetDeviceIds != null) {
+            targetAddresses
+                .filter { it in connectedAddresses }
+                .toSet()
+        } else {
+            connectedAddresses
+        }
 
         android.util.Log.d(
             TAG,
-            "Broadcast: inbound=" + inboundDevices.size +
-                ", outbound=" + outboundGatts.size +
-                ", targeted=" + (raw.targetDeviceIds != null)
+            "Broadcast: targets=" + peerAddresses.size +
+                ", connected=" + connectedAddresses.size +
+                ", targeted=" + (raw.targetDeviceIds != null) +
+                ", unresolved=" + unresolvedTargetIds.size
         )
-        if (inboundDevices.isEmpty() && outboundGatts.isEmpty()) {
-            android.util.Log.w(TAG, "Broadcast dropped: no connected peers")
+
+        if (peerAddresses.isEmpty()) {
             return TacticalResult.Failure("No connected peers to broadcast to")
         }
 
+        val results = coroutineScope {
+            peerAddresses.map { address ->
+                async {
+                    val success = sendTransferToPeer(address, raw.data)
+                    address to success
+                }
+            }.awaitAll()
+        }
+
+        val failures = results
+            .filterNot { it.second }
+            .map { "transfer failed for ${it.first}" }
+            .toMutableList()
+
+        if (unresolvedTargetIds.isNotEmpty()) {
+            failures += unresolvedTargetIds.map { "target unresolved: $it" }
+        }
+
+        val disconnectedTargets = if (raw.targetDeviceIds != null) {
+            targetAddresses.filter { it !in connectedAddresses }
+        } else {
+            emptyList()
+        }
+        failures += disconnectedTargets.map { "target not connected: $it" }
+
+        val anySucceeded = results.any { it.second }
+
+        return if (raw.targetDeviceIds != null) {
+            if (
+                unresolvedTargetIds.isEmpty() &&
+                disconnectedTargets.isEmpty() &&
+                targetAddresses.isNotEmpty() &&
+                results.size == targetAddresses.toSet().size &&
+                results.all { it.second }
+            ) {
+                TacticalResult.Success(Unit)
+            } else {
+                TacticalResult.Failure(
+                    "broadcast did not reach every target: " +
+                        failures.joinToString("; ")
+                )
+            }
+        } else {
+            if (anySucceeded) {
+                TacticalResult.Success(Unit)
+            } else {
+                TacticalResult.Failure(
+                    "broadcast reached no peers: " +
+                        failures.joinToString("; ")
+                )
+            }
+        }
+    }
+
+    /**
+     * Sends a packet to one peer and waits for that peer to confirm complete
+     * fragment reassembly. The same transferId is reused for whole-transfer
+     * retries, allowing an incomplete receiver to fill missing chunks.
+     */
+    private suspend fun sendTransferToPeer(
+        address: String,
+        data: ByteArray
+    ): Boolean {
         val transferId = connectionRegistry.nextTransferId()
-        var anySucceeded = false
-        val failures = mutableListOf<String>()
+        val chunks = try {
+            BleFragmenter.fragment(
+                data,
+                transferId,
+                connectionRegistry.usableMtuFor(address)
+            )
+        } catch (e: Exception) {
+            android.util.Log.w(
+                TAG,
+                "Unable to fragment transfer for " + address,
+                e
+            )
+            return false
+        }
 
-        val server = gattServer
-        val serverCharacteristic = server?.getService(GATT_SERVICE_UUID)?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
-        if (server != null && serverCharacteristic != null) {
-            for (device in inboundDevices) {
-                // When both sides have their own outbound GATT, prefer the
-                // outbound write and do not send the same packet a second time
-                // through the server notification path.
-                if (connectionRegistry.outboundGatt(device.address) != null) continue
+        val acknowledgement = CompletableDeferred<Unit>()
+        if (
+            !connectionRegistry.registerTransferAckWaiter(
+                address,
+                transferId,
+                acknowledgement
+            )
+        ) {
+            return false
+        }
 
-                val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(device.address))
-                var peerOk = true
-                for (chunk in chunks) {
-                    val notified = notifyChunkWithRetry(
-                        server,
-                        device,
-                        serverCharacteristic,
-                        chunk
-                    )
-                    if (!notified) {
-                        peerOk = false
-                        break
+        try {
+            repeat(END_TO_END_TRANSFER_ATTEMPTS) { attempt ->
+                val sent = sendAllChunks(address, chunks)
+                android.util.Log.d(
+                    TAG,
+                    "Transfer " + transferId +
+                        " attempt=" + (attempt + 1) +
+                        " peer=" + address +
+                        " chunks=" + chunks.size +
+                        " sent=" + sent
+                )
+
+                if (sent) {
+                    val acked = withTimeoutOrNull(TRANSFER_ACK_TIMEOUT_MS) {
+                        acknowledgement.await()
+                        true
+                    } ?: false
+
+                    if (acked) {
+                        android.util.Log.d(
+                            TAG,
+                            "Transfer " + transferId +
+                                " acknowledged by " + address
+                        )
+                        return true
                     }
                 }
-                if (peerOk) anySucceeded = true else failures.add("notify failed for ${device.address}")
-                android.util.Log.d(TAG, "Notify " + device.address + " success=" + peerOk)
-            }
-        }
 
-        for (gatt in outboundGatts) {
-            val characteristicOut = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
-            if (characteristicOut == null) {
-                failures.add("service not discovered on ${gatt.device.address}")
-                continue
-            }
-            val chunks = BleFragmenter.fragment(raw.data, transferId, connectionRegistry.usableMtuFor(gatt.device.address))
-            var peerOk = true
-            for (chunk in chunks) {
-                val written = writeChunkWithRetry(gatt, characteristicOut, chunk)
-                if (!written) {
-                    peerOk = false
-                    break
+                if (attempt < END_TO_END_TRANSFER_ATTEMPTS - 1) {
+                    delay(100L)
                 }
             }
-            if (peerOk) anySucceeded = true else failures.add("GATT write failed for ${gatt.device.address}")
-            android.util.Log.d(TAG, "Write " + gatt.device.address + " success=" + peerOk)
+
+            android.util.Log.w(
+                TAG,
+                "Transfer " + transferId +
+                    " failed end-to-end for " + address
+            )
+            false
+        } finally {
+            connectionRegistry.cancelTransferAckWaiter(
+                address,
+                transferId,
+                acknowledgement
+            )
+        }
+    }
+
+    private suspend fun sendAllChunks(
+        address: String,
+        chunks: List<ByteArray>
+    ): Boolean {
+        val outbound = connectionRegistry.outboundGatt(address)
+        if (outbound != null) {
+            val characteristic = outbound
+                .getService(GATT_SERVICE_UUID)
+                ?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
+                ?: return false
+
+            for (chunk in chunks) {
+                if (!writeChunkWithRetry(outbound, characteristic, chunk)) {
+                    return false
+                }
+            }
+            return true
         }
 
-        return if (anySucceeded) TacticalResult.Success(Unit)
-        else TacticalResult.Failure("broadcast reached no peers: ${failures.joinToString("; ")}")
+        val inbound = connectionRegistry.inboundDevice(address)
+        val server = gattServer
+        val characteristic = server
+            ?.getService(GATT_SERVICE_UUID)
+            ?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
+
+        if (inbound != null && server != null && characteristic != null) {
+            for (chunk in chunks) {
+                if (!notifyChunkWithRetry(server, inbound, characteristic, chunk)) {
+                    return false
+                }
+            }
+            return true
+        }
+
+        return false
+    }
+
+
+    /**
+     * Sends an acknowledgement over the reverse GATT role used by the
+     * completed transfer. ACKs themselves use the same per-address operation
+     * locks as ordinary fragments.
+     */
+    private suspend fun sendAcknowledgement(
+        address: String,
+        transferId: Int
+    ) {
+        val acknowledgement = BleFragmenter.acknowledgement(transferId)
+
+        val inbound = connectionRegistry.inboundDevice(address)
+        val server = gattServer
+        val serverCharacteristic = server
+            ?.getService(GATT_SERVICE_UUID)
+            ?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
+
+        if (inbound != null && server != null && serverCharacteristic != null) {
+            notifyChunkWithRetry(
+                server,
+                inbound,
+                serverCharacteristic,
+                acknowledgement
+            )
+            return
+        }
+
+        val outbound = connectionRegistry.outboundGatt(address)
+        val characteristic = outbound
+            ?.getService(GATT_SERVICE_UUID)
+            ?.getCharacteristic(PACKET_CHARACTERISTIC_UUID)
+
+        if (outbound != null && characteristic != null) {
+            writeChunkWithRetry(
+                outbound,
+                characteristic,
+                acknowledgement
+            )
+        }
     }
 
     private fun hasBluetoothConnectPermission(): Boolean =
@@ -606,6 +824,8 @@ class BleRadioTransport(
      * this mode, avoiding the response-operation bottleneck for fragments. */
     companion object {
         private const val TAG = "BleRadioTransport"
+        private const val END_TO_END_TRANSFER_ATTEMPTS = 2
+        private const val TRANSFER_ACK_TIMEOUT_MS = 7500L
         val GATT_SERVICE_UUID: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         val PACKET_CHARACTERISTIC_UUID: UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
