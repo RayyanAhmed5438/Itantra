@@ -374,6 +374,61 @@ fun SquadScreen(
                 Spacer(Modifier.height(6.dp))
             }
 
+            Spacer(Modifier.height(2.dp))
+
+            Surface(
+                onClick = {
+                    pendingLanguageCode = uiState.selectedLanguageCode
+                    languagePickerVisible = true
+                },
+                color = SquadBlueSurface,
+                shape = RoundedCornerShape(22.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, SquadBlueBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "LANGUAGE",
+                            color = Color(0xFF8EA8C0),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            if (uiState.languageLoadingCode != null) {
+                                "Loading…"
+                            } else {
+                                uiState.selectedLanguage
+                            },
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    if (uiState.languageLoadingCode != null) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = SquadBlueGlow,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "Select language",
+                            tint = Color(0xFFBFD6EA)
+                        )
+                    }
+                }
+            }
+
             if (uiState.pttEnabled) {
                 Spacer(Modifier.height(10.dp))
 
