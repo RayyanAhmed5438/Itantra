@@ -109,6 +109,7 @@ data class MainUiState(
     val username: String = "",
     val selectedLanguageCode: String = "hi",
     val selectedLanguage: String = "हिन्दी",
+    val languageLoadingCode: String? = null,
     val squadPeers: List<PeerNodeUi> = emptyList(),
     val availablePeers: List<PeerNodeUi> = emptyList(),
     val messages: List<ChatMessageUi> = emptyList(),
@@ -640,37 +641,43 @@ class MainViewModel @Inject constructor(
 
     fun setSelectedLanguage(languageCode: String) {
         if (languageCode !in setOf("hi", "en")) return
+        if (_uiState.value.languageLoadingCode != null) return
+        if (_uiState.value.selectedLanguageCode == languageCode) return
 
         val wasContinuousCallMode =
             !_uiState.value.pttEnabled && _uiState.value.pttContinuousSession
 
-        // A running call-mode STT flow must be stopped before swapping the
-        // selected backend. Otherwise the old backend can keep owning the
-        // microphone/model while the preference changes underneath it.
         viewModelScope.launch {
-            if (wasContinuousCallMode) {
-                runCatching { pttController.stopContinuous() }
-            }
+            _uiState.update { it.copy(languageLoadingCode = languageCode) }
 
-            speechLanguagePreferences.setSelectedLanguageCode(languageCode)
-            routingSpeechToText.onSelectedLanguageChanged(languageCode)
-            // Warm the newly selected STT backend immediately so the next PTT
-            // press does not pay the native model-load cost.
-            runCatching { routingSpeechToText.preloadSelectedLanguage() }
+            try {
+                if (wasContinuousCallMode) {
+                    runCatching { pttController.stopContinuous() }
+                }
 
-            _uiState.update {
-                it.copy(
-                    selectedLanguageCode = languageCode,
-                    selectedLanguage = displayLanguageName(languageCode)
-                )
-            }
+                speechLanguagePreferences.setSelectedLanguageCode(languageCode)
+                routingSpeechToText.onSelectedLanguageChanged(languageCode)
 
-            MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
-                runCatching { mmsTtsEngine.preload(language) }
-            }
+                // Warm the newly selected STT backend immediately so the next
+                // PTT press does not pay the native model-load cost.
+                runCatching { routingSpeechToText.preloadSelectedLanguage() }
 
-            if (wasContinuousCallMode && !_uiState.value.pttEnabled) {
-                runCatching { pttController.startContinuous() }
+                MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
+                    runCatching { mmsTtsEngine.preload(language) }
+                }
+
+                _uiState.update {
+                    it.copy(
+                        selectedLanguageCode = languageCode,
+                        selectedLanguage = displayLanguageName(languageCode)
+                    )
+                }
+
+                if (wasContinuousCallMode && !_uiState.value.pttEnabled) {
+                    runCatching { pttController.startContinuous() }
+                }
+            } finally {
+                _uiState.update { it.copy(languageLoadingCode = null) }
             }
         }
     }
@@ -1295,7 +1302,7 @@ class MainViewModel @Inject constructor(
             sender = message.senderName,
             text = message.text,
             timestampText = formatTimestamp(message.timestampEpochMs),
-            statusText = if (message.isAlert) "Emergency" else "Received",
+            statusText = if (message.isAlert) "Emergency" else "",
             isVoice = message.isVoice,
             isCallMode = message.isCallMode,
             isAlert = message.isAlert,
