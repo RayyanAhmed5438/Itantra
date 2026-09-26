@@ -130,7 +130,9 @@ data class MainUiState(
     val pendingSquadRequest: SquadRequest? = null,
     val pendingSquadRequestCount: Int = 0,
     val respondingSquadRequestId: String? = null,
-    val squadRequestError: String? = null
+    val squadRequestError: String? = null,
+    val ttsPlaybackMode: com.tactical.platform.speech.mms.MmsTtsPlaybackMode =
+        com.tactical.platform.speech.mms.MmsTtsPlaybackMode.OVERLAPPING
 )
 
 @HiltViewModel
@@ -147,6 +149,8 @@ class MainViewModel @Inject constructor(
     private val routingSpeechToText: RoutingSpeechToText,
     private val localAppDataStore: LocalAppDataStore,
     private val pttModePreferences: PttModePreferences,
+    private val mmsTtsPlaybackPreferences: com.tactical.platform.speech.mms.MmsTtsPlaybackPreferences,
+    private val mmsTtsPlaybackCoordinator: com.tactical.platform.speech.mms.MmsTtsPlaybackCoordinator,
     private val messageNotificationNotifier: com.tactical.app.service.MessageNotificationNotifier
 ) : ViewModel() {
 
@@ -171,7 +175,8 @@ class MainViewModel @Inject constructor(
             sentMessages = localAppDataStore.loadSentMessages()
                 .map(::storedSentMessageToUi),
             pttEnabled = pttModePreferences.isPttEnabled,
-            unreadMessageCount = localAppDataStore.unreadMessageCount()
+            unreadMessageCount = localAppDataStore.unreadMessageCount(),
+            ttsPlaybackMode = mmsTtsPlaybackPreferences.playbackMode
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -623,6 +628,14 @@ class MainViewModel @Inject constructor(
 
     fun repairPeer(deviceAddress: String) {
         viewModelScope.launch { bleConnectionManager.repairAndReconnect(deviceAddress) }
+    }
+
+    fun setTtsPlaybackMode(mode: com.tactical.platform.speech.mms.MmsTtsPlaybackMode) {
+        if (_uiState.value.ttsPlaybackMode == mode) return
+
+        mmsTtsPlaybackPreferences.setPlaybackMode(mode)
+        mmsTtsPlaybackCoordinator.setMode(mode)
+        _uiState.update { it.copy(ttsPlaybackMode = mode) }
     }
 
     fun setSelectedLanguage(languageCode: String) {
