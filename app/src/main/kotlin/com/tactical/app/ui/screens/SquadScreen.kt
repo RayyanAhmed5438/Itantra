@@ -1,7 +1,5 @@
 package com.tactical.app.ui.screens
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -52,8 +50,6 @@ fun SquadScreen(
     onPttPress: () -> Unit,
     onPttRelease: () -> Unit,
     onPttCancel: () -> Unit,
-    onEmergencyPress: () -> Unit,
-    onEmergencyRelease: () -> Unit,
     onRemoveFromSquad: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -66,28 +62,13 @@ fun SquadScreen(
         uiState.pttSessionState != SessionState.ARMED
 
     var pttHeld by remember { mutableStateOf(false) }
-    var emergencyHeld by remember { mutableStateOf(false) }
     var removeArmedDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
     var languagePickerVisible by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageCode by rememberSaveable {
         mutableStateOf(uiState.selectedLanguageCode)
     }
 
-    val emergencyHoldProgress by animateFloatAsState(
-        targetValue = if (
-            emergencyHeld && !uiState.emergencyComposerVisible
-        ) {
-            1f
-        } else {
-            0f
-        },
-        animationSpec = if (emergencyHeld) {
-            tween(durationMillis = 2000)
-        } else {
-            tween(durationMillis = 150)
-        },
-        label = "emergencyHoldProgress"
-    )
+
 
     val pttLabel = when (uiState.pttSessionState) {
         SessionState.ARMED -> "STARTING"
@@ -619,110 +600,6 @@ fun SquadScreen(
                     }
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            if (uiState.emergencyComposerVisible) {
-                                SquadBlueSurface
-                            } else {
-                                Color(0xFF5A1717)
-                            }
-                        )
-                        .border(
-                            width = 1.5.dp,
-                            color = if (uiState.emergencyComposerVisible) {
-                                SquadBlueBorder
-                            } else {
-                                RedTacticalPrimaryBright
-                            },
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .then(
-                            if (
-                                !uiState.emergencyComposerVisible &&
-                                (
-                                    uiState.pttSessionState == SessionState.IDLE ||
-                                        uiState.pttContinuousSession
-                                    )
-                            ) {
-                                Modifier.pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onPress = {
-                                            emergencyHeld = true
-                                            onEmergencyPress()
-                                            try {
-                                                awaitRelease()
-                                            } finally {
-                                                emergencyHeld = false
-                                                onEmergencyRelease()
-                                            }
-                                        }
-                                    )
-                                }
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!uiState.emergencyComposerVisible && emergencyHoldProgress > 0f) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(emergencyHoldProgress)
-                                .align(Alignment.CenterStart)
-                                .background(RedTacticalPrimaryBright)
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🚨",
-                            fontSize = 20.sp
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (uiState.emergencyComposerVisible) {
-                                "EMERGENCY ACTIVE"
-                            } else {
-                                "HOLD FOR EMERGENCY"
-                            },
-                            color = if (uiState.emergencyComposerVisible) {
-                                Color(0xFF8EA8C0)
-                            } else {
-                                Color.White
-                            },
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(5.dp))
-
-            Text(
-                "Hold for 2 seconds to open the emergency recorder",
-                color = Color(0xFF8EA8C0),
-                fontSize = 10.sp,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-        }
 
         item {
             SectionDividerLabel("${connectedPeers.size} CONNECTED DEVICES")
