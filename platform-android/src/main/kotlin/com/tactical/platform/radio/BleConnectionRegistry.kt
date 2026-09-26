@@ -21,6 +21,8 @@ class BleConnectionRegistry {
     private val transferIdCounter = AtomicInteger(0)
     private val outboundWriteWaiters =
         ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val notificationWaiters =
+        ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
     // Default is the un-negotiated BLE minimum (23 total, 3 reserved for
     // ATT header) — used until onMtuChanged reports a real negotiated value.
@@ -141,6 +143,23 @@ class BleConnectionRegistry {
         waiter: CompletableDeferred<Boolean>
     ) {
         outboundWriteWaiters.remove(address, waiter)
+    }
+
+    fun registerNotificationWaiter(
+        address: String,
+        waiter: CompletableDeferred<Boolean>
+    ): Boolean =
+        notificationWaiters.putIfAbsent(address, waiter) == null
+
+    fun completeNotification(address: String, success: Boolean) {
+        notificationWaiters.remove(address)?.complete(success)
+    }
+
+    fun cancelNotificationWaiter(
+        address: String,
+        waiter: CompletableDeferred<Boolean>
+    ) {
+        notificationWaiters.remove(address, waiter)
     }
 
     fun nextTransferId(): Int = transferIdCounter.getAndIncrement()
