@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.tactical.app.di.DeviceIdentityStore
 import com.tactical.app.di.LocalAppDataStore
 import com.tactical.app.di.PttModePreferences
+import com.tactical.app.di.UiLanguagePreferences
 import com.tactical.app.di.StoredPairedDevice
 import com.tactical.app.di.StoredReceivedMessage
 import com.tactical.app.di.StoredSentMessage
@@ -109,6 +110,7 @@ data class MainUiState(
     val username: String = "",
     val selectedLanguageCode: String = "hi",
     val selectedLanguage: String = "हिन्दी",
+    val uiLanguageCode: String = "en",
     val languageLoadingCode: String? = null,
     val squadPeers: List<PeerNodeUi> = emptyList(),
     val availablePeers: List<PeerNodeUi> = emptyList(),
@@ -150,6 +152,7 @@ class MainViewModel @Inject constructor(
     private val routingSpeechToText: RoutingSpeechToText,
     private val localAppDataStore: LocalAppDataStore,
     private val pttModePreferences: PttModePreferences,
+    private val uiLanguagePreferences: UiLanguagePreferences,
     private val mmsTtsPlaybackPreferences: com.tactical.platform.speech.mms.MmsTtsPlaybackPreferences,
     private val mmsTtsPlaybackCoordinator: com.tactical.platform.speech.mms.MmsTtsPlaybackCoordinator,
     private val messageNotificationNotifier: com.tactical.app.service.MessageNotificationNotifier
@@ -164,6 +167,7 @@ class MainViewModel @Inject constructor(
             username = identityStore.callsign,
             selectedLanguageCode = speechLanguagePreferences.selectedLanguageCode,
             selectedLanguage = displayLanguageName(speechLanguagePreferences.selectedLanguageCode),
+            uiLanguageCode = uiLanguagePreferences.selectedLanguageCode,
             squadPeers = localAppDataStore.loadPairedDevices()
                 .filter { it.deviceId in bleConnectionManager.squadDeviceIds() }
                 .map(::storedPeerToUi),
@@ -702,6 +706,12 @@ class MainViewModel @Inject constructor(
         mmsTtsPlaybackPreferences.setPlaybackMode(mode)
         mmsTtsPlaybackCoordinator.setMode(mode)
         _uiState.update { it.copy(ttsPlaybackMode = mode) }
+    }
+
+    fun setUiLanguage(languageCode: String) {
+        if (languageCode != "en" && languageCode != "hi") return
+        uiLanguagePreferences.setSelectedLanguageCode(languageCode)
+        _uiState.update { it.copy(uiLanguageCode = languageCode) }
     }
 
     fun setSelectedLanguage(languageCode: String) {
