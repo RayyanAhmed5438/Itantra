@@ -144,6 +144,53 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
 
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf("en" to "English", "hi" to "हिन्दी").forEach { (code, name) ->
+                val selected = uiLanguageCode == code
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            if (selected) SquadBluePrimary else SquadBlueBorder,
+                            RoundedCornerShape(14.dp)
+                        )
+                        .clickable(enabled = !selected) {
+                            onUiLanguageSelected(code)
+                        }
+                ) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = SquadBluePrimary,
+                                unselectedColor = RedTacticalTextSecondary
+                            ),
+                            onClick = {
+                                if (!selected) onUiLanguageSelected(code)
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            name,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
         Text(
             LocalUiStrings.current.text(UiTextKey.INCOMING_VOICE_PLAYBACK),
             color = Color.White,
@@ -155,7 +202,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            "Voices from the same device are always played one by one. This setting controls how voices from different devices are handled when they arrive close together.",
+            LocalUiStrings.current.text(UiTextKey.INCOMING_VOICE_PLAYBACK_DESC),
             color = RedTacticalTextSecondary,
             fontSize = 12.sp
         )
