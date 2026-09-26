@@ -667,7 +667,15 @@ fun SquadScreen(
                 squadOfflinePeers,
                 key = { "squad_" + it.deviceAddress }
             ) { peer ->
-                PeerCard(peer, onRemoveFromSquad)
+                PeerCard(
+                    peer = peer,
+                    removeArmed = removeArmedDeviceId == peer.deviceAddress,
+                    onLongPress = { removeArmedDeviceId = peer.deviceAddress },
+                    onRemove = {
+                        onRemoveFromSquad(peer.deviceAddress)
+                        removeArmedDeviceId = null
+                    }
+                )
             }
         }
 
