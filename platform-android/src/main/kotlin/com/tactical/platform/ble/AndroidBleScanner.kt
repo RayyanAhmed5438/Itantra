@@ -102,13 +102,6 @@ class AndroidBleScanner(
                         packet.callsign
                     )
 
-                    android.util.Log.d(
-                        TAG,
-                        "iTantra beacon detected from " +
-                            packet.callsign +
-                            " (" + result.device.address + ")"
-                    )
-
                     trySend(
                         ScannedBleDevice(
                             deviceId = result.device.address,
@@ -143,13 +136,6 @@ class AndroidBleScanner(
                         BlePeerAddressRegistry.remember(
                             packet.sender.value,
                             result.device.address
-                        )
-
-                        android.util.Log.d(
-                            TAG,
-                            "iTantra beacon detected from " +
-                                packet.callsign +
-                                " (" + result.device.address + ")"
                         )
 
                         trySend(
@@ -195,10 +181,6 @@ class AndroidBleScanner(
                 callback
             )
 
-            android.util.Log.d(
-                TAG,
-                "BLE scan started (software beacon filtering)"
-            )
         } catch (e: SecurityException) {
             close(
                 SecurityException(
