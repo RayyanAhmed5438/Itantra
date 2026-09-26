@@ -51,6 +51,8 @@ private val OUTGOING_LANGUAGES = listOf(
 fun SettingsScreen(
     selectedLanguageCode: String,
     onLanguageSelected: (String) -> Unit,
+    ttsPlaybackMode: com.tactical.platform.speech.mms.MmsTtsPlaybackMode,
+    onTtsPlaybackModeSelected: (com.tactical.platform.speech.mms.MmsTtsPlaybackMode) -> Unit,
     username: String,
     onUsernameSave: (String) -> String?,
     modifier: Modifier = Modifier
@@ -208,6 +210,101 @@ fun SettingsScreen(
 
         Text(
             "Incoming voice messages are handled independently. The sender's language flag is carried in the packet, so Hindi and English can be received regardless of your selected outgoing language.",
+            color = RedTacticalTextSecondary,
+            fontSize = 11.sp
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            "INCOMING VOICE PLAYBACK",
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.sp
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            "Choose how received voice messages are played when multiple messages arrive close together.",
+            color = RedTacticalTextSecondary,
+            fontSize = 12.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            val playbackOptions = listOf(
+                Triple(
+                    com.tactical.platform.speech.mms.MmsTtsPlaybackMode.ONE_BY_ONE,
+                    "ONE BY ONE",
+                    "Finish one voice message before starting the next."
+                ),
+                Triple(
+                    com.tactical.platform.speech.mms.MmsTtsPlaybackMode.OVERLAPPING,
+                    "OVERLAPPING VOICES",
+                    "Play multiple voice messages at the same time when they overlap."
+                )
+            )
+
+            playbackOptions.forEach { (mode, title, description) ->
+                val selected = ttsPlaybackMode == mode
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = RedTacticalSurface
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            width = 1.dp,
+                            color = if (selected) {
+                                RedTacticalPrimary
+                            } else {
+                                RedTacticalSurfaceBorder
+                            },
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable { onTtsPlaybackModeSelected(mode) }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = { onTtsPlaybackModeSelected(mode) }
+                        )
+
+                        Column {
+                            Text(
+                                title,
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                description,
+                                color = RedTacticalTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            "Overlapping voices may be slower or use more CPU when multiple messages are being processed.",
             color = RedTacticalTextSecondary,
             fontSize = 11.sp
         )
