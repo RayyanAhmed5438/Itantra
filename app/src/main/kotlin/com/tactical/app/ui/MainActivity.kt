@@ -199,7 +199,6 @@ class MainActivity : ComponentActivity() {
                                     )
                                 1 -> SquadScreen(
                                     uiState = state,
-                                    onRefresh = viewModel::forceDiscovery,
                                     onLanguageSelected = viewModel::setSelectedLanguage,
                                     onPttToggle = {
                                         viewModel.setPttEnabled(!state.pttEnabled)
