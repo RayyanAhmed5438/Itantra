@@ -1,5 +1,7 @@
 package com.tactical.app.ui.components
 
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -33,9 +35,9 @@ fun AppHeader(deviceCount: Int, modifier: Modifier = Modifier, onSettingsClick: 
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(RedTacticalSurface).border(1.dp, RedTacticalSurfaceBorder, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(RedTacticalStatusGreen))
             Spacer(Modifier.width(6.dp))
-            Text("NETWORK READY", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(LocalUiStrings.current.text(UiTextKey.NETWORK_READY), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(8.dp))
-            Text("• $deviceCount ${if (deviceCount == 1) "Device" else "Devices"}", color = RedTacticalTextSecondary, fontSize = 11.sp)
+            Text("• $deviceCount ${if (deviceCount == 1) "Device" else LocalUiStrings.current.text(UiTextKey.DEVICES)}", color = RedTacticalTextSecondary, fontSize = 11.sp)
         }
     }
 }
@@ -53,8 +55,8 @@ fun AppBottomNavigation(
         containerColor = if (squadTheme) SquadBlueSurface else RedTacticalSurface,
         tonalElevation = 8.dp
     ) {
-        NavigationBarItem(selected = selectedTab == 0, onClick = { onTabSelected(0) }, icon = { Icon(Icons.Default.Devices, "Devices") }, label = { Text("DEVICES") }, colors = navigationColors(squadTheme))
-        NavigationBarItem(selected = selectedTab == 1, onClick = { onTabSelected(1) }, icon = { Icon(Icons.Default.People, "Squad") }, label = { Text("SQUAD") }, colors = navigationColors(squadTheme))
+        NavigationBarItem(selected = selectedTab == 0, onClick = { onTabSelected(0) }, icon = { Icon(Icons.Default.Devices, LocalUiStrings.current.text(UiTextKey.DEVICES)) }, label = { Text(LocalUiStrings.current.text(UiTextKey.DEVICES)) }, colors = navigationColors(squadTheme))
+        NavigationBarItem(selected = selectedTab == 1, onClick = { onTabSelected(1) }, icon = { Icon(Icons.Default.People, LocalUiStrings.current.text(UiTextKey.SQUAD)) }, label = { Text(LocalUiStrings.current.text(UiTextKey.SQUAD)) }, colors = navigationColors(squadTheme))
         NavigationBarItem(
             selected = selectedTab == 2,
             onClick = { onTabSelected(2) },
@@ -68,10 +70,10 @@ fun AppBottomNavigation(
                         }
                     }
                 ) {
-                    Icon(Icons.Default.Email, "Messages")
+                    Icon(Icons.Default.Email, LocalUiStrings.current.text(UiTextKey.MESSAGES))
                 }
             },
-            label = { Text("MESSAGES") },
+            label = { Text(LocalUiStrings.current.text(UiTextKey.MESSAGES)) },
             colors = navigationColors(squadTheme)
         )
     }
