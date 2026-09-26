@@ -33,7 +33,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
@@ -57,6 +59,8 @@ class AndroidBleConnectionManager(
     private val pendingSquadRequestAddresses = ConcurrentHashMap<String, String>()
     private val outgoingSquadRequestAddresses = ConcurrentHashMap<String, String>()
     private val _pendingSquadRequests = MutableStateFlow<List<SquadRequest>>(emptyList())
+    private val _peerIdentityUpdates =
+        MutableSharedFlow<com.tactical.platform.api.ble.PeerIdentityUpdate>(extraBufferCapacity = 16)
 
     private val controlIncomingListener: (String, ByteArray) -> Unit = { address, data ->
         handleControlMessage(address, data)
@@ -95,6 +99,25 @@ class AndroidBleConnectionManager(
 
     override fun pendingSquadRequests(): StateFlow<List<SquadRequest>> =
         _pendingSquadRequests.asStateFlow()
+
+    override fun peerIdentityUpdates(): Flow<com.tactical.platform.api.ble.PeerIdentityUpdate> =
+        _peerIdentityUpdates.asSharedFlow()
+
+    override suspend fun announceLocalCallsign(callsign: String) {
+        val bytes = callsign.toByteArray(Charsets.UTF_8)
+        require(bytes.isNotEmpty()) { "BLE callsign must not be blank" }
+        require(bytes.size <= 7) { "BLE callsign must be at most 7 UTF-8 bytes" }
+
+        val packet = SquadControlCodec.callsignUpdate(callsign)
+        val addresses = squadDeviceIds()
+            .mapNotNull { resolveAddress(it) }
+            .filter { it in registry.allConnectedAddresses() }
+            .toSet()
+
+        addresses.forEach { address ->
+            sendControlWithRetry(address, packet)
+        }
+    }
 
     private val reconnectScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val prefs by lazy {
@@ -750,6 +773,17 @@ class AndroidBleConnectionManager(
                     setState(address, BleLinkState.AVAILABLE)
                 }
                 outgoingSquadRequestAddresses.remove(message.deviceId)
+            }
+
+            is SquadControlCodec.Message.CallsignUpdate -> {
+                val appId = applicationIdForAddress(address) ?: return
+                BlePeerAddressRegistry.updateCallsign(appId, message.callsign)
+                _peerIdentityUpdates.tryEmit(
+                    com.tactical.platform.api.ble.PeerIdentityUpdate(
+                        deviceId = appId,
+                        callsign = message.callsign
+                    )
+                )
             }
 
             is SquadControlCodec.Message.Remove -> {
