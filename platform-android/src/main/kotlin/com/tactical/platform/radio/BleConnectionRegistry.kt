@@ -2,6 +2,7 @@ package com.tactical.platform.radio
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
+import com.tactical.platform.ble.BlePeerAddressRegistry
 import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -88,11 +89,13 @@ class BleConnectionRegistry {
 
     fun registerInboundConnection(device: BluetoothDevice) {
         inboundDevices[device.address] = device
+        BlePeerAddressRegistry.markConnectionActive(device.address)
         connectionListeners.forEach { it.onInboundConnected(device) }
     }
 
     fun unregisterInboundConnection(device: BluetoothDevice) {
         if (inboundDevices.remove(device.address) != null) {
+            BlePeerAddressRegistry.markConnectionInactive(device.address)
             connectionListeners.forEach { it.onInboundDisconnected(device) }
         }
         negotiatedMtu.remove(device.address)
@@ -100,10 +103,12 @@ class BleConnectionRegistry {
 
     fun registerOutboundConnection(gatt: BluetoothGatt) {
         outboundGatts[gatt.device.address] = gatt
+        BlePeerAddressRegistry.markConnectionActive(gatt.device.address)
     }
 
     fun unregisterOutboundConnection(address: String) {
         outboundGatts.remove(address)
+        BlePeerAddressRegistry.markConnectionInactive(address)
         negotiatedMtu.remove(address)
     }
 
