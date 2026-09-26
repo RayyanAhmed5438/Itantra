@@ -3,6 +3,7 @@ package com.tactical.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -216,45 +217,66 @@ fun MessagesScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = SquadBlueBackground,
-            contentColor = Color.White,
-            divider = { HorizontalDivider(color = SquadBlueBorder) },
-            indicator = {
-                TabRowDefaults.SecondaryIndicator(color = SquadBluePrimary)
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .background(
+                    SquadBlueSurface,
+                    RoundedCornerShape(12.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = SquadBlueBorder,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = {
-                    selectedTab = 0
-                    selectedKeys = emptySet()
-                },
-                text = {
-                    Text(
-                        "CHAT / PPT MODE",
-                        color = if (selectedTab == 0) SquadBlueGlow else RedTacticalTextSecondary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(
+                        if (selectedTab == 0) SquadBluePrimary else Color.Transparent
                     )
-                }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = {
-                    selectedTab = 1
-                    selectedKeys = emptySet()
-                },
-                text = {
-                    Text(
-                        "CALL MODE",
-                        color = if (selectedTab == 1) SquadBlueGlow else RedTacticalTextSecondary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+                    .clickable {
+                        selectedTab = 0
+                        selectedKeys = emptySet()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "CHAT / PPT MODE",
+                    color = if (selectedTab == 0) Color.White else RedTacticalTextSecondary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(
+                        if (selectedTab == 1) SquadBluePrimary else Color.Transparent
                     )
-                }
-            )
+                    .clickable {
+                        selectedTab = 1
+                        selectedKeys = emptySet()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "CALL MODE",
+                    color = if (selectedTab == 1) Color.White else RedTacticalTextSecondary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))
