@@ -97,34 +97,10 @@ class BleRadioTransport(
                 value: ByteArray
             ) {
                 if (characteristic.uuid == PACKET_CHARACTERISTIC_UUID) {
-                    val acknowledgementTransferId =
-                        BleFragmenter.acknowledgementTransferId(value)
-
-                    if (acknowledgementTransferId != null) {
-                        connectionRegistry.completeTransferAck(
-                            device.address,
-                            acknowledgementTransferId
-                        )
-                    } else if (SquadControlCodec.decode(value) != null) {
+                    if (SquadControlCodec.decode(value) != null) {
                         connectionRegistry.dispatchControlIncoming(device.address, value)
                     } else {
-                        android.util.Log.d(
-                            TAG,
-                            "Incoming BLE write from " + device.address +
-                                ", bytes=" + value.size
-                        )
-                        val transferId = BleFragmenter.transferIdOf(value)
                         reassembler.onFragmentReceived(device.address, value)?.let { complete ->
-                            android.util.Log.d(
-                                TAG,
-                                "Incoming BLE packet reassembled from " +
-                                    device.address + ", bytes=" + complete.size
-                            )
-                            transferId?.let { id ->
-                                scope.launch {
-                                    sendAcknowledgement(device.address, id)
-                                }
-                            }
                             trySend(
                                 RawPacket(
                                     data = complete,
@@ -313,25 +289,8 @@ class BleRadioTransport(
             }
         }
 
-        val clientFragmentListener: (String, ByteArray) -> Unit = clientFragmentListener@{ address, fragment ->
-            val acknowledgementTransferId =
-                BleFragmenter.acknowledgementTransferId(fragment)
-
-            if (acknowledgementTransferId != null) {
-                connectionRegistry.completeTransferAck(
-                    address,
-                    acknowledgementTransferId
-                )
-                return@clientFragmentListener
-            }
-
-            val transferId = BleFragmenter.transferIdOf(fragment)
+        val clientFragmentListener: (String, ByteArray) -> Unit = { address, fragment ->
             reassembler.onFragmentReceived(address, fragment)?.let { complete ->
-                transferId?.let { id ->
-                    scope.launch {
-                        sendAcknowledgement(address, id)
-                    }
-                }
                 trySend(
                     RawPacket(
                         data = complete,
