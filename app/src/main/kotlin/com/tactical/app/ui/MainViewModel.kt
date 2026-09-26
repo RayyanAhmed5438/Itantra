@@ -36,6 +36,7 @@ import com.tactical.engine.discovery.service.DiscoveryService
 import com.tactical.engine.mesh.service.MeshService
 import com.tactical.platform.api.ble.BleConnectionManager
 import com.tactical.platform.api.ble.BleLinkState
+import com.tactical.platform.api.ble.SquadRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -125,7 +126,8 @@ data class MainUiState(
     val emergencyRecording: Boolean = false,
     val emergencySending: Boolean = false,
     val emergencyTranscription: String = "",
-    val emergencyError: String? = null
+    val emergencyError: String? = null,
+    val pendingSquadRequest: SquadRequest? = null
 )
 
 @HiltViewModel
@@ -306,6 +308,12 @@ class MainViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            bleConnectionManager.pendingSquadRequests().collect { requests ->
+                _uiState.update { it.copy(pendingSquadRequest = requests.firstOrNull()) }
+            }
+        }
+
+        viewModelScope.launch {
             discoveryService.peers().collectLatest { devices ->
                 _uiState.update { state ->
                     val existing = (state.availablePeers + state.squadPeers)
@@ -359,27 +367,9 @@ class MainViewModel @Inject constructor(
                             observePeerState(peer.deviceAddress)
                         }
 
-                        // All nearby iTantra peers may form a GATT link without
-                        // Android bonding. Only the stable-ID-low side initiates
-                        // to avoid simultaneous duplicate GATT attempts.
-                        if (identityStore.deviceIdValue < peer.deviceAddress) {
-                            val existingConnectionJob = reconnectJobs[peer.deviceAddress]
-                            if (existingConnectionJob?.isActive != true) {
-                                val job = viewModelScope.launch {
-                                    runCatching {
-                                        bleConnectionManager.connect(peer.deviceAddress)
-                                    }
-                                }
-                                reconnectJobs[peer.deviceAddress] = job
-                                job.invokeOnCompletion {
-                                    if (reconnectJobs[peer.deviceAddress] === job) {
-                                        reconnectJobs.remove(peer.deviceAddress)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
+                        // Nearby devices remain AVAILABLE until the user sends
+                        // an application-level squad request. Squad members are
+                        // reconnected automatically by AndroidBleConnectionManager.
                     val squadIds = bleConnectionManager.squadDeviceIds()
                     val squadById = state.squadPeers.associateBy { it.deviceAddress }
                     val currentSquad = squadIds.mapNotNull { id ->
@@ -473,27 +463,9 @@ class MainViewModel @Inject constructor(
 
     fun addPeerToSquad(deviceAddress: String) {
         viewModelScope.launch {
-            val result = bleConnectionManager.addToSquad(deviceAddress)
-            if (result is TacticalResult.Success) {
-                val peer = _uiState.value.availablePeers.firstOrNull {
-                    it.deviceAddress == deviceAddress
-                }
-                if (peer != null) {
-                    localAppDataStore.savePairedDevice(
-                        StoredPairedDevice(
-                            deviceId = peer.deviceAddress,
-                            callsign = peer.callsign,
-                            lastSeenEpochMs = System.currentTimeMillis(),
-                            rssi = 0,
-                            linkText = peer.linkText
-                        )
-                    )
-                }
-                refreshSquadPeers()
-            }
+            runCatching { bleConnectionManager.addToSquad(deviceAddress) }
         }
     }
-
     fun removePeerFromSquad(deviceAddress: String) {
         viewModelScope.launch {
             bleConnectionManager.removeFromSquad(deviceAddress)
