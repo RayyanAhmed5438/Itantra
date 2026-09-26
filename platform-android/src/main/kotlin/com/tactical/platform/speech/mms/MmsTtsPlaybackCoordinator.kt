@@ -1,11 +1,14 @@
 package com.tactical.platform.speech.mms
 
 import com.tactical.domain.audio.AudioFrame
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,8 +28,9 @@ import javax.inject.Singleton
  *
  * Only a small number of synthesized frames are buffered at once, preventing
  * a burst of long messages from consuming unbounded RAM. Mode changes never
- * interrupt a currently playing AudioTrack; messages that have not started
- * playback yet follow the mode active when they are dispatched.
+ * interrupt a currently playing AudioTrack. When switching to ONE_BY_ONE,
+ * playback waits for any already-running overlapping tracks to finish before
+ * starting the next pending track.
  */
 @Singleton
 class MmsTtsPlaybackCoordinator @Inject constructor(
@@ -50,6 +54,10 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
     private val synthesizedQueue = Channel<Synthesized>(SYNTHESIZED_BUFFER_CAPACITY)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    private val playbackStateMutex = Mutex()
+    private var activePlaybacks = 0
+    private var idleSignal = CompletableDeferred<Unit>().also { it.complete(Unit) }
 
     @Volatile
     private var playbackMode = MmsTtsPlaybackMode.OVERLAPPING
@@ -111,13 +119,50 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
     private suspend fun playbackLoop() {
         for (synthesized in synthesizedQueue) {
             if (playbackMode == MmsTtsPlaybackMode.ONE_BY_ONE) {
-                runPlaybackSafely(synthesized)
-            } else {
-                // Do not wait for an earlier AudioTrack in overlapping mode.
-                // Each synthesized message gets its own playback task.
-                scope.launch {
+                awaitIdle()
+                beginPlayback()
+
+                try {
                     runPlaybackSafely(synthesized)
+                } finally {
+                    endPlayback()
                 }
+            } else {
+                // Register the playback before launching it so a mode change
+                // to ONE_BY_ONE cannot observe a false idle state.
+                beginPlayback()
+                scope.launch {
+                    try {
+                        runPlaybackSafely(synthesized)
+                    } finally {
+                        endPlayback()
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun awaitIdle() {
+        val signal = playbackStateMutex.withLock {
+            if (activePlaybacks == 0) null else idleSignal
+        }
+        signal?.await()
+    }
+
+    private suspend fun beginPlayback() {
+        playbackStateMutex.withLock {
+            if (activePlaybacks == 0) {
+                idleSignal = CompletableDeferred()
+            }
+            activePlaybacks++
+        }
+    }
+
+    private suspend fun endPlayback() {
+        playbackStateMutex.withLock {
+            activePlaybacks--
+            if (activePlaybacks == 0 && !idleSignal.isCompleted) {
+                idleSignal.complete(Unit)
             }
         }
     }
