@@ -173,12 +173,24 @@ private fun EmergencySosButton(
     onPress: () -> Unit,
     onRelease: () -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 2.dp),
-        contentAlignment = Alignment.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Text(
+            text = "Send alert with your location and critical message",
+            color = Color.White.copy(alpha = 0.88f),
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+
         Box(
             modifier = Modifier
                 .size(176.dp)
@@ -280,17 +292,6 @@ private fun EmergencySosButton(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = "Send alert with your location\nand critical message",
-                            color = Color.White.copy(alpha = 0.94f),
-                            fontSize = 8.5.sp,
-                            lineHeight = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(Modifier.height(5.dp))
-
                         Icon(
                             imageVector = Icons.Default.NotificationsActive,
                             contentDescription = "Emergency SOS",
