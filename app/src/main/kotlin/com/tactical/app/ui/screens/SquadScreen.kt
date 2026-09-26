@@ -375,102 +375,143 @@ fun SquadScreen(
             }
 
             if (uiState.pttEnabled) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(10.dp))
+
+                val pttButtonColor = when {
+                    uiState.pttSessionState == SessionState.TRANSMITTING -> SquadTransmitOrange
+                    pttHeld -> SquadHoldRed
+                    !pttButtonEnabled -> SquadBlueSurfaceRaised
+                    else -> SquadBluePrimary
+                }
+                val pttGlowColor = when {
+                    uiState.pttSessionState == SessionState.TRANSMITTING -> SquadTransmitGlow
+                    pttHeld -> SquadHoldRedGlow
+                    !pttButtonEnabled -> SquadBlueBorder
+                    else -> SquadBlueGlow
+                }
 
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(190.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    !pttButtonEnabled -> SquadBlueSurface
-                                    pttHeld -> RedTacticalVoiceOrange
-                                    else -> RedTacticalPrimary
-                                }
-                            )
-                            .border(
-                                width = if (pttButtonEnabled) 2.dp else 1.dp,
-                                color = when {
-                                    !pttButtonEnabled -> SquadBlueBorder
-                                    pttHeld -> RedTacticalVoiceOrange
-                                    else -> RedTacticalPrimary
-                                },
-                                shape = CircleShape
-                            )
-                            .then(
-                                if (pttButtonEnabled) {
-                                    Modifier.pointerInput(Unit) {
-                                        var cancelled = false
-                                        var totalDragX = 0f
-                                        var totalDragY = 0f
-
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                cancelled = false
-                                                totalDragX = 0f
-                                                totalDragY = 0f
-                                                pttHeld = true
-                                                onPttPress()
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                totalDragX += dragAmount.x
-                                                totalDragY += dragAmount.y
-
-                                                if (
-                                                    !cancelled &&
-                                                    totalDragX > 80.dp.toPx() &&
-                                                    totalDragX > kotlin.math.abs(totalDragY) * 1.2f
-                                                ) {
-                                                    cancelled = true
-                                                    pttHeld = false
-                                                    onPttCancel()
-                                                }
-
-                                                change.consume()
-                                            },
-                                            onDragEnd = {
-                                                if (!cancelled && pttHeld) {
-                                                    pttHeld = false
-                                                    onPttRelease()
-                                                }
-                                            },
-                                            onDragCancel = {
-                                                if (!cancelled && pttHeld) {
-                                                    pttHeld = false
-                                                    onPttCancel()
-                                                }
-                                            }
-                                        )
-                                    }
-                                } else {
-                                    Modifier
-                                }
-                            ),
+                        modifier = Modifier.size(222.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                        Box(
+                            Modifier
+                                .size(216.dp)
+                                .border(
+                                    1.5.dp,
+                                    pttGlowColor.copy(alpha = 0.25f),
+                                    CircleShape
+                                )
+                        )
+                        Box(
+                            Modifier
+                                .size(202.dp)
+                                .border(
+                                    2.dp,
+                                    pttGlowColor.copy(alpha = 0.45f),
+                                    CircleShape
+                                )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(186.dp)
+                                .shadow(
+                                    elevation = 28.dp,
+                                    shape = CircleShape,
+                                    clip = false,
+                                    ambientColor = pttGlowColor.copy(alpha = 0.70f),
+                                    spotColor = pttGlowColor.copy(alpha = 0.90f)
+                                )
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            pttGlowColor.copy(alpha = 0.88f),
+                                            pttButtonColor,
+                                            pttButtonColor.copy(alpha = 0.82f)
+                                        )
+                                    )
+                                )
+                                .border(
+                                    2.dp,
+                                    pttGlowColor.copy(alpha = 0.95f),
+                                    CircleShape
+                                )
+                                .then(
+                                    if (pttButtonEnabled) {
+                                        Modifier.pointerInput(Unit) {
+                                            var cancelled = false
+                                            var totalDragX = 0f
+                                            var totalDragY = 0f
+
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    cancelled = false
+                                                    totalDragX = 0f
+                                                    totalDragY = 0f
+                                                    pttHeld = true
+                                                    onPttPress()
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    totalDragX += dragAmount.x
+                                                    totalDragY += dragAmount.y
+
+                                                    if (
+                                                        !cancelled &&
+                                                        totalDragX > 80.dp.toPx() &&
+                                                        totalDragX > kotlin.math.abs(totalDragY) * 1.2f
+                                                    ) {
+                                                        cancelled = true
+                                                        pttHeld = false
+                                                        onPttCancel()
+                                                    }
+
+                                                    change.consume()
+                                                },
+                                                onDragEnd = {
+                                                    if (!cancelled && pttHeld) {
+                                                        pttHeld = false
+                                                        onPttRelease()
+                                                    }
+                                                },
+                                                onDragCancel = {
+                                                    if (!cancelled && pttHeld) {
+                                                        pttHeld = false
+                                                        onPttCancel()
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Mic,
-                                contentDescription = null,
-                                tint = if (pttButtonEnabled) Color.White else Color(0xFF8EA8C0),
-                                modifier = Modifier.size(38.dp)
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                pttLabel,
-                                color = if (pttButtonEnabled) Color.White else Color(0xFF8EA8C0),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.sp,
-                                textAlign = TextAlign.Center
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    pttLabel,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 1.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
@@ -501,7 +542,7 @@ fun SquadScreen(
                         Icon(
                             Icons.Default.Mic,
                             contentDescription = null,
-                            tint = RedTacticalPrimaryBright,
+                            tint = SquadBlueGlow,
                             modifier = Modifier.size(26.dp)
                         )
                         Spacer(Modifier.width(10.dp))
