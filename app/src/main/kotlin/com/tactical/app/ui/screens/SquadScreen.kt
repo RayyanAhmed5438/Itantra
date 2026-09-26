@@ -12,7 +12,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shadow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -27,8 +29,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,6 +47,7 @@ import com.tactical.app.ui.theme.*
 fun SquadScreen(
     uiState: MainUiState,
     onRefresh: () -> Unit,
+    onLanguageSelected: (String) -> Unit = {},
     onPttToggle: () -> Unit,
     onPttPress: () -> Unit,
     onPttRelease: () -> Unit,
@@ -62,6 +68,10 @@ fun SquadScreen(
     var pttHeld by remember { mutableStateOf(false) }
     var emergencyHeld by remember { mutableStateOf(false) }
     var removeArmedDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var languagePickerVisible by rememberSaveable { mutableStateOf(false) }
+    var pendingLanguageCode by rememberSaveable {
+        mutableStateOf(uiState.selectedLanguageCode)
+    }
 
     val emergencyHoldProgress by animateFloatAsState(
         targetValue = if (
@@ -99,7 +109,7 @@ fun SquadScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(RedTacticalBackground)
+            .background(SquadBlueBackground)
             .padding(horizontal = 20.dp, vertical = 12.dp)
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -131,17 +141,17 @@ fun SquadScreen(
                                 uiState.pttContinuousSession
                             ) && (uiState.pttEnabled || hasConnection),
                         color = if (uiState.pttEnabled) {
-                            RedTacticalPrimary
+                            SquadBluePrimary
                         } else {
-                            RedTacticalSurface
+                            SquadBlueSurface
                         },
                         shape = RoundedCornerShape(8.dp),
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
                             if (uiState.pttEnabled) {
-                                RedTacticalPrimaryBright
+                                SquadBlueGlow
                             } else {
-                                RedTacticalSurfaceBorder
+                                SquadBlueBorder
                             }
                         )
                     ) {
@@ -183,7 +193,7 @@ fun SquadScreen(
             ) {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = RedTacticalSurface
+                        containerColor = SquadBlueSurface
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
@@ -207,7 +217,7 @@ fun SquadScreen(
                                         else ->
                                             "LAST PTT TRANSMISSION"
                                     },
-                                    color = RedTacticalTextSecondary,
+                                    color = Color(0xFF8EA8C0),
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 0.8.sp
@@ -230,7 +240,7 @@ fun SquadScreen(
                             if (uiState.pttTransmissionHistory.isNotEmpty()) {
                                 Text(
                                     if (transmissionExpanded) "▲" else "▼",
-                                    color = RedTacticalTextSecondary,
+                                    color = Color(0xFF8EA8C0),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -261,7 +271,7 @@ fun SquadScreen(
                                 )
                                 Text(
                                     "LIVE",
-                                    color = RedTacticalTextSecondary,
+                                    color = Color(0xFF8EA8C0),
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -289,7 +299,7 @@ fun SquadScreen(
                                     )
                                     Text(
                                         formatPttTimestamp(latest.timestampEpochMs),
-                                        color = RedTacticalTextSecondary,
+                                        color = Color(0xFF8EA8C0),
                                         fontSize = 10.sp
                                     )
                                 }
@@ -313,7 +323,7 @@ fun SquadScreen(
                                                     Spacer(Modifier.height(3.dp))
                                                     Text(
                                                         formatPttTimestamp(transmission.timestampEpochMs),
-                                                        color = RedTacticalTextSecondary,
+                                                        color = Color(0xFF8EA8C0),
                                                         fontSize = 9.sp
                                                     )
                                                 }
@@ -334,7 +344,7 @@ fun SquadScreen(
                                             ) {
                                                 Spacer(Modifier.height(8.dp))
                                                 HorizontalDivider(
-                                                    color = RedTacticalSurfaceBorder
+                                                    color = SquadBlueBorder
                                                 )
                                                 Spacer(Modifier.height(8.dp))
                                             }
@@ -354,7 +364,7 @@ fun SquadScreen(
                                 }
                                 ?: Text(
                                     "Speak normally. Each finalized sentence is sent automatically.",
-                                    color = RedTacticalTextSecondary,
+                                    color = Color(0xFF8EA8C0),
                                     fontSize = 10.sp
                                 )
                         }
@@ -377,7 +387,7 @@ fun SquadScreen(
                             .clip(CircleShape)
                             .background(
                                 when {
-                                    !pttButtonEnabled -> RedTacticalSurface
+                                    !pttButtonEnabled -> SquadBlueSurface
                                     pttHeld -> RedTacticalVoiceOrange
                                     else -> RedTacticalPrimary
                                 }
@@ -385,7 +395,7 @@ fun SquadScreen(
                             .border(
                                 width = if (pttButtonEnabled) 2.dp else 1.dp,
                                 color = when {
-                                    !pttButtonEnabled -> RedTacticalSurfaceBorder
+                                    !pttButtonEnabled -> SquadBlueBorder
                                     pttHeld -> RedTacticalVoiceOrange
                                     else -> RedTacticalPrimary
                                 },
@@ -449,13 +459,13 @@ fun SquadScreen(
                             Icon(
                                 Icons.Default.Mic,
                                 contentDescription = null,
-                                tint = if (pttButtonEnabled) Color.White else RedTacticalTextSecondary,
+                                tint = if (pttButtonEnabled) Color.White else Color(0xFF8EA8C0),
                                 modifier = Modifier.size(38.dp)
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 pttLabel,
-                                color = if (pttButtonEnabled) Color.White else RedTacticalTextSecondary,
+                                color = if (pttButtonEnabled) Color.White else Color(0xFF8EA8C0),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 1.sp,
@@ -469,7 +479,7 @@ fun SquadScreen(
 
                 Text(
                     pttHint,
-                    color = RedTacticalTextSecondary,
+                    color = Color(0xFF8EA8C0),
                     fontSize = 10.sp,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
@@ -477,7 +487,7 @@ fun SquadScreen(
             } else {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = RedTacticalSurface
+                        containerColor = SquadBlueSurface
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -506,7 +516,7 @@ fun SquadScreen(
                             Spacer(Modifier.height(2.dp))
                             Text(
                                 "Continuous STT • sentence-by-sentence transmission",
-                                color = RedTacticalTextSecondary,
+                                color = Color(0xFF8EA8C0),
                                 fontSize = 10.sp
                             )
                         }
@@ -527,7 +537,7 @@ fun SquadScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(
                             if (uiState.emergencyComposerVisible) {
-                                RedTacticalSurface
+                                SquadBlueSurface
                             } else {
                                 Color(0xFF5A1717)
                             }
@@ -535,7 +545,7 @@ fun SquadScreen(
                         .border(
                             width = 1.5.dp,
                             color = if (uiState.emergencyComposerVisible) {
-                                RedTacticalSurfaceBorder
+                                SquadBlueBorder
                             } else {
                                 RedTacticalPrimaryBright
                             },
@@ -595,7 +605,7 @@ fun SquadScreen(
                                 "HOLD FOR EMERGENCY"
                             },
                             color = if (uiState.emergencyComposerVisible) {
-                                RedTacticalTextSecondary
+                                Color(0xFF8EA8C0)
                             } else {
                                 Color.White
                             },
@@ -611,7 +621,7 @@ fun SquadScreen(
 
             Text(
                 "Hold for 2 seconds to open the emergency recorder",
-                color = RedTacticalTextSecondary,
+                color = Color(0xFF8EA8C0),
                 fontSize = 10.sp,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
@@ -694,7 +704,7 @@ private fun transmissionStatusColor(status: String): Color =
     when (status) {
         "Sent" -> RedTacticalStatusGreen
         "Sending…" -> RedTacticalPrimaryBright
-        else -> RedTacticalTextSecondary
+        else -> Color(0xFF8EA8C0)
     }
 
 @Composable
@@ -705,11 +715,11 @@ private fun SectionDividerLabel(label: String) {
     ) {
         HorizontalDivider(
             modifier = Modifier.weight(1f),
-            color = RedTacticalSurfaceBorder
+            color = SquadBlueBorder
         )
         Text(
             text = label,
-            color = RedTacticalTextSecondary,
+            color = Color(0xFF8EA8C0),
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.9.sp,
@@ -717,7 +727,7 @@ private fun SectionDividerLabel(label: String) {
         )
         HorizontalDivider(
             modifier = Modifier.weight(1f),
-            color = RedTacticalSurfaceBorder
+            color = SquadBlueBorder
         )
     }
 }
@@ -725,13 +735,13 @@ private fun SectionDividerLabel(label: String) {
 @Composable
 private fun EmptySquadSection(message: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
+        colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
             text = message,
-            color = RedTacticalTextSecondary,
+            color = Color(0xFF8EA8C0),
             fontSize = 12.sp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -753,7 +763,7 @@ fun PeerCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Card(
-            colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
+            colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
@@ -785,7 +795,7 @@ fun PeerCard(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(RedTacticalBackground)
+                        .background(SquadBlueBackground)
                 ) {
                     Icon(
                         Icons.Default.Person,
@@ -812,7 +822,7 @@ fun PeerCard(
                         color = if (peer.isConnected) {
                             RedTacticalStatusGreen
                         } else {
-                            RedTacticalTextSecondary
+                            Color(0xFF8EA8C0)
                         },
                         fontSize = 11.sp
                     )
@@ -823,7 +833,7 @@ fun PeerCard(
                     tint = if (peer.isConnected) {
                         RedTacticalStatusGreen
                     } else {
-                        RedTacticalTextSecondary
+                        Color(0xFF8EA8C0)
                     },
                     modifier = Modifier.size(20.dp)
                 )
@@ -834,7 +844,7 @@ fun PeerCard(
             expanded = removeArmed,
             onDismissRequest = onDismissRemove,
             modifier = Modifier.widthIn(min = 170.dp),
-            containerColor = RedTacticalSurface,
+            containerColor = SquadBlueSurface,
             shape = RoundedCornerShape(10.dp),
             shadowElevation = 8.dp
         ) {
