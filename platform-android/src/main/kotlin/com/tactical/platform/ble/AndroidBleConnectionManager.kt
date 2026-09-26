@@ -168,46 +168,84 @@ class AndroidBleConnectionManager(
         val resolvedAddress = resolveAddress(deviceAddress)
             ?: return TacticalResult.Failure("BLE address not known yet; scan for the device again")
 
-        val appId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress)
-            ?: deviceAddress
-
+        val appId = BlePeerAddressRegistry.applicationIdFor(resolvedAddress) ?: deviceAddress
         rememberAddress(appId, resolvedAddress)
 
-        val ids = squadDeviceIds().toMutableSet()
-        ids.add(appId)
-        prefs.edit()
-            .putStringSet(SQUAD_IDS_KEY, ids)
-            .remove(LEGACY_PAIRED_IDS_KEY)
-            .apply()
+        val connection = reconnectSquadMember(appId).let { result ->
+            if (result is TacticalResult.Success) result else connect(appId)
+        }
+        if (connection is TacticalResult.Failure) {
+            return TacticalResult.Failure("Could not reach $appId: ${connection.error}")
+        }
 
-        setState(resolvedAddress, if (hasDirectConnection(resolvedAddress)) {
-            BleLinkState.CONNECTED
-        } else {
-            BleLinkState.AVAILABLE
-        })
+        delay(100L)
+        val sent = registry.sendControl(
+            resolvedAddress,
+            SquadControlCodec.request(
+                localDeviceId,
+                localCallsignProvider()
+            )
+        )
+        if (!sent) {
+            return TacticalResult.Failure("GATT link is up but squad request could not be sent")
+        }
 
-        android.util.Log.d(TAG, "Added " + appId + " to iTantra squad (no Android pairing)")
+        setState(resolvedAddress, BleLinkState.CONNECTED)
+        android.util.Log.d(TAG, "Squad request sent to $appId (no Android pairing)")
         return TacticalResult.Success(Unit)
     }
 
     override suspend fun removeFromSquad(deviceAddress: String) {
         val resolvedAddress = resolveAddress(deviceAddress) ?: deviceAddress
         val appId = applicationIdForAddress(resolvedAddress) ?: deviceAddress
-        val ids = squadDeviceIds().toMutableSet()
 
-        if (ids.remove(appId)) {
-            prefs.edit()
-                .putStringSet(SQUAD_IDS_KEY, ids)
-                .remove(LEGACY_PAIRED_IDS_KEY)
-                .apply()
+        registry.sendControl(
+            resolvedAddress,
+            SquadControlCodec.remove(localDeviceId)
+        )
+
+        forgetSquadMember(appId)
+
+        gattClients.remove(resolvedAddress)?.let {
+            try { it.disconnect() } catch (_: Exception) {}
+            try { it.close() } catch (_: Exception) {}
         }
-
-        // Squad membership and physical GATT connectivity are intentionally
-        // independent. Keep the GATT link available for mesh participation.
+        registry.unregisterOutboundConnection(resolvedAddress)
         refreshLinkState(resolvedAddress, BleLinkState.AVAILABLE)
         android.util.Log.d(TAG, "Removed " + appId + " from iTantra squad")
     }
 
+    override suspend fun respondToSquadRequest(
+        deviceId: String,
+        approve: Boolean
+    ): TacticalResult<Unit> {
+        val request = pendingSquadRequestsById[deviceId]
+            ?: return TacticalResult.Failure("Squad request is no longer pending")
+
+        val address = resolveAddress(request.deviceId)
+            ?: return TacticalResult.Failure("Requester is no longer reachable")
+
+        rememberAddress(request.deviceId, address)
+
+        val sent = registry.sendControl(
+            address,
+            SquadControlCodec.response(localDeviceId, approve)
+        )
+        if (!sent) {
+            return TacticalResult.Failure("Could not send squad response")
+        }
+
+        if (approve) {
+            rememberSquadMember(request.deviceId, address)
+            setState(address, BleLinkState.CONNECTED)
+        }
+
+        pendingSquadRequestsById.remove(deviceId)
+        _pendingSquadRequests.value = pendingSquadRequestsById.values
+            .sortedBy { it.callsign.lowercase() }
+
+        return TacticalResult.Success(Unit)
+    }
     override suspend fun connect(deviceAddress: String): TacticalResult<Unit> {
         if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
 
