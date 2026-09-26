@@ -667,7 +667,7 @@ class AndroidBleConnectionManager(
                         if (status == BluetoothGatt.GATT_SUCCESS) {
                             registry.onMtuNegotiated(resolvedAddress, mtu)
                         }
-                        startServiceDiscovery()
+                        startServiceDiscovery(gatt)
                     }
                 }
             }
