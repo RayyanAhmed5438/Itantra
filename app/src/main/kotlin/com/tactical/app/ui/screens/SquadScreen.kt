@@ -785,6 +785,7 @@ private fun SquadLanguageRow(
 }
 
 
+@Composable
 private fun formatPttTimestamp(epochMs: Long): String =
     if (epochMs > 0L) {
         java.text.SimpleDateFormat(
@@ -795,6 +796,7 @@ private fun formatPttTimestamp(epochMs: Long): String =
         LocalUiStrings.current.text(UiTextKey.UNKNOWN)
     }
 
+@Composable
 private fun transmissionStatusColor(status: String): Color =
     when (status) {
         LocalUiStrings.current.text(UiTextKey.SENT) -> RedTacticalStatusGreen
