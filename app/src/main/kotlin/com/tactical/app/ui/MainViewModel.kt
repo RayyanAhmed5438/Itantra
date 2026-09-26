@@ -658,26 +658,35 @@ class MainViewModel @Inject constructor(
                 speechLanguagePreferences.setSelectedLanguageCode(languageCode)
                 routingSpeechToText.onSelectedLanguageChanged(languageCode)
 
-                // Warm the newly selected STT backend immediately so the next
-                // PTT press does not pay the native model-load cost.
+                // The language switch indicator represents the outgoing STT
+                // model, because that is what PTT/Call Mode actually needs.
                 runCatching { routingSpeechToText.preloadSelectedLanguage() }
-
-                MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
-                    runCatching { mmsTtsEngine.preload(language) }
-                }
 
                 _uiState.update {
                     it.copy(
                         selectedLanguageCode = languageCode,
-                        selectedLanguage = displayLanguageName(languageCode)
+                        selectedLanguage = displayLanguageName(languageCode),
+                        languageLoadingCode = null
                     )
                 }
 
+                // Restart Call Mode as soon as its new STT backend is ready;
+                // do not hold the microphone off while TTS warms in the
+                // background.
                 if (wasContinuousCallMode && !_uiState.value.pttEnabled) {
                     runCatching { pttController.startContinuous() }
                 }
-            } finally {
+            } catch (t: Throwable) {
                 _uiState.update { it.copy(languageLoadingCode = null) }
+                return@launch
+            }
+
+            // Incoming multilingual TTS is warmed independently. It must not
+            // extend the visible language-loading state or delay Call Mode.
+            MmsTtsLanguage.fromIsoCode(languageCode)?.let { language ->
+                viewModelScope.launch {
+                    runCatching { mmsTtsEngine.preload(language) }
+                }
             }
         }
     }
