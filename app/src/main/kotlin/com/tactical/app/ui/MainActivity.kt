@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var showSettings by remember { mutableStateOf(false) }
-                val blueTheme = !showSettings
+                val blueTheme = true
 
                 Scaffold(
                         topBar = {
