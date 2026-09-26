@@ -190,7 +190,7 @@ fun MessagesScreen(
                         Icons.Default.Delete,
                         contentDescription = "Delete selected messages",
                         tint = if (selectedKeys.isNotEmpty()) {
-                            RedTacticalPrimaryBright
+                            SquadBlueGlow
                         } else {
                             RedTacticalTextSecondary
                         }
@@ -234,6 +234,7 @@ fun MessagesScreen(
                 text = {
                     Text(
                         "CHAT / PPT MODE",
+                        color = if (selectedTab == 0) SquadBlueGlow else RedTacticalTextSecondary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
@@ -248,6 +249,7 @@ fun MessagesScreen(
                 text = {
                     Text(
                         "CALL MODE",
+                        color = if (selectedTab == 1) SquadBlueGlow else RedTacticalTextSecondary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
@@ -541,7 +543,7 @@ private fun MessageRow(
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = if (isSelected) {
-                    Color(0xFF3A1414)
+                    SquadBlueSurfaceRaised
                 } else {
                     SquadBlueSurface
                 }
