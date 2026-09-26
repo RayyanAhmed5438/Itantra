@@ -584,6 +584,21 @@ class AndroidBleConnectionManager(
                     }
                 }
 
+                override fun onCharacteristicWrite(
+                    gatt: BluetoothGatt,
+                    characteristic: BluetoothGattCharacteristic,
+                    status: Int
+                ) {
+                    if (gattClients[resolvedAddress] === gatt &&
+                        characteristic.uuid == BleRadioTransport.PACKET_CHARACTERISTIC_UUID
+                    ) {
+                        registry.completeOutboundWrite(
+                            resolvedAddress,
+                            status == BluetoothGatt.GATT_SUCCESS
+                        )
+                    }
+                }
+
                 override fun onReadRemoteRssi(
                     gatt: BluetoothGatt,
                     rssi: Int,
