@@ -49,6 +49,31 @@ class RoutingSpeechToText @Inject constructor(
         }
     }
 
+    /**
+     * Eagerly loads the currently selected STT backend so the first PTT press
+     * can start microphone capture immediately. Only the selected backend is
+     * retained in memory.
+     */
+    suspend fun preloadSelectedLanguage() {
+        val selectedLanguage = languagePreferences.selectedLanguageCode
+
+        switchMutex.withLock {
+            if (activeLanguage != selectedLanguage) {
+                when (activeLanguage) {
+                    "hi" -> voskHindiSpeechToText.close()
+                    "en" -> moonshineSpeechToText.close()
+                }
+                activeLanguage = selectedLanguage
+            }
+        }
+
+        when (selectedLanguage) {
+            "hi" -> voskHindiSpeechToText.preload()
+            "en" -> moonshineSpeechToText.preload()
+            else -> error("No STT backend configured for language " + selectedLanguage)
+        }
+    }
+
     override fun transcribe(
         audio: Flow<AudioFrame>
     ): Flow<TranscriptionChunk> {
