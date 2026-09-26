@@ -61,6 +61,7 @@ fun SquadScreen(
 
     var pttHeld by remember { mutableStateOf(false) }
     var emergencyHeld by remember { mutableStateOf(false) }
+    var removeArmedDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val emergencyHoldProgress by animateFloatAsState(
         targetValue = if (
@@ -634,7 +635,15 @@ fun SquadScreen(
                 connectedPeers,
                 key = { "connected_" + it.deviceAddress }
             ) { peer ->
-                PeerCard(peer, onRemoveFromSquad)
+                PeerCard(
+                    peer = peer,
+                    removeArmed = removeArmedDeviceId == peer.deviceAddress,
+                    onLongPress = { removeArmedDeviceId = peer.deviceAddress },
+                    onRemove = {
+                        onRemoveFromSquad(peer.deviceAddress)
+                        removeArmedDeviceId = null
+                    }
+                )
             }
         }
 
@@ -729,7 +738,9 @@ private fun EmptySquadSection(message: String) {
 @Composable
 fun PeerCard(
     peer: PeerNodeUi,
-    onRemoveFromSquad: (String) -> Unit = {}
+    removeArmed: Boolean = false,
+    onLongPress: () -> Unit = {},
+    onRemove: () -> Unit = {}
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = RedTacticalSurface),
@@ -738,9 +749,7 @@ fun PeerCard(
             .fillMaxWidth()
             .pointerInput(peer.deviceAddress) {
                 detectTapGestures(
-                    onLongPress = {
-                        onRemoveFromSquad(peer.deviceAddress)
-                    }
+                    onLongPress = onLongPress
                 )
             }
             .then(
@@ -780,12 +789,27 @@ fun PeerCard(
                     fontSize = 11.sp
                 )
             }
-            Icon(
-                Icons.Default.SignalCellularAlt,
-                contentDescription = "Signal",
-                tint = if (peer.isConnected) RedTacticalStatusGreen else RedTacticalTextSecondary,
-                modifier = Modifier.size(20.dp)
-            )
+            if (removeArmed) {
+                TextButton(
+                    onClick = onRemove,
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        "REMOVE FROM SQUAD",
+                        color = RedTacticalPrimaryBright,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.3.sp
+                    )
+                }
+            } else {
+                Icon(
+                    Icons.Default.SignalCellularAlt,
+                    contentDescription = "Signal",
+                    tint = if (peer.isConnected) RedTacticalStatusGreen else RedTacticalTextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }
