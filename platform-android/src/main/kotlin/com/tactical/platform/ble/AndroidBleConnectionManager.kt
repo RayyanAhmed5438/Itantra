@@ -54,6 +54,8 @@ class AndroidBleConnectionManager(
     private val rssiStates = ConcurrentHashMap<String, MutableStateFlow<Int?>>()
     private val rssiJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
     private val pendingSquadRequestsById = ConcurrentHashMap<String, SquadRequest>()
+    private val pendingSquadRequestAddresses = ConcurrentHashMap<String, String>()
+    private val outgoingSquadRequestAddresses = ConcurrentHashMap<String, String>()
     private val _pendingSquadRequests = MutableStateFlow<List<SquadRequest>>(emptyList())
 
     private val controlIncomingListener: (String, ByteArray) -> Unit = { address, data ->
@@ -120,9 +122,10 @@ class AndroidBleConnectionManager(
                 registry.allConnectedAddresses().toList().forEach { registry.unregisterOutboundConnection(it) }
                 states.keys.toList().forEach { setState(it, BleLinkState.DISCONNECTED) }
             } else if (state == BluetoothAdapter.STATE_ON) {
-                android.util.Log.d(TAG, "Bluetooth turned on; reconnecting squad members")
+                android.util.Log.d(TAG, "Bluetooth turned on; restoring iTantra links")
                 reconnectScope.launch {
-                    delay(1500L)
+                    delay(250L)
+                    retryPendingSquadRequests()
                     squadDeviceIds().forEach { id ->
                         runCatching { reconnectWithRoleStagger(id) }
                     }
@@ -139,7 +142,7 @@ class AndroidBleConnectionManager(
         // Startup GATT can race with the peer's GATT server initialization.
         // Retry quietly every 10 seconds; established sessions are left alone.
         reconnectScope.launch {
-            delay(3000L)
+            delay(1000L)
             while (true) {
                 val adapter = runCatching {
                     context.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
@@ -151,7 +154,7 @@ class AndroidBleConnectionManager(
                     }
                 }
 
-                delay(10_000L)
+                delay(5_000L)
             }
         }
 
@@ -191,6 +194,7 @@ class AndroidBleConnectionManager(
             return TacticalResult.Failure("GATT link is up but squad request could not be sent")
         }
 
+        outgoingSquadRequestAddresses[appId] = resolvedAddress
         setState(resolvedAddress, BleLinkState.CONNECTED)
         android.util.Log.d(TAG, "Squad request sent to $appId (no Android pairing)")
         return TacticalResult.Success(Unit)
@@ -223,30 +227,53 @@ class AndroidBleConnectionManager(
         val request = pendingSquadRequestsById[deviceId]
             ?: return TacticalResult.Failure("Squad request is no longer pending")
 
-        val address = resolveAddress(request.deviceId)
-            ?: return TacticalResult.Failure("Requester is no longer reachable")
+        val knownAddress = pendingSquadRequestAddresses[request.deviceId]
+            ?: resolveAddress(request.deviceId)
 
-        rememberAddress(request.deviceId, address)
+        if (knownAddress == null) {
+            return TacticalResult.Failure(
+                if (!isBluetoothEnabled()) {
+                    "Bluetooth is off. Turn Bluetooth on and try again."
+                } else {
+                    "Requester is no longer reachable"
+                }
+            )
+        }
+
+        rememberAddress(request.deviceId, knownAddress)
+
+        if (!hasDirectConnection(knownAddress)) {
+            val reconnect = connect(request.deviceId)
+            if (reconnect is TacticalResult.Failure) {
+                return TacticalResult.Failure(
+                    "Could not reconnect to requester: ${reconnect.error}"
+                )
+            }
+        }
 
         val sent = registry.sendControl(
-            address,
+            knownAddress,
             SquadControlCodec.response(localDeviceId, approve)
         )
         if (!sent) {
-            return TacticalResult.Failure("Could not send squad response")
+            return TacticalResult.Failure("Could not send squad response; try again")
         }
 
         if (approve) {
-            rememberSquadMember(request.deviceId, address)
-            setState(address, BleLinkState.CONNECTED)
+            rememberSquadMember(request.deviceId, knownAddress)
+            setState(knownAddress, BleLinkState.CONNECTED)
+        } else {
+            setState(knownAddress, BleLinkState.AVAILABLE)
         }
 
         pendingSquadRequestsById.remove(deviceId)
-        _pendingSquadRequests.value = pendingSquadRequestsById.values
-            .sortedBy { it.callsign.lowercase() }
+        pendingSquadRequestAddresses.remove(deviceId)
+        outgoingSquadRequestAddresses.remove(request.deviceId)
+        publishPendingSquadRequests()
 
         return TacticalResult.Success(Unit)
     }
+
     override suspend fun connect(deviceAddress: String): TacticalResult<Unit> {
         if (!hasConnectPermission()) return TacticalResult.Failure("Missing BLUETOOTH_CONNECT permission")
 
@@ -633,14 +660,16 @@ class AndroidBleConnectionManager(
                     )
                     setState(address, BleLinkState.CONNECTED)
                 } else {
-                    pendingSquadRequestsById[message.deviceId] =
-                        SquadRequest(
-                            message.deviceId,
-                            BlePeerAddressRegistry.callsignFor(message.deviceId)
-                                ?: message.deviceId.take(8)
-                        )
-                    _pendingSquadRequests.value = pendingSquadRequestsById.values
-                        .sortedBy { it.callsign.lowercase() }
+                    synchronized(pendingSquadRequestsById) {
+                        pendingSquadRequestsById[message.deviceId] =
+                            SquadRequest(
+                                message.deviceId,
+                                BlePeerAddressRegistry.callsignFor(message.deviceId)
+                                    ?: message.deviceId.take(8)
+                            )
+                        pendingSquadRequestAddresses[message.deviceId] = address
+                        publishPendingSquadRequestsLocked()
+                    }
                 }
             }
 
@@ -652,14 +681,18 @@ class AndroidBleConnectionManager(
                 } else {
                     setState(address, BleLinkState.AVAILABLE)
                 }
+                outgoingSquadRequestAddresses.remove(message.deviceId)
             }
 
             is SquadControlCodec.Message.Remove -> {
                 if (message.deviceId == localDeviceId) return
                 forgetSquadMember(message.deviceId)
-                pendingSquadRequestsById.remove(message.deviceId)
-                _pendingSquadRequests.value = pendingSquadRequestsById.values
-                    .sortedBy { it.callsign.lowercase() }
+                synchronized(pendingSquadRequestsById) {
+                    pendingSquadRequestsById.remove(message.deviceId)
+                    pendingSquadRequestAddresses.remove(message.deviceId)
+                    publishPendingSquadRequestsLocked()
+                }
+                outgoingSquadRequestAddresses.remove(message.deviceId)
                 setState(address, BleLinkState.AVAILABLE)
                 android.util.Log.d(TAG, "Remote squad removal received from " + message.deviceId)
             }
@@ -691,6 +724,44 @@ class AndroidBleConnectionManager(
 
     override fun rssi(deviceAddress: String): Flow<Int?> =
         rssiState(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
+
+    private fun publishPendingSquadRequests() {
+        synchronized(pendingSquadRequestsById) {
+            publishPendingSquadRequestsLocked()
+        }
+    }
+
+    private fun publishPendingSquadRequestsLocked() {
+        _pendingSquadRequests.value = pendingSquadRequestsById.values
+            .sortedBy { it.callsign.lowercase() }
+    }
+
+    private fun isBluetoothEnabled(): Boolean =
+        context.getSystemService(android.bluetooth.BluetoothManager::class.java)
+            ?.adapter
+            ?.isEnabled == true
+
+    private suspend fun retryPendingSquadRequests() {
+        outgoingSquadRequestAddresses.forEach { (peerId, knownAddress) ->
+            runCatching {
+                val result = connect(peerId)
+                if (result is TacticalResult.Success) {
+                    val currentAddress = resolveAddress(peerId) ?: knownAddress
+                    if (registry.sendControl(
+                            currentAddress,
+                            SquadControlCodec.request(localDeviceId)
+                        )
+                    ) {
+                        outgoingSquadRequestAddresses[peerId] = currentAddress
+                        android.util.Log.d(
+                            TAG,
+                            "Retried pending squad request to " + peerId
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     override fun connectedSquadDeviceIds(): Set<String> {
         val squadIds = squadDeviceIds()
@@ -736,7 +807,7 @@ class AndroidBleConnectionManager(
         } else {
             deviceAddress
         }
-        if (localDeviceId > peerId) delay(1500L)
+        if (localDeviceId > peerId) delay(250L)
         runCatching { reconnectSquadMember(peerId) }
     }
     override suspend fun reconnectSquadMember(deviceAddress: String): TacticalResult<Unit> {
