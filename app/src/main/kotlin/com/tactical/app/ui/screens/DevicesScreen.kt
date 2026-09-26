@@ -1,5 +1,7 @@
 package com.tactical.app.ui.screens
 
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -96,7 +98,7 @@ fun DevicesScreen(
         Spacer(Modifier.height(14.dp))
 
         Text(
-            text = "AVAILABLE DEVICES",
+            text = LocalUiStrings.current.text(UiTextKey.AVAILABLE_DEVICES),
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -129,7 +131,7 @@ fun DevicesScreen(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = if (uiState.isScanning) "SCANNING" else "SCAN",
+                text = if (uiState.isScanning) LocalUiStrings.current.text(UiTextKey.SCANNING) else LocalUiStrings.current.text(UiTextKey.SCAN),
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 0.8.sp
             )
@@ -294,7 +296,7 @@ private fun EmergencySosButton(
                     ) {
                         Icon(
                             imageVector = Icons.Default.NotificationsActive,
-                            contentDescription = "Emergency SOS",
+                            contentDescription = LocalUiStrings.current.text(UiTextKey.EMERGENCY_SOS),
                             tint = Color.White,
                             modifier = Modifier.size(29.dp)
                         )
@@ -302,7 +304,7 @@ private fun EmergencySosButton(
                         Spacer(Modifier.height(1.dp))
 
                         Text(
-                            text = "SOS",
+                            text = LocalUiStrings.current.text(UiTextKey.SOS),
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Black,
@@ -313,9 +315,9 @@ private fun EmergencySosButton(
 
                         Text(
                             text = if (active) {
-                                "ACTIVE"
+                                LocalUiStrings.current.text(UiTextKey.ACTIVE)
                             } else {
-                                "Hold for 2 seconds"
+                                LocalUiStrings.current.text(UiTextKey.HOLD_TWO_SECONDS)
                             },
                             color = Color.White.copy(alpha = 0.95f),
                             fontSize = 8.sp,
@@ -407,10 +409,10 @@ private fun AvailableDeviceCard(
 
                 Text(
                     when (peer.bleState) {
-                        BleLinkState.CONNECTED -> "CONNECTED"
-                        BleLinkState.CONNECTING -> "CONNECTING"
-                        BleLinkState.FAILED -> "AVAILABLE"
-                        else -> "AVAILABLE"
+                        BleLinkState.CONNECTED -> LocalUiStrings.current.text(UiTextKey.CONNECTED)
+                        BleLinkState.CONNECTING -> LocalUiStrings.current.text(UiTextKey.CONNECTING)
+                        BleLinkState.FAILED -> LocalUiStrings.current.text(UiTextKey.AVAILABLE)
+                        else -> LocalUiStrings.current.text(UiTextKey.AVAILABLE)
                     },
                     color = if (peer.bleState == BleLinkState.CONNECTED) {
                         RedTacticalStatusGreen
@@ -439,7 +441,7 @@ private fun AvailableDeviceCard(
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    "ADD TO SQUAD",
+                    LocalUiStrings.current.text(UiTextKey.ADD_TO_SQUAD),
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.5.sp
                 )
