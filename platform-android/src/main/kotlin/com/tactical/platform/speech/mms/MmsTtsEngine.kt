@@ -194,7 +194,7 @@ class MmsTtsEngine @Inject constructor(
         return null
     }
 
-    private suspend fun play(frame: AudioFrame, sampleRate: Int) =
+    suspend fun play(frame: AudioFrame, sampleRate: Int) =
         withContext(Dispatchers.IO) {
             val channelMask = AudioFormat.CHANNEL_OUT_MONO
             val encoding = AudioFormat.ENCODING_PCM_16BIT
