@@ -113,7 +113,7 @@ fun SettingsScreen(
             label = { Text("Username") },
             supportingText = {
                 Text(
-                    usernameError ?: "Maximum 7 UTF-8 bytes for the BLE callsign field.",
+                    usernameError ?: "Maximum 5 UTF-8 bytes for the existing BLE callsign field.",
                     color = if (usernameError != null) {
                         SquadBluePrimary
                     } else {
