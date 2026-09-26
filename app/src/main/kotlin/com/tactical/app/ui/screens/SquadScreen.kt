@@ -1,5 +1,7 @@
 package com.tactical.app.ui.screens
 
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -69,19 +71,19 @@ fun SquadScreen(
 
 
     val pttLabel = when (uiState.pttSessionState) {
-        SessionState.ARMED -> "STARTING"
-        SessionState.RECORDING -> "RECORDING"
-        SessionState.TRANSMITTING -> "SENDING"
-        else -> if (hasConnection) "PUSH TO TALK" else "NO CONNECTION"
+        SessionState.ARMED -> LocalUiStrings.current.text(UiTextKey.STARTING)
+        SessionState.RECORDING -> LocalUiStrings.current.text(UiTextKey.RECORDING)
+        SessionState.TRANSMITTING -> LocalUiStrings.current.text(UiTextKey.SENDING)
+        else -> if (hasConnection) LocalUiStrings.current.text(UiTextKey.PUSH_TO_TALK) else LocalUiStrings.current.text(UiTextKey.NO_CONNECTION)
     }
 
     val pttHint = when (uiState.pttSessionState) {
-        SessionState.RECORDING -> "Release to send • swipe right to cancel"
-        SessionState.TRANSMITTING -> "Transcribing and sending…"
+        SessionState.RECORDING -> LocalUiStrings.current.text(UiTextKey.RELEASE_TO_SEND)
+        SessionState.TRANSMITTING -> LocalUiStrings.current.text(UiTextKey.TRANSCRIBING_SENDING)
         else -> if (hasConnection) {
-            "Hold to record • release to send • swipe right to cancel"
+            LocalUiStrings.current.text(UiTextKey.HOLD_TO_RECORD)
         } else {
-            "Connect to a squad member to enable PTT"
+            LocalUiStrings.current.text(UiTextKey.CONNECT_SQUAD_MEMBER)
         }
     }
 
@@ -102,7 +104,7 @@ fun SquadScreen(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "SQUAD",
+                        LocalUiStrings.current.text(UiTextKey.SQUAD),
                         color = Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -135,7 +137,7 @@ fun SquadScreen(
                         )
                     ) {
                         Text(
-                            if (uiState.pttEnabled) "PTT" else "CALL",
+                            if (uiState.pttEnabled) LocalUiStrings.current.text(UiTextKey.PTT) else LocalUiStrings.current.text(UiTextKey.CALL),
                             color = Color.White,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -182,11 +184,11 @@ fun SquadScreen(
                                 Text(
                                     when {
                                         !uiState.pttEnabled ->
-                                            "CALL MODE • VOICE TRANSMISSIONS"
+                                            LocalUiStrings.current.text(UiTextKey.CALL_MODE_VOICE)
                                         uiState.pttSessionState == SessionState.RECORDING ->
-                                            "LIVE PTT TRANSCRIPTION"
+                                            LocalUiStrings.current.text(UiTextKey.LIVE_PTT_TRANSCRIPTION)
                                         else ->
-                                            "LAST TRANSMISSION"
+                                            LocalUiStrings.current.text(UiTextKey.LAST_TRANSMISSION)
                                     },
                                     color = Color(0xFF8EA8C0),
                                     fontSize = 9.sp,
@@ -197,9 +199,9 @@ fun SquadScreen(
                                     Spacer(Modifier.height(3.dp))
                                     Text(
                                         if (uiState.pttContinuousSession) {
-                                            "Listening continuously"
+                                            LocalUiStrings.current.text(UiTextKey.LISTENING_CONTINUOUSLY)
                                         } else {
-                                            "Continuous voice mode ready"
+                                            LocalUiStrings.current.text(UiTextKey.CALL_READY)
                                         },
                                         color = Color.White,
                                         fontSize = 11.sp,
@@ -235,13 +237,13 @@ fun SquadScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    "Recording…",
+                                    LocalUiStrings.current.text(UiTextKey.RECORDING),
                                     color = RedTacticalVoiceOrange,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "LIVE",
+                                    LocalUiStrings.current.text(UiTextKey.LIVE),
                                     color = Color(0xFF8EA8C0),
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -334,7 +336,7 @@ fun SquadScreen(
                                     )
                                 }
                                 ?: Text(
-                                    "Speak normally. Each finalized sentence is sent automatically.",
+                                    LocalUiStrings.current.text(UiTextKey.SPEAK_NORMALLY),
                                     color = Color(0xFF8EA8C0),
                                     fontSize = 10.sp
                                 )
@@ -365,7 +367,7 @@ fun SquadScreen(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "LANGUAGE",
+                            LocalUiStrings.current.text(UiTextKey.LANGUAGE),
                             color = Color(0xFF8EA8C0),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
@@ -374,7 +376,7 @@ fun SquadScreen(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             if (uiState.languageLoadingCode != null) {
-                                "Loading…"
+                                LocalUiStrings.current.text(UiTextKey.LOADING)
                             } else {
                                 uiState.selectedLanguage
                             },
@@ -393,7 +395,7 @@ fun SquadScreen(
                     } else {
                         Icon(
                             Icons.Default.ChevronRight,
-                            contentDescription = "Select language",
+                            contentDescription = LocalUiStrings.current.text(UiTextKey.SELECT_LANGUAGE),
                             tint = Color(0xFFBFD6EA)
                         )
                     }
@@ -574,7 +576,7 @@ fun SquadScreen(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "CALL MODE",
+                                LocalUiStrings.current.text(UiTextKey.CALL_MODE),
                                 color = Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -598,7 +600,7 @@ fun SquadScreen(
 
         if (connectedPeers.isEmpty()) {
             item {
-                EmptySquadSection("No connected devices")
+                EmptySquadSection(LocalUiStrings.current.text(UiTextKey.NO_CONNECTED_DEVICES))
             }
         } else {
             items(
@@ -627,9 +629,9 @@ fun SquadScreen(
             item {
                 EmptySquadSection(
                     if (uiState.squadPeers.isEmpty()) {
-                        "No squad members"
+                        LocalUiStrings.current.text(UiTextKey.NO_SQUAD_MEMBERS)
                     } else {
-                        "All squad members are connected"
+                        LocalUiStrings.current.text(UiTextKey.ALL_SQUAD_CONNECTED)
                     }
                 )
             }
@@ -666,7 +668,7 @@ fun SquadScreen(
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)
                 ) {
                     Text(
-                        "Select Language",
+                        LocalUiStrings.current.text(UiTextKey.SELECT_LANGUAGE),
                         color = Color(0xFF10243A),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -675,7 +677,7 @@ fun SquadScreen(
                     Spacer(Modifier.height(14.dp))
 
                     Text(
-                        "Indian languages",
+                        LocalUiStrings.current.text(UiTextKey.INDIAN_LANGUAGES),
                         color = Color(0xFF54708C),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -694,7 +696,7 @@ fun SquadScreen(
                     Spacer(Modifier.height(8.dp))
 
                     Text(
-                        "Other",
+                        LocalUiStrings.current.text(UiTextKey.OTHER),
                         color = Color(0xFF54708C),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -719,7 +721,7 @@ fun SquadScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("CONFIRM", fontWeight = FontWeight.ExtraBold)
+                        Text(LocalUiStrings.current.text(UiTextKey.CONFIRM), fontWeight = FontWeight.ExtraBold)
                     }
                 }
             }
@@ -790,13 +792,13 @@ private fun formatPttTimestamp(epochMs: Long): String =
             java.util.Locale.getDefault()
         ).format(java.util.Date(epochMs))
     } else {
-        "Unknown"
+        LocalUiStrings.current.text(UiTextKey.UNKNOWN)
     }
 
 private fun transmissionStatusColor(status: String): Color =
     when (status) {
-        "Sent" -> RedTacticalStatusGreen
-        "Sending…" -> RedTacticalPrimaryBright
+        LocalUiStrings.current.text(UiTextKey.SENT) -> RedTacticalStatusGreen
+        LocalUiStrings.current.text(UiTextKey.SENDING_DOT) -> RedTacticalPrimaryBright
         else -> Color(0xFF8EA8C0)
     }
 
@@ -913,7 +915,7 @@ fun PeerCard(
 
                 Icon(
                     Icons.Default.SignalCellularAlt,
-                    contentDescription = "Signal",
+                    contentDescription = LocalUiStrings.current.text(UiTextKey.SIGNAL),
                     tint = if (peer.isConnected) {
                         RedTacticalStatusGreen
                     } else {
@@ -941,7 +943,7 @@ fun PeerCard(
             DropdownMenuItem(
                 text = {
                     Text(
-                        "REMOVE FROM SQUAD",
+                        LocalUiStrings.current.text(UiTextKey.REMOVE_FROM_SQUAD),
                         color = SquadHoldRedGlow,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
