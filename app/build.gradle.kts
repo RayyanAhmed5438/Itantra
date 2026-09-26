@@ -28,6 +28,9 @@ val moonshineModelFiles = listOf(
 )
 
 val prepareMoonshineModel = tasks.register("prepareMoonshineModel") {
+    // This task performs direct file/network I/O from the Gradle script.
+    // Keep it out of Gradle configuration-cache serialization.
+    notCompatibleWithConfigurationCache("Downloads and packages the local Moonshine model archive")
     outputs.file(moonshineModelZip)
 
     doLast {
