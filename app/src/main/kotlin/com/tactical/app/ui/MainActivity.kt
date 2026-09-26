@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.uiState.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var showSettings by remember { mutableStateOf(false) }
-                val squadTheme = !showSettings && selectedTab == 1
+                val blueTheme = !showSettings && (selectedTab == 0 || selectedTab == 1)
 
                 Scaffold(
                         topBar = {
@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
                                             text = if (showSettings) "Settings" else "Itantra",
                                             color = Color.White
                                         )
-                                        if (!showSettings && !squadTheme) {
+                                        if (!showSettings && !blueTheme) {
                                             androidx.compose.foundation.layout.Spacer(
                                                 Modifier.width(6.dp)
                                             )
@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = if (squadTheme) {
+                                    containerColor = if (blueTheme) {
                                         com.tactical.app.ui.theme.SquadBlueBackground
                                     } else {
                                         RedTacticalBackground
@@ -163,11 +163,11 @@ class MainActivity : ComponentActivity() {
                                     selectedTab = selectedTab,
                                     unreadMessageCount = state.unreadMessageCount,
                                     onTabSelected = { tab -> selectedTab = tab },
-                                    squadTheme = squadTheme
+                                    squadTheme = blueTheme
                                 )
                             }
                         },
-                        containerColor = if (squadTheme) {
+                        containerColor = if (blueTheme) {
                             com.tactical.app.ui.theme.SquadBlueBackground
                         } else {
                             RedTacticalBackground
