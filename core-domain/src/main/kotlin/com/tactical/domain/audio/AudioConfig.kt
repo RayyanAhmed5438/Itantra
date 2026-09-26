@@ -9,7 +9,13 @@ data class AudioConfig(
     val sampleRate: Int = 16_000,
     val channels: Int = 1,
     val bitDepth: Int = 16,
-    val chunkDurationMs: Long = 20L
+    val chunkDurationMs: Long = 20L,
+    /**
+     * Uses Android's voice-communication capture path instead of the normal
+     * microphone path. Call Mode enables this so the platform can apply
+     * communication-oriented echo/noise processing where supported.
+     */
+    val voiceCommunication: Boolean = false
 ) {
     init {
         require(sampleRate > 0) { "sampleRate must be positive" }
