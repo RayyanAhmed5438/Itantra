@@ -359,7 +359,7 @@ class MainViewModel @Inject constructor(
 
                         PeerNodeUi(
                             deviceAddress = id,
-                            callsign = localAppDataStore.callsignForPeer(id) ?: callsign,
+                            callsign = callsign,
                             isConnected = previous?.isConnected ?: false,
                             distanceText = if (hasRssi) {
                                 formatDistance(estimator.estimate(device.rssi))
