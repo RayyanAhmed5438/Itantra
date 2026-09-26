@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -44,7 +43,6 @@ import com.tactical.app.ui.theme.*
 @Composable
 fun SquadScreen(
     uiState: MainUiState,
-    onRefresh: () -> Unit,
     onLanguageSelected: (String) -> Unit = {},
     onPttToggle: () -> Unit,
     onPttPress: () -> Unit,
@@ -137,23 +135,15 @@ fun SquadScreen(
                         )
                     ) {
                         Text(
-                            if (uiState.pttEnabled) "PTT ON" else "CALL",
+                            if (uiState.pttEnabled) "PTT" else "CALL",
                             color = Color.White,
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp,
+                            letterSpacing = 0.8.sp,
                             modifier = Modifier.padding(
-                                horizontal = 8.dp,
-                                vertical = 6.dp
+                                horizontal = 12.dp,
+                                vertical = 7.dp
                             )
-                        )
-                    }
-
-                    IconButton(onClick = onRefresh) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = Color.White
                         )
                     }
                 }
@@ -196,7 +186,7 @@ fun SquadScreen(
                                         uiState.pttSessionState == SessionState.RECORDING ->
                                             "LIVE PTT TRANSCRIPTION"
                                         else ->
-                                            "LAST PTT TRANSMISSION"
+                                            "LAST TRANSMISSION"
                                     },
                                     color = Color(0xFF8EA8C0),
                                     fontSize = 9.sp,
@@ -261,7 +251,7 @@ fun SquadScreen(
                             Spacer(Modifier.height(8.dp))
 
                             if (!transmissionExpanded) {
-                                val latest = uiState.pttTransmissionHistory.first()
+                                val latest = uiState.pttTransmissionHistory.last()
                                 Text(
                                     latest.text,
                                     color = Color.White,
