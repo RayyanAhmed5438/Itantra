@@ -84,6 +84,11 @@ class VoskHindiSpeechToText @Inject constructor(
         }
     }.flowOn(Dispatchers.Default)
 
+    /** Preloads the native Vosk model without opening a microphone stream. */
+    suspend fun preload() {
+        loadModel()
+    }
+
     fun close() {
         modelMutex.tryLock().let { locked ->
             if (locked) {
