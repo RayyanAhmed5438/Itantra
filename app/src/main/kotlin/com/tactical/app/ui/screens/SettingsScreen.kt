@@ -23,7 +23,6 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,24 +44,10 @@ import com.tactical.app.ui.theme.SquadBlueGlow
 import com.tactical.app.ui.theme.SquadBluePrimary
 import com.tactical.app.ui.theme.SquadBlueSurface
 
-private data class LanguageOption(
-    val code: String,
-    val name: String,
-    val nativeName: String
-)
-
-private val OUTGOING_LANGUAGES = listOf(
-    LanguageOption("hi", "Hindi", "हिन्दी"),
-    LanguageOption("en", "English", "English")
-)
-
 @Composable
 fun SettingsScreen(
-    selectedLanguageCode: String,
-    languageLoadingCode: String?,
     uiLanguageCode: String,
     onUiLanguageSelected: (String) -> Unit,
-    onLanguageSelected: (String) -> Unit,
     ttsPlaybackMode: com.tactical.platform.speech.mms.MmsTtsPlaybackMode,
     onTtsPlaybackModeSelected: (com.tactical.platform.speech.mms.MmsTtsPlaybackMode) -> Unit,
     username: String,
@@ -158,126 +143,6 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Spacer(Modifier.height(16.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf("en" to "English", "hi" to "हिन्दी").forEach { (code, name) ->
-                val selected = uiLanguageCode == code
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, if (selected) SquadBluePrimary else SquadBlueBorder, RoundedCornerShape(14.dp))
-                        .clickable(enabled = !selected) { onUiLanguageSelected(code) }
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selected,
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = SquadBluePrimary,
-                                unselectedColor = RedTacticalTextSecondary
-                            ),
-                            onClick = { if (!selected) onUiLanguageSelected(code) }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            OUTGOING_LANGUAGES.forEach { language ->
-                val selected = selectedLanguageCode == language.code
-                val loading = languageLoadingCode == language.code
-                val switching = languageLoadingCode != null
-
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = SquadBlueSurface
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            width = 1.dp,
-                            color = if (selected) {
-                                SquadBluePrimary
-                            } else {
-                                SquadBlueBorder
-                            },
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        .clickable(enabled = !switching && !selected) {
-                            onLanguageSelected(language.code)
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = SquadBlueGlow,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            RadioButton(
-                                selected = selected,
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = SquadBluePrimary,
-                                    unselectedColor = RedTacticalTextSecondary
-                                ),
-                                onClick = {
-                                    if (!switching && !selected) {
-                                        onLanguageSelected(language.code)
-                                    }
-                                }
-                            )
-                        }
-
-                        Spacer(Modifier.width(4.dp))
-
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                language.nativeName,
-                                color = if (switching && !loading) {
-                                    RedTacticalTextSecondary
-                                } else {
-                                    Color.White
-                                },
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                if (loading) LocalUiStrings.current.text(UiTextKey.LOADING) else language.name,
-                                color = if (loading) {
-                                    SquadBlueGlow
-                                } else {
-                                    RedTacticalTextSecondary
-                                },
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Spacer(Modifier.height(24.dp))
 
         Text(
             LocalUiStrings.current.text(UiTextKey.INCOMING_VOICE_PLAYBACK),
