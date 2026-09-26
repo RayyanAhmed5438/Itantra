@@ -406,9 +406,9 @@ class MainViewModel @Inject constructor(
                     try {
                         delay(1000L)
                         refreshSquadConnectionStates()
-                        if (scanLoopJob == null || scanLoopJob?.isCancelled == true) {
-                            startDiscovery()
-                        }
+                        // Scanning is intentionally not restarted here.
+                        // Discovery runs once at startup; the user can trigger
+                        // another scan manually from the Home screen.
                         if (discoveryService is DefaultDiscoveryService && discoveryService.peers().value.isEmpty()) {
                             runCatching { discoveryService.start() }
                         }
@@ -464,9 +464,11 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Keeps discovery alive independently from any established connection.
-     * The 10-second timer schedules fresh discovery cycles; it never calls
-     * disconnect on an already connected peer.
+     * Starts local beacon advertising and performs one discovery scan at startup.
+     * Further scans are user-triggered via the Home screen.
+     *
+     * Beacon advertising remains active after the scan ends, so other devices
+     * can still discover this phone without this device continuously scanning.
      */
     fun startDiscovery() {
         if (scanLoopJob?.isActive == true) return
@@ -474,18 +476,11 @@ class MainViewModel @Inject constructor(
         scanLoopJob = viewModelScope.launch {
             runCatching { discoveryService.start() }
             try {
-                while (true) {
-                    try {
-                        runScanCycle()
-                        delay(DISCOVERY_INTERVAL_MS)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        // Keep periodic discovery alive after transient errors.
-                    }
-                }
-            } catch (_: CancellationException) {
-                // Normal cancellation of the ViewModel scope.
+                runScanCycle()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // A failed startup scan must not affect beacon advertising.
             }
         }
     }
@@ -1406,6 +1401,5 @@ class MainViewModel @Inject constructor(
     }
     companion object {
         private const val SINGLE_SCAN_WINDOW_MS = 5000L
-        private const val DISCOVERY_INTERVAL_MS = 10000L
     }
 }
