@@ -10,6 +10,7 @@ import com.tactical.platform.speech.RoutingSpeechToText
 import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.platform.speech.mms.MmsTtsModelStore
+import com.tactical.platform.speech.mms.MmsTtsPlaybackCoordinator
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,12 @@ class TacticalApplication : Application() {
     @Inject
     lateinit var routingSpeechToText: RoutingSpeechToText
 
+    @Inject
+    lateinit var mmsTtsPlaybackPreferences: com.tactical.platform.speech.mms.MmsTtsPlaybackPreferences
+
+    @Inject
+    lateinit var mmsTtsPlaybackCoordinator: MmsTtsPlaybackCoordinator
+
     private val speechPreloadScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -40,6 +47,7 @@ class TacticalApplication : Application() {
         super.onCreate()
         cleanupSpeechExtractionCache()
         ttsModelStore.cleanupUnbundledModels()
+        mmsTtsPlaybackCoordinator.setMode(mmsTtsPlaybackPreferences.playbackMode)
         createNotificationChannels()
         preloadSpeechModels()
     }
