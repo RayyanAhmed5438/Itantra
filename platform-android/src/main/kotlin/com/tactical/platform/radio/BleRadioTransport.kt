@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import android.os.Build
 import com.tactical.domain.result.TacticalResult
 import com.tactical.platform.ble.BlePeerAddressRegistry
+import com.tactical.platform.ble.SquadControlCodec
 import com.tactical.platform.api.radio.RadioTransport
 import com.tactical.platform.api.radio.RawPacket
 import kotlinx.coroutines.CoroutineScope
