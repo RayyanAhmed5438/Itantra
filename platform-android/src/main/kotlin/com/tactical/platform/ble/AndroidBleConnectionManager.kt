@@ -386,6 +386,8 @@ class AndroidBleConnectionManager(
         return try {
             val callback = object : BluetoothGattCallback() {
 
+                private var serviceDiscoveryStarted = false
+
                 private fun isCurrentGatt(gatt: BluetoothGatt): Boolean =
                     pending[resolvedAddress] === completion || gattClients[resolvedAddress] === gatt
 
@@ -411,6 +413,8 @@ class AndroidBleConnectionManager(
                         )
 
                         fun startServiceDiscovery() {
+                            if (serviceDiscoveryStarted || !isCurrentGatt(gatt)) return
+                            serviceDiscoveryStarted = true
                             android.util.Log.d(
                                 TAG,
                                 "GATT connected, discovering services for " + resolvedAddress
@@ -663,6 +667,7 @@ class AndroidBleConnectionManager(
                         if (status == BluetoothGatt.GATT_SUCCESS) {
                             registry.onMtuNegotiated(resolvedAddress, mtu)
                         }
+                        startServiceDiscovery()
                     }
                 }
             }
