@@ -236,7 +236,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            "OVERLAPPING allows voices from different devices to play together; each device's own messages remain sequential.",
+            ""+ LocalUiStrings.current.text(UiTextKey.OVERLAPPING_NOTE) +"",
             color = RedTacticalTextSecondary,
             fontSize = 11.sp
         )
