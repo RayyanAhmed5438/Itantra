@@ -720,10 +720,12 @@ class AndroidBleConnectionManager(
                 if (message.deviceId == localDeviceId) return
                 rememberAddress(message.deviceId, address)
                 if (message.deviceId in squadDeviceIds()) {
-                    sendControlWithRetry(
-                        address,
-                        SquadControlCodec.response(localDeviceId, true)
-                    )
+                    reconnectScope.launch {
+                        sendControlWithRetry(
+                            address,
+                            SquadControlCodec.response(localDeviceId, true)
+                        )
+                    }
                     setState(address, BleLinkState.CONNECTED)
                 } else {
                     synchronized(pendingSquadRequestsById) {
