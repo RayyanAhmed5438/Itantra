@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import com.tactical.app.ui.theme.RedTacticalTextSecondary
+import com.tactical.app.ui.i18n.LocalUiStrings
+import com.tactical.app.ui.i18n.UiTextKey
 import com.tactical.app.ui.theme.SquadBlueBackground
 import com.tactical.app.ui.theme.SquadBlueBorder
 import com.tactical.app.ui.theme.SquadBlueGlow
@@ -80,7 +82,7 @@ fun SettingsScreen(
             .padding(20.dp)
     ) {
         Text(
-            "USERNAME / CALLSIGN",
+            LocalUiStrings.current.text(UiTextKey.USERNAME_CALLSIGN),
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -90,7 +92,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            "This name is shown to other squad members.",
+            LocalUiStrings.current.text(UiTextKey.NAME_SHOWN),
             color = RedTacticalTextSecondary,
             fontSize = 12.sp
         )
@@ -105,10 +107,10 @@ fun SettingsScreen(
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text("Username") },
+            label = { Text(LocalUiStrings.current.text(UiTextKey.USERNAME)) },
             supportingText = {
                 Text(
-                    usernameError ?: "Maximum 5 UTF-8 bytes for the existing BLE callsign field.",
+                    usernameError ?: LocalUiStrings.current.text(UiTextKey.MAX_CALLSIGN),
                     color = if (usernameError != null) {
                         SquadBluePrimary
                     } else {
@@ -138,13 +140,13 @@ fun SettingsScreen(
                 containerColor = SquadBluePrimary
             )
         ) {
-            Text("SAVE USERNAME", fontWeight = FontWeight.Bold)
+            Text(LocalUiStrings.current.text(UiTextKey.SAVE_USERNAME), fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(24.dp))
 
         Text(
-            "UI LANGUAGE",
+            LocalUiStrings.current.text(UiTextKey.UI_LANGUAGE),
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -154,6 +156,38 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Spacer(Modifier.height(16.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf("en" to "English", "hi" to "हिन्दी").forEach { (code, name) ->
+                val selected = uiLanguageCode == code
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SquadBlueSurface),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, if (selected) SquadBluePrimary else SquadBlueBorder, RoundedCornerShape(14.dp))
+                        .clickable(enabled = !selected) { onUiLanguageSelected(code) }
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = SquadBluePrimary,
+                                unselectedColor = RedTacticalTextSecondary
+                            ),
+                            onClick = { if (!selected) onUiLanguageSelected(code) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
 
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -244,7 +278,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(24.dp))
 
         Text(
-            "INCOMING VOICE PLAYBACK",
+            LocalUiStrings.current.text(UiTextKey.INCOMING_VOICE_PLAYBACK),
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -267,13 +301,13 @@ fun SettingsScreen(
             val playbackOptions = listOf(
                 Triple(
                     com.tactical.platform.speech.mms.MmsTtsPlaybackMode.ONE_BY_ONE,
-                    "ONE BY ONE",
-                    "Play all received voice messages one by one, regardless of which device sent them."
+                    LocalUiStrings.current.text(UiTextKey.ONE_BY_ONE),
+                    LocalUiStrings.current.text(UiTextKey.ONE_BY_ONE_DESC)
                 ),
                 Triple(
                     com.tactical.platform.speech.mms.MmsTtsPlaybackMode.OVERLAPPING,
-                    "OVERLAPPING VOICES",
-                    "Voices from different devices may play at the same time. Messages from the same device never overlap."
+                    LocalUiStrings.current.text(UiTextKey.OVERLAPPING_VOICES),
+                    LocalUiStrings.current.text(UiTextKey.OVERLAPPING_DESC)
                 )
             )
 
