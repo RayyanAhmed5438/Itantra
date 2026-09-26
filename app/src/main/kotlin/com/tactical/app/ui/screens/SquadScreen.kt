@@ -757,7 +757,7 @@ fun PeerCard(
             .fillMaxWidth()
             .pointerInput(peer.deviceAddress) {
                 detectTapGestures(
-                    onLongPress = onLongPress
+                    onLongPress = { onLongPress() }
                 )
             }
             .then(
