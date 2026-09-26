@@ -22,9 +22,14 @@ import javax.inject.Singleton
  *   message 1: synthesize -> play
  *   message 2:          synthesize -> wait/play
  *
- * In ONE_BY_ONE mode, synthesized frames are played strictly in receive order.
- * In OVERLAPPING mode, each synthesized frame starts playback immediately, so
- * multiple AudioTracks may overlap.
+ * In ONE_BY_ONE mode, all synthesized frames are played strictly in receive
+ * order.
+ *
+ * In OVERLAPPING mode, voices from different senders may play concurrently,
+ * but messages from the same sender are always serialized. This prevents one
+ * device's long voice message from overlapping that same device's next,
+ * shorter message while still allowing simultaneous voices from different
+ * devices.
  *
  * Only a small number of synthesized frames are buffered at once, preventing
  * a burst of long messages from consuming unbounded RAM. Mode changes never
@@ -38,11 +43,13 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
 ) {
 
     private data class Request(
+        val senderId: String,
         val language: MmsTtsLanguage,
         val text: String
     )
 
     private data class Synthesized(
+        val senderId: String,
         val frame: AudioFrame,
         val sampleRate: Int
     )
@@ -57,6 +64,7 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
 
     private val playbackStateMutex = Mutex()
     private var activePlaybacks = 0
+    private val activeSenders = mutableMapOf<String, CompletableDeferred<Unit>>()
     private var idleSignal = CompletableDeferred<Unit>().also { it.complete(Unit) }
 
     @Volatile
@@ -79,11 +87,13 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
     fun currentMode(): MmsTtsPlaybackMode = playbackMode
 
     fun enqueue(
+        senderId: String,
         language: MmsTtsLanguage,
         text: String
     ) {
         requestQueue.trySend(
             Request(
+                senderId = senderId,
                 language = language,
                 text = text
             )
@@ -100,6 +110,7 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
 
                 synthesizedQueue.send(
                     Synthesized(
+                        senderId = request.senderId,
                         frame = frame,
                         sampleRate = result.sampleRate
                     )
@@ -119,23 +130,28 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
     private suspend fun playbackLoop() {
         for (synthesized in synthesizedQueue) {
             if (playbackMode == MmsTtsPlaybackMode.ONE_BY_ONE) {
+                // ONE_BY_ONE is global: no sender can start while any other
+                // received voice message is still playing.
                 awaitIdle()
-                beginPlayback()
+                beginPlayback(synthesized.senderId)
 
                 try {
                     runPlaybackSafely(synthesized)
                 } finally {
-                    endPlayback()
+                    endPlayback(synthesized.senderId)
                 }
             } else {
-                // Register the playback before launching it so a mode change
-                // to ONE_BY_ONE cannot observe a false idle state.
-                beginPlayback()
+                // OVERLAPPING only permits overlap between different senders.
+                // Messages from the same sender always wait for that sender's
+                // current playback to finish.
+                awaitSenderIdle(synthesized.senderId)
+                beginPlayback(synthesized.senderId)
+
                 scope.launch {
                     try {
                         runPlaybackSafely(synthesized)
                     } finally {
-                        endPlayback()
+                        endPlayback(synthesized.senderId)
                     }
                 }
             }
@@ -149,18 +165,29 @@ class MmsTtsPlaybackCoordinator @Inject constructor(
         signal?.await()
     }
 
-    private suspend fun beginPlayback() {
+    private suspend fun awaitSenderIdle(senderId: String) {
+        val signal = playbackStateMutex.withLock {
+            activeSenders[senderId]
+        }
+        signal?.await()
+    }
+
+    private suspend fun beginPlayback(senderId: String) {
         playbackStateMutex.withLock {
             if (activePlaybacks == 0) {
                 idleSignal = CompletableDeferred()
             }
             activePlaybacks++
+            activeSenders[senderId] = CompletableDeferred()
         }
     }
 
-    private suspend fun endPlayback() {
+    private suspend fun endPlayback(senderId: String) {
         playbackStateMutex.withLock {
             activePlaybacks--
+            activeSenders.remove(senderId)?.let { signal ->
+                if (!signal.isCompleted) signal.complete(Unit)
+            }
             if (activePlaybacks == 0 && !idleSignal.isCompleted) {
                 idleSignal.complete(Unit)
             }
