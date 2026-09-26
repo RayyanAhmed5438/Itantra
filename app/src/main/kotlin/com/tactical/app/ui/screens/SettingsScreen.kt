@@ -20,6 +20,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,6 +53,7 @@ private val OUTGOING_LANGUAGES = listOf(
 @Composable
 fun SettingsScreen(
     selectedLanguageCode: String,
+    languageLoadingCode: String?,
     onLanguageSelected: (String) -> Unit,
     ttsPlaybackMode: com.tactical.platform.speech.mms.MmsTtsPlaybackMode,
     onTtsPlaybackModeSelected: (com.tactical.platform.speech.mms.MmsTtsPlaybackMode) -> Unit,
@@ -160,6 +162,8 @@ fun SettingsScreen(
         ) {
             OUTGOING_LANGUAGES.forEach { language ->
                 val selected = selectedLanguageCode == language.code
+                val loading = languageLoadingCode == language.code
+                val switching = languageLoadingCode != null
 
                 Card(
                     colors = CardDefaults.cardColors(
@@ -177,7 +181,9 @@ fun SettingsScreen(
                             },
                             shape = RoundedCornerShape(14.dp)
                         )
-                        .clickable { onLanguageSelected(language.code) }
+                        .clickable(enabled = !switching && !selected) {
+                            onLanguageSelected(language.code)
+                        }
                 ) {
                     Row(
                         modifier = Modifier
@@ -185,22 +191,44 @@ fun SettingsScreen(
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = selected,
-                            onClick = { onLanguageSelected(language.code) }
-                        )
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = RedTacticalPrimaryBright,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            RadioButton(
+                                selected = selected,
+                                onClick = {
+                                    if (!switching && !selected) {
+                                        onLanguageSelected(language.code)
+                                    }
+                                }
+                            )
+                        }
 
-                        Column {
+                        Spacer(Modifier.width(4.dp))
+
+                        Column(Modifier.weight(1f)) {
                             Text(
                                 language.nativeName,
-                                color = Color.White,
+                                color = if (switching && !loading) {
+                                    RedTacticalTextSecondary
+                                } else {
+                                    Color.White
+                                },
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                language.name,
-                                color = RedTacticalTextSecondary,
+                                if (loading) "Loading voice models…" else language.name,
+                                color = if (loading) {
+                                    RedTacticalPrimaryBright
+                                } else {
+                                    RedTacticalTextSecondary
+                                },
                                 fontSize = 11.sp
                             )
                         }
