@@ -230,7 +230,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            "Choose how received voice messages are played when multiple messages arrive close together.",
+            "Voices from the same device are always played one by one. This setting controls how voices from different devices are handled when they arrive close together.",
             color = RedTacticalTextSecondary,
             fontSize = 12.sp
         )
@@ -244,12 +244,12 @@ fun SettingsScreen(
                 Triple(
                     com.tactical.platform.speech.mms.MmsTtsPlaybackMode.ONE_BY_ONE,
                     "ONE BY ONE",
-                    "Finish one voice message before starting the next."
+                    "Play all received voice messages one by one, regardless of which device sent them."
                 ),
                 Triple(
                     com.tactical.platform.speech.mms.MmsTtsPlaybackMode.OVERLAPPING,
                     "OVERLAPPING VOICES",
-                    "Play multiple voice messages at the same time when they overlap."
+                    "Voices from different devices may play at the same time. Messages from the same device never overlap."
                 )
             )
 
@@ -307,7 +307,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            "Overlapping voices may be slower or use more CPU when multiple messages are being processed.",
+            "OVERLAPPING allows voices from different devices to play together; each device's own messages remain sequential.",
             color = RedTacticalTextSecondary,
             fontSize = 11.sp
         )
