@@ -51,8 +51,8 @@ class DeviceIdentityStore @Inject constructor(@ApplicationContext context: Conte
         require(cleaned.isNotBlank()) { "Username must not be blank" }
 
         val byteCount = cleaned.toByteArray(Charsets.UTF_8).size
-        require(byteCount <= 5) {
-            "Username must be at most 5 UTF-8 bytes for the existing BLE callsign field"
+        require(byteCount <= 7) {
+            "Username must be at most 7 UTF-8 bytes for the BLE callsign field"
         }
 
         prefs.edit().putString(KEY_CALLSIGN, cleaned).apply()
