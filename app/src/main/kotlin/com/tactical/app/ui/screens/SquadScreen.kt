@@ -132,8 +132,10 @@ fun SquadScreen(
                 ) {
                     Surface(
                         onClick = onPttToggle,
-                        enabled = uiState.pttSessionState == SessionState.IDLE ||
-                            uiState.pttContinuousSession,
+                        enabled = (
+                            uiState.pttSessionState == SessionState.IDLE ||
+                                uiState.pttContinuousSession
+                            ) && (uiState.pttEnabled || hasConnection),
                         color = if (uiState.pttEnabled) {
                             RedTacticalPrimary
                         } else {
