@@ -16,7 +16,6 @@ import com.tactical.emergency.receiver.EmergencyReceiver
 import com.tactical.emergency.squelch.SquelchBreaker
 import com.tactical.engine.discovery.service.DiscoveryService
 import com.tactical.engine.mesh.service.MeshService
-import com.tactical.platform.speech.mms.MmsTtsEngine
 import com.tactical.platform.speech.mms.MmsTtsLanguage
 import com.tactical.platform.speech.mms.MmsTtsPlaybackCoordinator
 import dagger.hilt.android.AndroidEntryPoint
@@ -59,9 +58,6 @@ class TacticalMeshService : Service() {
 
     @Inject
     lateinit var identityStore: DeviceIdentityStore
-
-    @Inject
-    lateinit var mmsTtsEngine: MmsTtsEngine
 
     @Inject
     lateinit var mmsTtsPlaybackCoordinator: MmsTtsPlaybackCoordinator
