@@ -191,7 +191,8 @@ class MainActivity : ComponentActivity() {
                                     onPttRelease = viewModel::releasePtt,
                                     onPttCancel = viewModel::cancelPtt,
                                     onEmergencyPress = viewModel::startEmergencyHold,
-                                    onEmergencyRelease = viewModel::releaseEmergencyHold
+                                    onEmergencyRelease = viewModel::releaseEmergencyHold,
+                                    onRemoveFromSquad = viewModel::removePeerFromSquad
                                 )
                                     2 -> MessagesScreen(
                                         state,
