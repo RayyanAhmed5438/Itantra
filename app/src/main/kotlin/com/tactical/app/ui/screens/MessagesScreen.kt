@@ -406,7 +406,7 @@ fun MessagesScreen(
             },
             text = {
                 Text(
-                    "Delete ${selectedMessages.size} selected message${if (selectedMessages.size == 1) "" else "s"}? This cannot be undone.",
+                    LocalUiStrings.current.deleteConfirmation(selectedMessages.size),
                     color = RedTacticalTextSecondary
                 )
             },
@@ -444,6 +444,7 @@ fun MessagesScreen(
     }
 }
 
+@Composable
 private fun formatLiveMessageTimestamp(
     message: ChatMessageUi,
     nowMs: Long
