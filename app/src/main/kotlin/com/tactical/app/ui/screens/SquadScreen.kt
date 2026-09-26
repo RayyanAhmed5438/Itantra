@@ -600,6 +600,7 @@ fun SquadScreen(
                     }
                 }
             }
+        }
 
         item {
             SectionDividerLabel("${connectedPeers.size} CONNECTED DEVICES")
