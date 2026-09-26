@@ -312,7 +312,7 @@ fun MessagesScreen(
                 MessageRow(
                     message = message,
                     currentTimeMs = currentTimeMs,
-                    isSent = message.sender == LocalUiStrings.current.text(UiTextKey.YOU),
+                    isSent = message.sender == "YOU",
                     isSelectionMode = selectionMode,
                     isSelected = messageStorageKey(message) in selectedKeys,
                     onClick = {
