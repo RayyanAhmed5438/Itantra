@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -95,6 +96,7 @@ class MainActivity : ComponentActivity() {
                 val blueTheme = true
                 val ui = com.tactical.app.ui.i18n.UiStrings.forCode(state.uiLanguageCode)
 
+                CompositionLocalProvider(LocalUiStrings provides ui) {
                 Scaffold(
                         topBar = {
                             TopAppBar(
@@ -321,6 +323,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
                 }
             }
         requestStartupPermissions()
