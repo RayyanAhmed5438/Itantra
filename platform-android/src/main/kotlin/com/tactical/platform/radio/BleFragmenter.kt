@@ -22,6 +22,31 @@ import java.util.concurrent.ConcurrentHashMap
 object BleFragmenter {
 
     private const val HEADER_SIZE = 8
+    private const val ACK_MAGIC = 0x49544143 // "ITAC"
+    private const val ACK_VERSION = 1
+    private const val ACK_SIZE = 12
+
+    /**
+     * Compact hop-level acknowledgement. It stays within the default
+     * 20-byte usable ATT payload, so it works before MTU negotiation.
+     */
+    fun acknowledgement(transferId: Int): ByteArray =
+        ByteBuffer.allocate(ACK_SIZE).apply {
+            putInt(ACK_MAGIC)
+            putInt(transferId)
+            putInt(ACK_VERSION)
+        }.array()
+
+    fun acknowledgementTransferId(bytes: ByteArray): Int? {
+        if (bytes.size != ACK_SIZE) return null
+        val buffer = ByteBuffer.wrap(bytes)
+        if (buffer.int != ACK_MAGIC) return null
+        val transferId = buffer.int
+        return if (buffer.int == ACK_VERSION) transferId else null
+    }
+
+    fun transferIdOf(fragment: ByteArray): Int? =
+        if (fragment.size >= HEADER_SIZE) ByteBuffer.wrap(fragment).int else null
 
     fun fragment(data: ByteArray, transferId: Int, maxChunkPayloadSize: Int): List<ByteArray> {
         val maxPayload = maxChunkPayloadSize - HEADER_SIZE
