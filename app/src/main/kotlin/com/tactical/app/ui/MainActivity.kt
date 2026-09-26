@@ -233,23 +233,68 @@ class MainActivity : ComponentActivity() {
                             }
 
                             state.pendingSquadRequest?.let { request ->
+                                val isResponding =
+                                    state.respondingSquadRequestId == request.deviceId
+
                                 AlertDialog(
                                     onDismissRequest = { },
-                                    title = { Text("SQUAD REQUEST") },
+                                    title = {
+                                        Text(
+                                            if (state.pendingSquadRequestCount > 1) {
+                                                "SQUAD REQUEST 1/" +
+                                                    state.pendingSquadRequestCount
+                                            } else {
+                                                "SQUAD REQUEST"
+                                            }
+                                        )
+                                    },
                                     text = {
-                                        Text(request.callsign + " wants to add you to their squad.")
+                                        androidx.compose.foundation.layout.Column {
+                                            Text(
+                                                request.callsign +
+                                                    " wants to add you to their squad."
+                                            )
+                                            state.squadRequestError?.let { error ->
+                                                androidx.compose.foundation.layout.Spacer(
+                                                    Modifier.height(8.dp)
+                                                )
+                                                Text(
+                                                    error,
+                                                    color = Color(0xFFFF8A80),
+                                                    fontSize = 12.sp
+                                                )
+                                            }
+                                        }
                                     },
                                     confirmButton = {
-                                        TextButton(onClick = {
-                                            viewModel.respondToSquadRequest(request.deviceId, true)
-                                        }) {
-                                            Text("APPROVE")
+                                        TextButton(
+                                            onClick = {
+                                                viewModel.respondToSquadRequest(
+                                                    request.deviceId,
+                                                    true
+                                                )
+                                            },
+                                            enabled = !isResponding
+                                        ) {
+                                            Text(
+                                                if (isResponding) {
+                                                    "SENDING..."
+                                                } else {
+                                                    "APPROVE"
+                                                }
+                                            )
                                         }
                                     },
                                     dismissButton = {
-                                        TextButton(onClick = {
-                                            viewModel.respondToSquadRequest(request.deviceId, false)
-                                        }) {
+                                        TextButton(
+                                            onClick = {
+                                                viewModel.respondToSquadRequest(
+                                                    request.deviceId,
+                                                    false
+                                                )
+                                            },
+                                            enabled = !isResponding
+                                        ) {
                                             Text("REJECT")
                                         }
                                     }
