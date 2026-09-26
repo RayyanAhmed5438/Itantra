@@ -130,6 +130,11 @@ class MoonshineSpeechToText @Inject constructor(
         awaitClose { }
     }.flowOn(Dispatchers.Default)
 
+    /** Preloads the native Moonshine model without opening a microphone stream. */
+    suspend fun preload() {
+        loadTranscriber()
+    }
+
     fun close() {
         loadMutex.tryLock().let { locked ->
             if (locked) {
