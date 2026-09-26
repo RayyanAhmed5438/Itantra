@@ -98,7 +98,8 @@ class AndroidBleScanner(
 
                     BlePeerAddressRegistry.remember(
                         packet.sender.value,
-                        result.device.address
+                        result.device.address,
+                        packet.callsign
                     )
 
                     android.util.Log.d(
