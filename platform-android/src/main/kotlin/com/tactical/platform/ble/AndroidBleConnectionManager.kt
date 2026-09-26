@@ -692,6 +692,12 @@ class AndroidBleConnectionManager(
     override fun rssi(deviceAddress: String): Flow<Int?> =
         rssiState(resolveAddress(deviceAddress) ?: deviceAddress).asStateFlow()
 
+    override fun connectedSquadDeviceIds(): Set<String> =
+        squadDeviceIds().filter { id ->
+            val address = resolveAddress(id)
+            address != null && hasDirectConnection(address)
+        }.toSet()
+
     override fun squadDeviceIds(): Set<String> {
         val current = prefs.getStringSet(SQUAD_IDS_KEY, null)
         if (current != null) return current.toSet()
